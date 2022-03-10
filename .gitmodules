@@ -1,6 +1,6 @@
-[submodule "spdk"]
+[submodule "dependencies/spdk"]
 	path = dependencies/spdk
 	url = https://github.com/spdk/spdk.git
-[submodule "rocksdb"]
+[submodule "dependencies/rocksdb"]
 	path = dependencies/rocksdb
 	url = https://github.com/facebook/rocksdb.git
