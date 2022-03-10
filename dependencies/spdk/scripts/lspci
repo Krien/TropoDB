@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-set -e
-
-scriptdir=$(dirname $0)
-lspci -F <($scriptdir/rpc.py framework_get_pci_devices --format-lspci) "$@"

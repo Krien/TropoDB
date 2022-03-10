@@ -1,8 +1,0 @@
-paramiko
-pexpect
-pandas
-configshell-fb
-pyparsing
-ninja
-meson
-scikit-build
