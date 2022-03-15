@@ -1,0 +1,2 @@
+# device
+Device is an interface that we will use to interface with the ZNS device. It comes with an interface that allows to write to zones without concern in the database without worrying about SPDK internals.
