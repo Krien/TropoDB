@@ -38,7 +38,8 @@ namespace ZnsDevice{
                 .lba_size = 0,
                 .zone_size = 0,
                 .mdts = 0,
-                .zasl = 0
+                .zasl = 0,
+                .lba_cap = 0
             };
             return 0;
         }
@@ -87,7 +88,8 @@ namespace ZnsDevice{
                 .lba_size = 0,
                 .zone_size = 0,
                 .mdts = 0,
-                .zasl = 0
+                .zasl = 0,
+                .lba_cap = 0
             };
             return 0;
         }
@@ -108,6 +110,7 @@ namespace ZnsDevice{
             info->mdts = (uint64_t)1 << (12 + cap.bits.mpsmin + ctrlr_data->mdts);
             info->zasl = ctrlr_data_zns->zasl;
             info->zasl = info->zasl == 0 ? info->mdts : (uint64_t)1 << (12 + cap.bits.mpsmin + info->zasl);
+            info->lba_cap = ns_data->ncap;
             return 0;
         }
 
@@ -184,7 +187,7 @@ namespace ZnsDevice{
             if (spdk_nvme_cpl_is_error(completion)) {
                 fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
                 fprintf(stderr, "Read I/O failed, aborting run\n");
-                exit(1);
+                return;
             }
             *completed = true;
         }
@@ -206,19 +209,99 @@ namespace ZnsDevice{
 
         int
         z_read(QPair *qpair, uint64_t slba, void *buffer, uint64_t size) {
-            // Completion completion = {
-            //     .done = false
-            // };
-            // int rc = spdk_nvme_ns_cmd_read(qpair->man->ns, qpair, temp_buffer,
-            //     slba, /* LBA start */
-            //     0, /* number of LBAs */
-            //     __read_complete, &completion, 0);
-            // if (rc != 0) {
-            //     return 1;
-            // }
-            // POLL_QPAIR(qpair->qpair, completion.done);
-            // return rc;
-            return 0;
+            ERROR_ON_NULL(qpair, 1);
+            ERROR_ON_NULL(buffer, 1);
+            DeviceInfo info = qpair->man->info;
+            int rc = 0;
+
+            int lbas = (size+info.lba_size-1)/info.lba_size;
+            int lbas_processed = 0;
+            int step_size = (info.mdts/info.lba_size);
+            int current_step_size = step_size;
+            int slba_start = slba;
+
+            while(lbas_processed < lbas) {
+                Completion completion = {
+                    .done = false
+                };
+                if ((slba + lbas_processed + step_size) / info.zone_size > 
+                    (slba + lbas_processed) / info.zone_size) {
+                        current_step_size = ((slba + lbas_processed + step_size) / info.zone_size)
+                            * info.zone_size - lbas_processed - slba;
+                } else {
+                    current_step_size = step_size;
+                }
+                current_step_size = lbas-lbas_processed > current_step_size ? current_step_size : lbas-lbas_processed;
+                //printf("%d step %d  \n", slba_start, current_step_size);
+                rc = spdk_nvme_ns_cmd_read(qpair->man->ns, qpair->qpair, buffer+lbas_processed*info.lba_size,
+                    slba_start, /* LBA start */
+                    current_step_size, /* number of LBAs */
+                    __read_complete, &completion, 0);
+                if (rc != 0) {
+                    return 1;
+                }
+                POLL_QPAIR(qpair->qpair, completion.done);
+                lbas_processed += current_step_size;
+                slba_start = slba + lbas_processed;
+            }
+            return rc;
+        }
+
+        void*
+        z_calloc(QPair *qpair, int nr, int size) {
+            uint32_t alligned_size = qpair->man->info.lba_size;
+            uint32_t true_size = nr * size;
+            if (true_size % alligned_size != 0) {
+                return NULL;
+            }
+            void* temp_buffer = (char*)spdk_zmalloc(true_size, alligned_size, 
+                NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+            return temp_buffer;
+        }
+
+        void
+        z_free(QPair *qpair, void * buffer) {
+            //free(buffer);
+        }
+
+        int
+        z_append(QPair *qpair, uint64_t slba, void *buffer, uint64_t size) {
+            ERROR_ON_NULL(qpair, 1);
+            ERROR_ON_NULL(buffer, 1);
+
+            DeviceInfo info = qpair->man->info;
+            int rc = 0;
+
+            int lbas = (size+info.lba_size-1)/info.lba_size;
+            int lbas_processed = 0;
+            int step_size = (info.zasl/info.lba_size);
+            int current_step_size = step_size;
+            int slba_start = (slba / info.zone_size) * info.zone_size;
+        
+            while(lbas_processed < lbas) {
+                Completion completion = {
+                    .done = false
+                };
+                if ((slba + lbas_processed + step_size) / info.zone_size > 
+                    (slba + lbas_processed) / info.zone_size) {
+                        current_step_size = ((slba + lbas_processed + step_size) / info.zone_size)
+                            * info.zone_size - lbas_processed - slba;
+                } else {
+                    current_step_size = step_size;
+                }
+                current_step_size = lbas-lbas_processed > current_step_size ? current_step_size : lbas-lbas_processed;
+                rc = spdk_nvme_zns_zone_append(qpair->man->ns, qpair->qpair, buffer+lbas_processed*info.lba_size,
+                    slba_start, /* LBA start */
+                    current_step_size, /* number of LBAs */
+                    __append_complete, &completion, 0);
+                if (rc != 0) {
+                    break;
+                }
+                POLL_QPAIR(qpair->qpair, completion.done);
+                lbas_processed += current_step_size;
+                slba_start = ((slba + lbas_processed) / info.zone_size) * info.zone_size;
+            }
+            return rc;
         }
 
         int

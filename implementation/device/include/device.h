@@ -32,6 +32,7 @@ namespace ZnsDevice{
             uint64_t zone_size;
             uint64_t mdts;
             uint64_t zasl;
+            uint64_t lba_cap;
         } DeviceInfo;
 
         typedef struct {
@@ -77,8 +78,14 @@ namespace ZnsDevice{
         int
         z_destroy_qpair(QPair *qpair);
 
+        void*
+        z_calloc(QPair *qpair, int nr, int size);
+
+        void
+        z_free(QPair *qpair, void * buffer);
+
         int
-        z_append(QPair *qpair, void *buffer, uint64_t size);
+        z_append(QPair *qpair, uint64_t slba, void *buffer, uint64_t size);
 
         int
         z_read(QPair *qpair, uint64_t slba, void *buffer, uint64_t size);
