@@ -183,13 +183,12 @@ namespace ZnsDevice{
 
         static void
         __operation_complete(void *arg, const struct spdk_nvme_cpl *completion) {
-            bool *completed = (bool*)arg;
+            Completion *completed = (Completion*)arg;
+            completed->done = true;
             if (spdk_nvme_cpl_is_error(completion)) {
-                fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
-                fprintf(stderr, "Read I/O failed, aborting run\n");
+                completed->err = 1;
                 return;
             }
-            *completed = true;
         }
 
         static void
@@ -204,6 +203,11 @@ namespace ZnsDevice{
 
         static void
         __reset_zone_complete(void *arg, const struct spdk_nvme_cpl *completion) {
+            __operation_complete(arg, completion);   
+        }
+
+        static void
+        __get_zone_head_complete(void *arg, const struct spdk_nvme_cpl *completion) {
             __operation_complete(arg, completion);   
         }
 
@@ -222,7 +226,8 @@ namespace ZnsDevice{
 
             while(lbas_processed < lbas) {
                 Completion completion = {
-                    .done = false
+                    .done = false,
+                    .err = 0
                 };
                 if ((slba + lbas_processed + step_size) / info.zone_size > 
                     (slba + lbas_processed) / info.zone_size) {
@@ -241,6 +246,9 @@ namespace ZnsDevice{
                     return 1;
                 }
                 POLL_QPAIR(qpair->qpair, completion.done);
+                if (completion.err != 0) {
+                    return completion.err;
+                }
                 lbas_processed += current_step_size;
                 slba_start = slba + lbas_processed;
             }
@@ -280,7 +288,8 @@ namespace ZnsDevice{
         
             while(lbas_processed < lbas) {
                 Completion completion = {
-                    .done = false
+                    .done = false,
+                    .err = 0
                 };
                 if ((slba + lbas_processed + step_size) / info.zone_size > 
                     (slba + lbas_processed) / info.zone_size) {
@@ -298,6 +307,9 @@ namespace ZnsDevice{
                     break;
                 }
                 POLL_QPAIR(qpair->qpair, completion.done);
+                if (completion.err != 0) {
+                    return completion.err;
+                }
                 lbas_processed += current_step_size;
                 slba_start = ((slba + lbas_processed) / info.zone_size) * info.zone_size;
             }
@@ -318,6 +330,33 @@ namespace ZnsDevice{
             if (rc != 0)
                 return rc;
             POLL_QPAIR(qpair->qpair, completion.done);
+            return rc;
+        }
+
+        int
+        z_get_zone_head(QPair *qpair, uint64_t slba, uint64_t *head) {
+            ERROR_ON_NULL(qpair, 1);
+            ERROR_ON_NULL(qpair->man, 1);
+	        size_t report_bufsize = spdk_nvme_ns_get_max_io_xfer_size(qpair->man->ns);
+	        uint8_t *report_buf = (uint8_t*)calloc(1, report_bufsize);
+            Completion completion = {
+                .done = false,
+                .err = 0
+            };
+            int rc = spdk_nvme_zns_report_zones(qpair->man->ns, qpair->qpair, report_buf, report_bufsize,
+							slba, SPDK_NVME_ZRA_LIST_ALL, true,
+							__get_zone_head_complete, &completion);
+            if (rc != 0) {
+                return rc;
+            }
+            POLL_QPAIR(qpair->qpair, completion.done);
+            if (completion.err != 0) {
+                return completion.err;
+            }
+            uint32_t zd_index = sizeof(struct spdk_nvme_zns_zone_report);
+            struct spdk_nvme_zns_zone_desc *desc = (struct spdk_nvme_zns_zone_desc *)(report_buf + zd_index);
+            *head = desc->wp;
+            free(report_buf);
             return rc;
         }
 

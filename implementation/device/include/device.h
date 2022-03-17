@@ -25,6 +25,7 @@ namespace ZnsDevice{
 
         typedef struct {
             bool done = false;
+            int err = 0;
         } Completion;
 
         typedef struct {
@@ -54,8 +55,6 @@ namespace ZnsDevice{
             spdk_nvme_qpair *qpair;
             DeviceManager *man;
         } QPair;
-
-
 
         int
         z_init(DeviceManager **man);
@@ -93,6 +92,9 @@ namespace ZnsDevice{
         int
         z_reset(QPair *qpair, uint64_t slba, bool all);
 
+        int
+        z_get_zone_head(QPair *qpair, uint64_t slba, uint64_t *head);
+
         bool
         __probe_devices_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
 	        struct spdk_nvme_ctrlr_opts *opts);
@@ -118,6 +120,9 @@ namespace ZnsDevice{
 
          static void
         __reset_zone_complete(void *arg, const struct spdk_nvme_cpl *completion);
+
+        static void
+        __get_zone_head_complete(void *arg, const struct spdk_nvme_cpl *completion);
 
         int
         __probe();

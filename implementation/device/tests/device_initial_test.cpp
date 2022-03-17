@@ -86,23 +86,33 @@ int main(int argc, char **argv) {
     printf("zasl is %d\n", info.zasl);
     printf("lba_cap is %d\n", info.lba_cap);
 
+    uint64_t write_head;
     printf("----------------------WORKLOAD SMALL----------------------\n");
     // make space by resetting the device zones
     rc = ZnsDevice::z_reset(*qpair, 0, true);
     DEBUG_TEST_PRINT("reset all code ", rc);
     VALID(rc); 
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == 0);
     char** pattern_1 = (char**)calloc(1, sizeof(char**));
     rc = write_pattern(pattern_1, *qpair, info.lba_size, 10);
     VALID(rc);
     rc = ZnsDevice::z_append(*qpair, 0, *pattern_1, info.lba_size);
     DEBUG_TEST_PRINT("append alligned ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == 1);
     char** pattern_2 = (char**)calloc(1, sizeof(char**));
     rc = write_pattern(pattern_2, *qpair, info.zasl, 13);
     VALID(rc);
     rc = ZnsDevice::z_append(*qpair, 0, *pattern_2, info.zasl);
     DEBUG_TEST_PRINT("append zasl ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == 1+info.zasl/info.lba_size);
     char* pattern_read_1 = (char*)ZnsDevice::z_calloc(*qpair, info.lba_size, sizeof(char*));
     rc = ZnsDevice::z_read(*qpair, 0, pattern_read_1, info.lba_size);
     DEBUG_TEST_PRINT("read alligned ", rc);
@@ -134,6 +144,11 @@ int main(int argc, char **argv) {
     rc = ZnsDevice::z_append(*qpair, 0, *pattern_3, info.lba_size*info.lba_cap);
     DEBUG_TEST_PRINT("fill entire device ", rc);
     VALID(rc);
+    for (int i=0; i<info.lba_cap/info.zone_size;i++) {
+        rc = ZnsDevice::z_get_zone_head(*qpair, i*info.zone_size, &write_head);
+        VALID(rc);
+        assert(write_head == ~0lu);
+    }
     char* pattern_read_3 = (char*)ZnsDevice::z_calloc(*qpair, info.lba_size*info.lba_cap, sizeof(char*));
     rc = ZnsDevice::z_read(*qpair, 0, pattern_read_3, info.lba_size*info.lba_cap);
     DEBUG_TEST_PRINT("read entire device ", rc);
@@ -145,6 +160,15 @@ int main(int argc, char **argv) {
     rc = ZnsDevice::z_reset(*qpair, info.zone_size*2, false) | rc;
     DEBUG_TEST_PRINT("reset zone 2,3 ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == ~0lu);
+    rc = ZnsDevice::z_get_zone_head(*qpair, info.zone_size, &write_head);
+    VALID(rc);
+    assert(write_head == info.zone_size);
+    rc = ZnsDevice::z_get_zone_head(*qpair, info.zone_size*2, &write_head);
+    VALID(rc);
+    assert(write_head == info.zone_size * 2);
     char* pattern_read_4 = (char*)ZnsDevice::z_calloc(*qpair, info.lba_size*info.zone_size, sizeof(char*));
     rc = ZnsDevice::z_read(*qpair, 0, pattern_read_4, info.lba_size*info.zone_size);
     DEBUG_TEST_PRINT("read zone 1 ", rc);
@@ -178,12 +202,24 @@ int main(int argc, char **argv) {
     rc = ZnsDevice::z_append(*qpair, 0, *pattern_3, info.lba_size*(info.zone_size-3));
     DEBUG_TEST_PRINT("zone friction part 1: append 1 zoneborder - 3 ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == info.zone_size - 3);
     rc = ZnsDevice::z_append(*qpair, info.zone_size-3, *pattern_3 + info.lba_size*(info.zone_size-3), info.lba_size*6);
     DEBUG_TEST_PRINT("zone friction part 2: append 1 zoneborder + 6 ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, 0, &write_head);
+    VALID(rc);
+    assert(write_head == ~0lu);
+    rc = ZnsDevice::z_get_zone_head(*qpair, info.zone_size, &write_head);
+    VALID(rc);
+    assert(write_head == info.zone_size + 3);
     rc = ZnsDevice::z_append(*qpair, info.zone_size+3, *pattern_3 + info.lba_size*(info.zone_size+3), info.lba_size*13);
     DEBUG_TEST_PRINT("zone friction part 3: append 1 zoneborder + 16 ", rc);
     VALID(rc);
+    rc = ZnsDevice::z_get_zone_head(*qpair, info.zone_size, &write_head);
+    VALID(rc);
+    assert(write_head == info.zone_size + 16);
     rc = ZnsDevice::z_read(*qpair, 0, pattern_read_4, info.lba_size*(info.zone_size-3));
     DEBUG_TEST_PRINT("zone friction part 4: read 1 zoneborder - 3 ", rc);
     VALID(rc);
