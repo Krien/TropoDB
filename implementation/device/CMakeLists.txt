@@ -87,6 +87,12 @@ target_link_libraries(device_initial_test znsdevice_lib)
 target_include_directories(device_initial_test PRIVATE include)
 set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${LINK_FLAGS} ${SPDK_LIB_FLAGS})
 
+enable_testing()
+add_test(
+    NAME device_initial_test_runner
+    COMMAND device_initial_test
+)
+
 # Default to "default" location of clang-format, override if necessary
 if(DEFINED ENV{CLANG_PATH})
     set(CLANG_PATH "$ENV{CLANG_PATH}")
