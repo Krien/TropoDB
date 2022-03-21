@@ -18,8 +18,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0  -ggdb -Wl,--no-as-needed -Wall -
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fno-sanitize=null -fno-sanitize=alignment")
 
 # Change to personal location.
-set(SPDK_DIR "/home/$ENV{USER}/spdk")
+if(DEFINED ENV{SPDK_DIR})
+    set(SPDK_DIR "$ENV{SPDK_DIR}")
+else(DEFINED ENV{SPDK_DIR})
+    set(SPDK_DIR "/home/$ENV{USER}/local/spdk")
+endif()
 set(DPDK_LIB_DIR "${SPDK_DIR}/dpdk/build/lib")
+message("looking for SPDK in ${SPDK_DIR}")
 
 find_package(PkgConfig REQUIRED)
 if(NOT PKG_CONFIG_FOUND)
@@ -53,24 +58,24 @@ set(common_sources
 )
 
 # Library
-add_library(lsmzns_lib
+add_library(znsdevice_lib
     "${common_sources}"
 )
-target_include_directories(lsmzns_lib PUBLIC include)
-target_include_directories(lsmzns_lib PRIVATE src)
+target_include_directories(znsdevice_lib PUBLIC include)
+target_include_directories(znsdevice_lib PRIVATE src)
 
-set_target_properties(lsmzns_lib PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
+set_target_properties(znsdevice_lib PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
 add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
 
 # Standalone CLI
-add_executable(lsmzns
+add_executable(znsdevice
     "${common_sources}"
     src/main.cpp
 )
-target_include_directories(lsmzns PUBLIC include)
-target_include_directories(lsmzns PRIVATE src)
+target_include_directories(znsdevice PUBLIC include)
+target_include_directories(znsdevice PRIVATE src)
 
-set_target_properties(lsmzns PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
+set_target_properties(znsdevice PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
 add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
 
 # Tests
@@ -78,9 +83,9 @@ add_executable(device_initial_test
     tests/device_initial_test.cpp
 )
 set_target_properties(device_initial_test PROPERTIES LINKER_LANGUAGE CXX)
-target_link_libraries(device_initial_test lsmzns_lib)
+target_link_libraries(device_initial_test znsdevice_lib)
 target_include_directories(device_initial_test PRIVATE include)
-set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
+set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${LINK_FLAGS} ${SPDK_LIB_FLAGS})
 
 
 # Testing

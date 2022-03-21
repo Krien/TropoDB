@@ -60,13 +60,13 @@ namespace ZnsDevice{
             DeviceProber prober = {
                 .manager = manager,
                 .traddr = traddr,
-                .traddr_len = strlen(traddr),
+                .traddr_len = (u_int8_t)strlen(traddr),
                 .found = false
             };
             // Find and open device
             struct spdk_nvme_probe_ctx *probe_ctx;
 	        probe_ctx = (struct spdk_nvme_probe_ctx*)spdk_nvme_probe(&manager->g_trid, &prober, 
-                __probe_devices_cb, (spdk_nvme_attach_cb)__attach_devices__cb, NULL);
+                (spdk_nvme_probe_cb)__probe_devices_cb, (spdk_nvme_attach_cb)__attach_devices__cb, NULL);
             if (probe_ctx != 0) {
                 spdk_env_fini();
 		        return 1;
@@ -74,8 +74,7 @@ namespace ZnsDevice{
             if (!prober.found) {
                 return 2;
             }
-            int rc = z_get_device_info(&manager->info, manager);
-            return 0;
+            return z_get_device_info(&manager->info, manager);
         }
 
         int
@@ -127,6 +126,7 @@ namespace ZnsDevice{
                 if (strncmp((const char*)trid->traddr, prober->traddr, prober->traddr_len) != 0) {
                     return false;
                 }
+                (void)opts;
                 return true;
         }
 
@@ -152,6 +152,8 @@ namespace ZnsDevice{
                 prober->found = true;
                 break;
             }
+            (void)trid;
+            (void)opts;
             return;
         }
 
@@ -238,7 +240,8 @@ namespace ZnsDevice{
                 }
                 current_step_size = lbas-lbas_processed > current_step_size ? current_step_size : lbas-lbas_processed;
                 //printf("%d step %d  \n", slba_start, current_step_size);
-                rc = spdk_nvme_ns_cmd_read(qpair->man->ns, qpair->qpair, buffer+lbas_processed*info.lba_size,
+                rc = spdk_nvme_ns_cmd_read(qpair->man->ns, qpair->qpair, 
+                    (char*)buffer+lbas_processed*info.lba_size,
                     slba_start, /* LBA start */
                     current_step_size, /* number of LBAs */
                     __read_complete, &completion, 0);
@@ -264,11 +267,14 @@ namespace ZnsDevice{
             }
             void* temp_buffer = (char*)spdk_zmalloc(true_size, alligned_size, 
                 NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+            (void)qpair;
             return temp_buffer;
         }
 
         void
         z_free(QPair *qpair, void * buffer) {
+            (void)buffer;
+            (void)qpair;
             //free(buffer);
         }
 
@@ -299,7 +305,8 @@ namespace ZnsDevice{
                     current_step_size = step_size;
                 }
                 current_step_size = lbas-lbas_processed > current_step_size ? current_step_size : lbas-lbas_processed;
-                rc = spdk_nvme_zns_zone_append(qpair->man->ns, qpair->qpair, buffer+lbas_processed*info.lba_size,
+                rc = spdk_nvme_zns_zone_append(qpair->man->ns, qpair->qpair, 
+                    (char*)buffer+lbas_processed*info.lba_size,
                     slba_start, /* LBA start */
                     current_step_size, /* number of LBAs */
                     __append_complete, &completion, 0);
