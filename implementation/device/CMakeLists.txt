@@ -87,5 +87,17 @@ target_link_libraries(device_initial_test znsdevice_lib)
 target_include_directories(device_initial_test PRIVATE include)
 set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${LINK_FLAGS} ${SPDK_LIB_FLAGS})
 
-
-# Testing
+# Default to "default" location of clang-format, override if necessary
+if(DEFINED ENV{CLANG_PATH})
+    set(CLANG_PATH "$ENV{CLANG_PATH}")
+else(DEFINED ENV{CLANG_PATH})
+    set(CLANG_PATH "/home/$ENV{USER}/bin/clang-format")
+endif()
+# format (DO NOT GLOB! instead let the formatter glob when necessary)
+add_custom_target(
+    format
+    COMMAND ${CLANG_PATH}
+    -i
+    "./src/*.cpp" "./include/*.h"
+    "-style=file"
+)
