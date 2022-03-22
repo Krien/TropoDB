@@ -13,13 +13,28 @@
 
 namespace leveldb {
 int main_test(int argc, char** argv) {
-    std::string dbname_ = "hello world";
+    std::string dbname_ = "0000:00:04.0";
     Options options_;
     options_.create_if_missing = true;
     options_.compression = kNoCompression;
     DB* db_; 
     Status s = DB::Open(options_, dbname_, &db_);
-    std::cout << "OK? " << s.ok() << "\n"; 
+    assert(s.ok());
+    // read false
+    leveldb::ReadOptions ro = leveldb::ReadOptions();
+    const leveldb::Slice key_test = leveldb::Slice("hello");
+    std::string value_test;
+    s = db_->Get(ro, key_test, &value_test);
+    assert(!s.ok());
+    // put one pair
+    leveldb::WriteOptions wo = leveldb::WriteOptions();
+    const leveldb::Slice test_value = leveldb::Slice("lsmzns!");
+    s = db_->Put(wo, key_test, test_value);
+    assert(s.ok());
+    // read one correct pair
+    s = db_->Get(ro, key_test, &value_test);
+    assert(s.ok());
+    assert(value_test == "lsmzns!");
     return 0;
 }
 }

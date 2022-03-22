@@ -15,10 +15,10 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_COMPILER g++)
 message("compiler is ${CMAKE_CXX_COMPILER_ID}   and name is ${CMAKE_CXX_COMPILER}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0  -ggdb -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fno-sanitize=null -fno-sanitize=alignment")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fno-sanitize=null -fno-sanitize=alignment")
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/LinkSPDK.cmake")
-link_directories("${SPDK_LIBRARY_DIRS}")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LinkSPDK.cmake")
+link_directories("${SPDK_LIB_DIRS}")
 
 function(SETUP_SPDK_PROJECT_STRUCTURE project_name)
     set_target_properties(${project_name} PROPERTIES LINKER_LANGUAGE CXX)
@@ -78,3 +78,6 @@ add_custom_target(
     "./src/*.cpp" "./include/*.h"
     "-style=file"
 )
+
+set(SPDK_LIB_DIRS "${SPDK_LIB_DIRS}" PARENT_SCOPE)
+set(SPDK_LIBRARY_DEPENDENCIES "${SPDK_LIBRARY_DEPENDENCIES}" PARENT_SCOPE)

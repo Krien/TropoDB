@@ -17,6 +17,8 @@
 #include "port/port.h"
 #include "port/thread_annotations.h"
 
+#include <device.h>
+
 namespace leveldb {
 
 class MemTable;
@@ -70,6 +72,8 @@ class DBImpl : public DB {
   // bytes.
   void RecordReadSample(Slice key);
 
+  Status InitDB();
+
  private:
   friend class DB;
   struct CompactionState;
@@ -111,10 +115,13 @@ class DBImpl : public DB {
   }
 
   // Constant after construction
+  ZnsDevice::DeviceManager **device_manager_;
+  ZnsDevice::QPair **qpair_;
   Env* const env_;
   const InternalKeyComparator internal_comparator_;
   const InternalFilterPolicy internal_filter_policy_;
   const Options options_;  // options_.comparator == &internal_comparator_
+  const std::string name_;
 };
 
 

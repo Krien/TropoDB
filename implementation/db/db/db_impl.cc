@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "db/dbformat.h"
 #include "lsm_zns/db.h"
@@ -27,7 +28,8 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
     : env_(raw_options.env),
       internal_comparator_(raw_options.comparator),
       internal_filter_policy_(raw_options.filter_policy),
-      options_(raw_options){}
+      options_(raw_options),
+      name_(dbname){}
 
 DBImpl::~DBImpl() {
 }
@@ -63,7 +65,20 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
-  return Status::OK();
+  char* val = (char*)ZnsDevice::z_calloc(*this->qpair_, 4096, sizeof(char));
+  int rc = ZnsDevice::z_read(*this->qpair_, 0, val, 4096);
+  int walker = 0;
+  while(walker < 4096 && val[walker] != ':') {
+    walker++;
+  }
+  if (walker == 4096) {
+    return Status::NotFound("Invalid block");
+  }
+  if (strncmp(val, key.data(), walker) == 0) {
+    *value = std::string(val+walker+1);
+    return Status::OK();
+  }
+  return Status::NotFound("Key not found");
 }
 
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
@@ -83,7 +98,10 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 
 // Convenience methods
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
-  return Status::OK();
+  char* valpt = (char*)ZnsDevice::z_calloc(*this->qpair_, 4096, sizeof(char));
+  snprintf(valpt, 4096, "%s:%s", key.data(), val.data());
+  int rc = ZnsDevice::z_append(*this->qpair_, 0, valpt, 4096);
+  return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
@@ -115,8 +133,30 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 
 DB::~DB() = default;
 
+Status DBImpl::InitDB() {
+  ZnsDevice::DeviceManager** device_manager = (ZnsDevice::DeviceManager**)calloc(1, sizeof(ZnsDevice::DeviceManager));
+  int rc = ZnsDevice::z_init(device_manager);
+  this->device_manager_ = device_manager;
+  if (rc != 0) {
+    return Status::IOError("Error opening SPDK");
+  }
+  rc = ZnsDevice::z_open(*device_manager, this->name_.c_str());
+  if (rc != 0) {
+    return Status::IOError("Error opening ZNS device");
+  }
+  this->qpair_ = (ZnsDevice::QPair**)calloc(1, sizeof(ZnsDevice::QPair*));
+  rc = ZnsDevice::z_create_qpair(*device_manager, this->qpair_);
+  if (rc != 0) {
+    return Status::IOError("Error creating QPair");
+  }
+  rc = ZnsDevice::z_reset(*this->qpair_, 0, true);
+  return rc == 0 ? Status::OK() : Status::IOError("Error resetting device");
+}
+
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
-   return Status::OK();
+  DBImpl* impl = new DBImpl(options, dbname);
+  *dbptr = impl;
+  return impl->InitDB();
 }
 
 Snapshot::~Snapshot() = default;

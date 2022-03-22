@@ -25,7 +25,7 @@ endif(NOT CMAKE_CXX_STANDARD)
 
 option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
 option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" OFF)
-option(LEVELDB_INSTALL "Install LevelDB's header and library" ON)
+option(LEVELDB_INSTALL "Install LevelDB's header and library" OFF)
 
 include(CheckIncludeFile)
 check_include_file("unistd.h" HAVE_UNISTD_H)
@@ -211,6 +211,11 @@ if(HAVE_CLANG_THREAD_SAFETY)
       -Werror -Wthread-safety)
 endif(HAVE_CLANG_THREAD_SAFETY)
 
+add_subdirectory("device")
+link_directories("${SPDK_LIB_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/device/lib")
+target_link_libraries(leveldb znsdevice_lib)
+target_link_libraries(leveldb ${SPDK_LIBRARY_DEPENDENCIES})
+
 if(HAVE_CRC32C)
   target_link_libraries(leveldb crc32c)
 endif(HAVE_CRC32C)
@@ -238,7 +243,7 @@ add_executable(initialtest
   "tests/initial_test.cc"
 )
 target_link_libraries(initialtest leveldb)
-
+target_link_libraries(initialtest ${SPDK_LIBRARY_DEPENDENCIES})
 endif(LEVELDB_BUILD_TESTS)
 
 
