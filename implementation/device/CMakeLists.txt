@@ -17,38 +17,9 @@ message("compiler is ${CMAKE_CXX_COMPILER_ID}   and name is ${CMAKE_CXX_COMPILER
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0  -ggdb -Wl,--no-as-needed -Wall -Wextra")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fno-sanitize=null -fno-sanitize=alignment")
 
-# Change to personal location.
-if(DEFINED ENV{SPDK_DIR})
-    set(SPDK_DIR "$ENV{SPDK_DIR}")
-else(DEFINED ENV{SPDK_DIR})
-    set(SPDK_DIR "/home/$ENV{USER}/local/spdk")
-endif()
-set(DPDK_LIB_DIR "${SPDK_DIR}/dpdk/build/lib")
-message("looking for SPDK in ${SPDK_DIR}")
 
-find_package(PkgConfig REQUIRED)
-if(NOT PKG_CONFIG_FOUND)
-    message(FATAL_ERROR "pkg-config command not found!" )
-endif()
-
-set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${SPDK_DIR}/build/lib/pkgconfig/")
-message("Looking for SPDK packages...")
-pkg_search_module(SPDK REQUIRED IMPORTED_TARGET spdk_nvme)
-pkg_search_module(DPDK REQUIRED IMPORTED_TARGET spdk_env_dpdk)
-pkg_search_module(SYS REQUIRED IMPORTED_TARGET spdk_syslibs)
-
-# TODO this is of course not portable or the clean method, please fix.
-set(SPDK_LIB_FLAGS "")
-set(SPDK_LIB_FLAGS "${SPDK_LIB_FLAGS} -L${SPDK_DIR}/build/lib -Wl,--whole-archive -Wl,--no-as-needed")
-foreach(X in ${SPDK_LIBRARIES})
-    if (NOT ${X} STREQUAL "in")
-        set(SPDK_LIB_FLAGS "${SPDK_LIB_FLAGS} -l${X}")
-    endif()
-endforeach()
-set(SPDK_LIB_FLAGS "${SPDK_LIB_FLAGS} -Wl,--no-whole-archive ${SPDK_DIR}/build/lib/libspdk_env_dpdk.a -Wl,-rpath-link ${DPDK_LIB_DIR} -Wl,--whole-archive")
-set(SPDK_LIB_FLAGS "${SPDK_LIB_FLAGS}  ${DPDK_LIB_DIR}/librte_bus_pci.a ${DPDK_LIB_DIR}/librte_cryptodev.a ${DPDK_LIB_DIR}/librte_eal.a  ${DPDK_LIB_DIR}/librte_ethdev.a ${DPDK_LIB_DIR}/librte_hash.a ${DPDK_LIB_DIR}/librte_kvargs.a ${DPDK_LIB_DIR}/librte_mbuf.a ${DPDK_LIB_DIR}/librte_mempool.a   ${DPDK_LIB_DIR}/librte_mempool_ring.a ${DPDK_LIB_DIR}/librte_net.a ${DPDK_LIB_DIR}/librte_pci.a ${DPDK_LIB_DIR}/librte_power.a ${DPDK_LIB_DIR}/librte_rcu.a ${DPDK_LIB_DIR}/librte_ring.a ${DPDK_LIB_DIR}/librte_telemetry.a ${DPDK_LIB_DIR}/librte_vhost.a")
-set(SYS_LIBRARIES " -lnuma -ldl  -L/home/user/spdk/isa-l/.libs -lisal -pthread -lrt -luuid -lcrypto -lm -laio")
-set(SPDK_LIB_FLAGS "${SPDK_LIB_FLAGS} -Wl,--no-whole-archive ${SYS_LIBRARIES}")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/LinkSPDK.cmake")
+add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
 
 set(include_dir "include")
 set(common_sources
@@ -58,16 +29,17 @@ set(common_sources
 )
 
 # Library
-add_library(znsdevice_lib
+add_library(znsdevice_lib STATIC
     "${common_sources}"
 )
 target_include_directories(znsdevice_lib PUBLIC include)
 target_include_directories(znsdevice_lib PRIVATE src)
 
+#target_link_libraries(znsdevice_lib ${SPDK_LIB_FLAGS})
 set_target_properties(znsdevice_lib PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
-add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
 
 # Standalone CLI
+link_directories("${SPDK_LIBRARY_DIRS};${DPDK_LIBRARY_DIRS};${SYS_STATIC_LIBRARY_DIRS}")
 add_executable(znsdevice
     "${common_sources}"
     src/main.cpp
@@ -75,8 +47,20 @@ add_executable(znsdevice
 target_include_directories(znsdevice PUBLIC include)
 target_include_directories(znsdevice PRIVATE src)
 
-set_target_properties(znsdevice PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
-add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
+target_link_libraries(
+    znsdevice
+    -Wl,--whole-archive -Wl,--as-needed
+    "${SPDK_LIBRARIES}"
+    "${DPDK_LIBRARIES}"
+    -Wl,--no-whole-archive
+    "${SYS_STATIC_LIBRARIES}"
+    -pthread
+)
+
+target_compile_options(
+    znsdevice
+    PUBLIC "${SPDK_CFLAGS};${DPDK_CFLAGS}"
+)
 
 # Tests
 add_executable(device_initial_test
@@ -85,7 +69,21 @@ add_executable(device_initial_test
 set_target_properties(device_initial_test PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(device_initial_test znsdevice_lib)
 target_include_directories(device_initial_test PRIVATE include)
-set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${LINK_FLAGS} ${SPDK_LIB_FLAGS})
+#set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
+target_link_libraries(
+    device_initial_test
+    -Wl,--whole-archive -Wl,--as-needed
+    "${SPDK_LIBRARIES}"
+    "${DPDK_LIBRARIES}"
+    -Wl,--no-whole-archive
+    "${SYS_STATIC_LIBRARIES}"
+    -pthread
+)
+
+target_compile_options(
+    device_initial_test
+    PUBLIC "${SPDK_CFLAGS};${DPDK_CFLAGS}"
+)
 
 enable_testing()
 add_test(

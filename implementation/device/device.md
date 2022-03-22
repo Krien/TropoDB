@@ -6,7 +6,7 @@ It comes with a:
 * set of unittests to ensure validity, run with `./bin/device_initial_test`. Automatically tested when CMake is used, except when turned off.
 
 # DISCLAIMER
-SPDK needs to bind the device. Therefore ensure that your device is actually binded to SPDK. This can be done by navigating to sudo to the `scripts` directory in the SPDK directory and calling `setup.sh`. Further on, always run as root with e.g. `sudo`, the permissions are needed.
+SPDK needs to bind the device. Therefore ensure that your device is actually binded to SPDK. This can be done by navigating to the `scripts` directory in the SPDK directory and calling `setup.sh`. There are also some helper scripts in the repository root/scripts, bind binds all devices to SPDK and unbind unbinds all devices to SPDK. Further on, always run as root with e.g. `sudo`, the permissions are needed. The code is only tested on GNU/Linux. It will NOT run properly on either Windows. FreeBSD, MacOs etc. are all not tested and will probably not work as well.
 
 # How to build
 There are multiple ways to built this project.
