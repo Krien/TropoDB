@@ -14,12 +14,22 @@ set(LIBRARY_OUTPUT_PATH ${CMAKE_LIB_DIR})
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_COMPILER g++)
 message("compiler is ${CMAKE_CXX_COMPILER_ID}   and name is ${CMAKE_CXX_COMPILER}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0  -ggdb -Wl,--no-as-needed -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0  -ggdb -Wall -Wextra")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fno-sanitize=null -fno-sanitize=alignment")
 
-
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/LinkSPDK.cmake")
-add_definitions (${SPDK_CFLAGS} ${DPDK_CFLAGS})
+link_directories("${SPDK_LIBRARY_DIRS}")
+
+function(SETUP_SPDK_PROJECT_STRUCTURE project_name)
+    set_target_properties(${project_name} PROPERTIES LINKER_LANGUAGE CXX)
+    target_include_directories(${project_name} PUBLIC include)
+    target_include_directories(${project_name} PRIVATE src)
+    target_link_libraries(${project_name} ${SPDK_LIBRARY_DEPENDENCIES})
+    target_compile_options(
+        ${project_name}
+        PUBLIC "${SPDK_CFLAGS};${DPDK_CFLAGS}"
+    )
+endfunction()
 
 set(include_dir "include")
 set(common_sources
@@ -32,58 +42,21 @@ set(common_sources
 add_library(znsdevice_lib STATIC
     "${common_sources}"
 )
-target_include_directories(znsdevice_lib PUBLIC include)
-target_include_directories(znsdevice_lib PRIVATE src)
-
-#target_link_libraries(znsdevice_lib ${SPDK_LIB_FLAGS})
-set_target_properties(znsdevice_lib PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
+setup_spdk_project_structure(znsdevice_lib)
 
 # Standalone CLI
-link_directories("${SPDK_LIBRARY_DIRS};${DPDK_LIBRARY_DIRS};${SYS_STATIC_LIBRARY_DIRS}")
 add_executable(znsdevice
     "${common_sources}"
     src/main.cpp
 )
-target_include_directories(znsdevice PUBLIC include)
-target_include_directories(znsdevice PRIVATE src)
-
-target_link_libraries(
-    znsdevice
-    -Wl,--whole-archive -Wl,--as-needed
-    "${SPDK_LIBRARIES}"
-    "${DPDK_LIBRARIES}"
-    -Wl,--no-whole-archive
-    "${SYS_STATIC_LIBRARIES}"
-    -pthread
-)
-
-target_compile_options(
-    znsdevice
-    PUBLIC "${SPDK_CFLAGS};${DPDK_CFLAGS}"
-)
+setup_spdk_project_structure(znsdevice)
 
 # Tests
 add_executable(device_initial_test
     tests/device_initial_test.cpp
 )
-set_target_properties(device_initial_test PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(device_initial_test znsdevice_lib)
-target_include_directories(device_initial_test PRIVATE include)
-#set_target_properties(device_initial_test PROPERTIES LINK_FLAGS ${SPDK_LIB_FLAGS})
-target_link_libraries(
-    device_initial_test
-    -Wl,--whole-archive -Wl,--as-needed
-    "${SPDK_LIBRARIES}"
-    "${DPDK_LIBRARIES}"
-    -Wl,--no-whole-archive
-    "${SYS_STATIC_LIBRARIES}"
-    -pthread
-)
-
-target_compile_options(
-    device_initial_test
-    PUBLIC "${SPDK_CFLAGS};${DPDK_CFLAGS}"
-)
+setup_spdk_project_structure(device_initial_test)
 
 enable_testing()
 add_test(
