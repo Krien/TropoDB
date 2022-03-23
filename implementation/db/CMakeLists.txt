@@ -212,7 +212,8 @@ if(HAVE_CLANG_THREAD_SAFETY)
 endif(HAVE_CLANG_THREAD_SAFETY)
 
 add_subdirectory("device")
-link_directories("${SPDK_LIB_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/device/lib")
+link_directories("${SPDK_LIB_DIRS}")
+message("looking in ${SPDK_LIB_DIRS}")
 target_link_libraries(leveldb znsdevice_lib)
 target_link_libraries(leveldb ${SPDK_LIBRARY_DEPENDENCIES})
 
