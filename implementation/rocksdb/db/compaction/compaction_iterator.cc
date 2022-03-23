@@ -416,10 +416,11 @@ void CompactionIterator::NextFromInput() {
       key_ = current_key_.SetInternalKey(key_, &ikey_);
 
       int prev_cmp_with_ts_low =
-          !full_history_ts_low_ ? 0
-          : curr_ts_.empty()
+          !full_history_ts_low_
               ? 0
-              : cmp_->CompareTimestamp(curr_ts_, *full_history_ts_low_);
+              : curr_ts_.empty()
+                    ? 0
+                    : cmp_->CompareTimestamp(curr_ts_, *full_history_ts_low_);
 
       // If timestamp_size_ > 0, then copy from ikey_ to curr_ts_ for the use
       // in next iteration to compare with the timestamp of next key.
@@ -794,8 +795,8 @@ void CompactionIterator::NextFromInput() {
                  cmp_with_history_ts_low_ < 0)) &&
                bottommost_level_ && ikeyNotNeededForIncrementalSnapshot()) {
       // Handle the case where we have a delete key at the bottom most level
-      // We can skip outputting the key iff there are no subsequent puts for this
-      // key
+      // We can skip outputting the key iff there are no subsequent puts for
+      // this key
       assert(!compaction_ || compaction_->KeyNotExistsBeyondOutputLevel(
                                  ikey_.user_key, &level_ptrs_));
       ParsedInternalKey next_ikey;
@@ -822,8 +823,8 @@ void CompactionIterator::NextFromInput() {
               DefinitelyNotInSnapshot(next_ikey.sequence, prev_snapshot))) {
         AdvanceInputIter();
       }
-      // If you find you still need to output a row with this key, we need to output the
-      // delete too
+      // If you find you still need to output a row with this key, we need to
+      // output the delete too
       if (input_.Valid() &&
           (ParseInternalKey(input_.key(), &next_ikey, allow_data_in_errors_)
                .ok()) &&
@@ -1101,8 +1102,8 @@ inline SequenceNumber CompactionIterator::findEarliestVisibleSnapshot(
     ROCKS_LOG_FATAL(info_log_,
                     "No snapshot left in findEarliestVisibleSnapshot");
   }
-  auto snapshots_iter = std::lower_bound(
-      snapshots_->begin(), snapshots_->end(), in);
+  auto snapshots_iter =
+      std::lower_bound(snapshots_->begin(), snapshots_->end(), in);
   if (snapshots_iter == snapshots_->begin()) {
     *prev_snapshot = 0;
   } else {
@@ -1114,8 +1115,8 @@ inline SequenceNumber CompactionIterator::findEarliestVisibleSnapshot(
     }
   }
   if (snapshot_checker_ == nullptr) {
-    return snapshots_iter != snapshots_->end()
-      ? *snapshots_iter : kMaxSequenceNumber;
+    return snapshots_iter != snapshots_->end() ? *snapshots_iter
+                                               : kMaxSequenceNumber;
   }
   bool has_released_snapshot = !released_snapshots_.empty();
   for (; snapshots_iter != snapshots_->end(); ++snapshots_iter) {

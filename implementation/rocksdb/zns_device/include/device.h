@@ -88,26 +88,22 @@ void __attach_devices__cb(void *cb_ctx,
                           struct spdk_nvme_ctrlr *ctrlr,
                           const struct spdk_nvme_ctrlr_opts *opts);
 
-void __remove_devices__cb(void *cb_ctx,
-                          struct spdk_nvme_ctrlr *ctrlr);
+void __remove_devices__cb(void *cb_ctx, struct spdk_nvme_ctrlr *ctrlr);
 
 void *__reserve_dma(uint64_t size);
 
 int __get_block_alligned_size(uint64_t *size, uint64_t *blocks);
 
-void __operation_complete(void *arg,
-                                 const struct spdk_nvme_cpl *completion);
+void __operation_complete(void *arg, const struct spdk_nvme_cpl *completion);
 
-void __append_complete(void *arg,
-                              const struct spdk_nvme_cpl *completion);
+void __append_complete(void *arg, const struct spdk_nvme_cpl *completion);
 
 void __read_complete(void *arg, const struct spdk_nvme_cpl *completion);
 
-void __reset_zone_complete(void *arg,
-                                  const struct spdk_nvme_cpl *completion);
+void __reset_zone_complete(void *arg, const struct spdk_nvme_cpl *completion);
 
 void __get_zone_head_complete(void *arg,
-                                     const struct spdk_nvme_cpl *completion);
+                              const struct spdk_nvme_cpl *completion);
 
 int __probe();
 

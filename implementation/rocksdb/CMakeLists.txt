@@ -666,7 +666,7 @@ set(SOURCES
         db/db_impl/db_impl_experimental.cc
         db/db_impl/db_impl_readonly.cc
         db/db_impl/db_impl_secondary.cc
-        db/zns_impl/db_impl_zns.cc
+        #db/zns_impl/db_impl_zns.cc
         db/db_info_dumper.cc
         db/db_iter.cc
         db/dbformat.cc
@@ -1013,6 +1013,8 @@ endif()
 
 set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
 set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
+set(ROCKSDB_SHARED_OBJ_LIB rocksdb-obj-shared${ARTIFACT_SUFFIX})
+
 
 option(ROCKSDB_BUILD_SHARED "Build shared versions of the RocksDB libraries" ON)
 
@@ -1023,6 +1025,10 @@ else()
   set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
+set(ZNS_LSM_SOURCES
+  db/zns_impl/db_impl_zns.cc 
+)
+
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
   ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
@@ -1031,7 +1037,11 @@ target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE znsdevice_lib)
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE ${SPDK_LIBRARY_DEPENDENCIES})
 
 if(ROCKSDB_BUILD_SHARED)
-  add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
+  add_library(${ROCKSDB_SHARED_OBJ_LIB} OBJECT  ${SOURCES})
+  target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE
+    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+  set_property(TARGET ${ROCKSDB_SHARED_OBJ_LIB}  PROPERTY POSITION_INDEPENDENT_CODE ON)
+  add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE znsdevice_lib)
@@ -1484,3 +1494,17 @@ add_executable(initialtest
 target_link_libraries(initialtest ${ROCKSDB_LIB})
 target_link_libraries(initialtest znsdevice_lib)
 set_property(TARGET initialtest PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+if(DEFINED ENV{CLANG_PATH})
+    set(CLANG_FORMAT_PATH "$ENV{CLANG_FORMAT_PATH}")
+else(DEFINED ENV{CLANG_FORMAT_PATH})
+    set(CLANG_FORMAT_PATH "/home/$ENV{USER}/bin/clang-format")
+message("Clang-format path: ${CLANG_FORMAT_PATH}")
+endif()
+add_custom_target(
+    format_rocksdb
+    COMMAND ${CLANG_FORMAT_PATH}
+    -i
+    ${ZNS_LSM_SOURCES} ${SOURCES}
+    "-style=file"
+)

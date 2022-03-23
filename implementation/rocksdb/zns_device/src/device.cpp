@@ -41,10 +41,10 @@ int z_open(DeviceManager *manager, const char *traddr) {
                          .found = false};
   // Find and open device
   int probe_ctx;
-  probe_ctx = spdk_nvme_probe(
-      &manager->g_trid, &prober, (spdk_nvme_probe_cb)__probe_devices_cb,
-      (spdk_nvme_attach_cb)__attach_devices__cb, 
-      (spdk_nvme_remove_cb)__remove_devices__cb);
+  probe_ctx = spdk_nvme_probe(&manager->g_trid, &prober,
+                              (spdk_nvme_probe_cb)__probe_devices_cb,
+                              (spdk_nvme_attach_cb)__attach_devices__cb,
+                              (spdk_nvme_remove_cb)__remove_devices__cb);
   if (probe_ctx != 0) {
     spdk_env_fini();
     return 1;
@@ -136,10 +136,9 @@ void __attach_devices__cb(void *cb_ctx,
 }
 
 void __remove_devices__cb(void *cb_ctx, struct spdk_nvme_ctrlr *ctrlr) {
-    (void)cb_ctx;
-    (void)ctrlr;
+  (void)cb_ctx;
+  (void)ctrlr;
 }
-
 
 int z_create_qpair(DeviceManager *man, QPair **qpair) {
   ERROR_ON_NULL(man, 1);
@@ -164,8 +163,7 @@ void *__reserve_dma(uint64_t size) {
                               SPDK_MALLOC_DMA);
 }
 
-void __operation_complete(void *arg,
-                                 const struct spdk_nvme_cpl *completion) {
+void __operation_complete(void *arg, const struct spdk_nvme_cpl *completion) {
   Completion *completed = (Completion *)arg;
   completed->done = true;
   if (spdk_nvme_cpl_is_error(completion)) {
@@ -174,8 +172,7 @@ void __operation_complete(void *arg,
   }
 }
 
-void __append_complete(void *arg,
-                              const struct spdk_nvme_cpl *completion) {
+void __append_complete(void *arg, const struct spdk_nvme_cpl *completion) {
   __operation_complete(arg, completion);
 }
 
@@ -183,13 +180,12 @@ void __read_complete(void *arg, const struct spdk_nvme_cpl *completion) {
   __operation_complete(arg, completion);
 }
 
-void __reset_zone_complete(void *arg,
-                                  const struct spdk_nvme_cpl *completion) {
+void __reset_zone_complete(void *arg, const struct spdk_nvme_cpl *completion) {
   __operation_complete(arg, completion);
 }
 
 void __get_zone_head_complete(void *arg,
-                                     const struct spdk_nvme_cpl *completion) {
+                              const struct spdk_nvme_cpl *completion) {
   __operation_complete(arg, completion);
 }
 

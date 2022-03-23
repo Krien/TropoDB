@@ -20,14 +20,14 @@
 #include <vector>
 
 #include "options/cf_options.h"
-#include "rocksdb/options.h"
 #include "rocksdb/db.h"
-#include "rocksdb/slice.h"
-#include "rocksdb/metadata.h"
-#include "rocksdb/status.h"
-#include "rocksdb/listener.h"
-#include "rocksdb/transaction_log.h"
 #include "rocksdb/file_checksum.h"
+#include "rocksdb/listener.h"
+#include "rocksdb/metadata.h"
+#include "rocksdb/options.h"
+#include "rocksdb/slice.h"
+#include "rocksdb/status.h"
+#include "rocksdb/transaction_log.h"
 
 #ifndef ZNSDEV
 #define ZNSDEV
@@ -58,8 +58,8 @@ struct MemTableInfo;
 class DBImplZNS : public DB {
  public:
   DBImplZNS(const DBOptions& options, const std::string& dbname,
-         const bool seq_per_batch = false, const bool batch_per_txn = true,
-         bool read_only = false);
+            const bool seq_per_batch = false, const bool batch_per_txn = true,
+            bool read_only = false);
 
   DBImplZNS(const DBImplZNS&) = delete;
   DBImplZNS& operator=(const DBImplZNS&) = delete;
@@ -73,7 +73,7 @@ class DBImplZNS : public DB {
   // Implementations of the DB interface
   using DB::Put;
   Status Put(const WriteOptions& options, const Slice& key,
-                     const Slice& value) override;
+             const Slice& value) override;
   Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, const Slice& value) override;
   Status Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
@@ -94,23 +94,21 @@ class DBImplZNS : public DB {
                       ColumnFamilyHandle* column_family, const Slice& key,
                       const Slice& ts) override;
   using DB::Merge;
-  Status Merge(const WriteOptions& options,
-                       ColumnFamilyHandle* column_family, const Slice& key,
-                       const Slice& value) override;
+  Status Merge(const WriteOptions& options, ColumnFamilyHandle* column_family,
+               const Slice& key, const Slice& value) override;
   using DB::Write;
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
   using DB::Get;
   Status Get(const ReadOptions& options, const Slice& key,
              std::string* value) override;
-  Status Get(const ReadOptions& options,
-                     ColumnFamilyHandle* column_family, const Slice& key,
-                     PinnableSlice* value) override;
+  Status Get(const ReadOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, PinnableSlice* value) override;
 
-  Status GetMergeOperands(
-      const ReadOptions& options, ColumnFamilyHandle* column_family,
-      const Slice& key, PinnableSlice* merge_operands,
-      GetMergeOperandsOptions* get_merge_operands_options,
-      int* number_of_operands) override;
+  Status GetMergeOperands(const ReadOptions& options,
+                          ColumnFamilyHandle* column_family, const Slice& key,
+                          PinnableSlice* merge_operands,
+                          GetMergeOperandsOptions* get_merge_operands_options,
+                          int* number_of_operands) override;
 
   using DB::MultiGet;
   virtual std::vector<Status> MultiGet(
@@ -214,8 +212,7 @@ class DBImplZNS : public DB {
   virtual Status GetSortedWalFiles(VectorLogPtr& files) override;
   virtual Status GetCurrentWalFile(
       std::unique_ptr<LogFile>* current_log_file) override;
-  virtual Status GetCreationTimeOfOldestFile(
-      uint64_t* creation_time) override;
+  virtual Status GetCreationTimeOfOldestFile(uint64_t* creation_time) override;
 
   virtual Status GetUpdatesSince(
       SequenceNumber seq_number, std::unique_ptr<TransactionLogIterator>* iter,
@@ -264,7 +261,7 @@ class DBImplZNS : public DB {
   virtual Status GetPropertiesOfTablesInRange(
       ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
       TablePropertiesCollection* props) override;
-  
+
   virtual bool SetPreserveDeletesSequenceNumber(SequenceNumber seqnum);
 
   const Snapshot* GetSnapshot() override;
@@ -276,8 +273,8 @@ class DBImplZNS : public DB {
   Status NewDB();
 
   // Constant after construction
-  ZnsDevice::DeviceManager **device_manager_;
-  ZnsDevice::QPair **qpair_;
+  ZnsDevice::DeviceManager** device_manager_;
+  ZnsDevice::QPair** qpair_;
   const std::string name_;
 };
 }  // namespace ROCKSDB_NAMESPACE

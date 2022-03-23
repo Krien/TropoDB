@@ -85,9 +85,7 @@ const std::string kSharedChecksumDirSlash = kSharedChecksumDirName + "/";
 void BackupStatistics::IncrementNumberSuccessBackup() {
   number_success_backup++;
 }
-void BackupStatistics::IncrementNumberFailBackup() {
-  number_fail_backup++;
-}
+void BackupStatistics::IncrementNumberFailBackup() { number_fail_backup++; }
 
 uint32_t BackupStatistics::GetNumberSuccessBackup() const {
   return number_success_backup;
@@ -376,12 +374,8 @@ class BackupEngineImpl {
         timestamp_ = /* something clearly fabricated */ 1;
       }
     }
-    int64_t GetTimestamp() const {
-      return timestamp_;
-    }
-    uint64_t GetSize() const {
-      return size_;
-    }
+    int64_t GetTimestamp() const { return timestamp_; }
+    uint64_t GetSize() const { return size_; }
     uint32_t GetNumberFiles() const {
       return static_cast<uint32_t>(files_.size());
     }
@@ -404,8 +398,7 @@ class BackupEngineImpl {
 
     std::shared_ptr<FileInfo> GetFile(const std::string& filename) const {
       auto it = file_infos_->find(filename);
-      if (it == file_infos_->end())
-        return nullptr;
+      if (it == file_infos_->end()) return nullptr;
       return it->second;
     }
 
@@ -481,12 +474,11 @@ class BackupEngineImpl {
                                    bool include_file_details) const;
 
   inline std::string GetAbsolutePath(
-      const std::string &relative_path = "") const {
+      const std::string& relative_path = "") const {
     assert(relative_path.size() == 0 || relative_path[0] != '/');
     return options_.backup_dir + "/" + relative_path;
   }
-  inline std::string GetPrivateFileRel(BackupID backup_id,
-                                       bool tmp = false,
+  inline std::string GetPrivateFileRel(BackupID backup_id, bool tmp = false,
                                        const std::string& file = "") const {
     assert(file.size() == 0 || file[0] != '/');
     return kPrivateDirSlash + ROCKSDB_NAMESPACE::ToString(backup_id) +
@@ -691,12 +683,12 @@ class BackupEngineImpl {
     std::string dst_path;
     std::string dst_relative;
     BackupAfterCopyOrCreateWorkItem()
-      : shared(false),
-        needed_to_copy(false),
-        backup_env(nullptr),
-        dst_path_tmp(""),
-        dst_path(""),
-        dst_relative("") {}
+        : shared(false),
+          needed_to_copy(false),
+          backup_env(nullptr),
+          dst_path_tmp(""),
+          dst_path(""),
+          dst_relative("") {}
 
     BackupAfterCopyOrCreateWorkItem(BackupAfterCopyOrCreateWorkItem&& o)
         ROCKSDB_NOEXCEPT {
@@ -796,8 +788,8 @@ class BackupEngineImpl {
   std::map<BackupID, std::unique_ptr<BackupMeta>> backups_;
   std::map<BackupID, std::pair<IOStatus, std::unique_ptr<BackupMeta>>>
       corrupt_backups_;
-  std::unordered_map<std::string,
-                     std::shared_ptr<FileInfo>> backuped_file_infos_;
+  std::unordered_map<std::string, std::shared_ptr<FileInfo>>
+      backuped_file_infos_;
   std::atomic<bool> stop_backup_;
 
   // options data
@@ -995,10 +987,10 @@ IOStatus BackupEngineImpl::Initialize() {
 
     if (options_.max_valid_backups_to_open != port::kMaxInt32) {
       options_.max_valid_backups_to_open = port::kMaxInt32;
-      ROCKS_LOG_WARN(
-          options_.info_log,
-          "`max_valid_backups_to_open` is not set to the default value. Ignoring "
-          "its value since BackupEngine is not read-only.");
+      ROCKS_LOG_WARN(options_.info_log,
+                     "`max_valid_backups_to_open` is not set to the default "
+                     "value. Ignoring "
+                     "its value since BackupEngine is not read-only.");
     }
 
     // gather the list of directories that we need to create
@@ -1100,8 +1092,7 @@ IOStatus BackupEngineImpl::Initialize() {
     // load the backups if any, until valid_backups_to_open of the latest
     // non-corrupted backups have been successfully opened.
     int valid_backups_to_open = options_.max_valid_backups_to_open;
-    for (auto backup_iter = backups_.rbegin();
-         backup_iter != backups_.rend();
+    for (auto backup_iter = backups_.rbegin(); backup_iter != backups_.rend();
          ++backup_iter) {
       assert(latest_backup_id_ == 0 || latest_backup_id_ > backup_iter->first);
       if (latest_backup_id_ == 0) {

@@ -28,7 +28,7 @@ namespace ROCKSDB_NAMESPACE {
 namespace {
 class BytewiseComparatorImpl : public Comparator {
  public:
-  BytewiseComparatorImpl() { }
+  BytewiseComparatorImpl() {}
   static const char* kClassName() { return "leveldb.BytewiseComparator"; }
   const char* Name() const override { return kClassName(); }
 
@@ -96,7 +96,7 @@ class BytewiseComparatorImpl : public Comparator {
       const uint8_t byte = (*key)[i];
       if (byte != static_cast<uint8_t>(0xff)) {
         (*key)[i] = byte + 1;
-        key->resize(i+1);
+        key->resize(i + 1);
         return;
       }
     }
@@ -146,7 +146,7 @@ class BytewiseComparatorImpl : public Comparator {
 
 class ReverseBytewiseComparatorImpl : public BytewiseComparatorImpl {
  public:
-  ReverseBytewiseComparatorImpl() { }
+  ReverseBytewiseComparatorImpl() {}
 
   static const char* kClassName() {
     return "rocksdb.ReverseBytewiseComparator";
@@ -287,7 +287,7 @@ class ComparatorWithU64TsImpl : public Comparator {
   TComparator cmp_without_ts_;
 };
 
-}// namespace
+}  // namespace
 
 const Comparator* BytewiseComparator() {
   static BytewiseComparatorImpl bytewise;

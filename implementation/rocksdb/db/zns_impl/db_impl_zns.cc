@@ -8,107 +8,123 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 #include <set>
 #include <string>
 #include <vector>
-#include <iostream>
 
-#include "rocksdb/options.h"
 #include "rocksdb/db.h"
-#include "rocksdb/slice.h"
-#include "rocksdb/metadata.h"
-#include "rocksdb/status.h"
-#include "rocksdb/listener.h"
-#include "rocksdb/transaction_log.h"
 #include "rocksdb/file_checksum.h"
+#include "rocksdb/listener.h"
+#include "rocksdb/metadata.h"
+#include "rocksdb/options.h"
+#include "rocksdb/slice.h"
+#include "rocksdb/status.h"
+#include "rocksdb/transaction_log.h"
+#include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 const int kNumNonTableCacheFiles = 10;
 
 DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
-         const bool seq_per_batch, const bool batch_per_txn,
-         bool read_only)
-    : name_(dbname){}
+                     const bool seq_per_batch, const bool batch_per_txn,
+                     bool read_only)
+    : name_(dbname) {}
 
-Status DBImplZNS::NewDB() {
-  return Status::OK();
-}
+Status DBImplZNS::NewDB() { return Status::OK(); }
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
-                     const Slice& value)  {
-  char* valpt = (char*)ZnsDevice::z_calloc(*this->qpair_, 4096, sizeof(char));
-  snprintf(valpt, 4096, "%s:%s", key.data(), value.data());
-  int rc = ZnsDevice::z_append(*this->qpair_, 0, valpt, 4096);
+                      const Slice& value) {
+  uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
+  char* valpt =
+      (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
+  snprintf(valpt, lba_size, "SStable%s:%s", key.data(), value.data());
+  int rc = ZnsDevice::z_append(*this->qpair_, 0, valpt, lba_size);
   return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
   return Status::OK();
 }
 
-Status DBImplZNS::Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
-             const Slice& key, const Slice& value) {
-        return Status::NotSupported();               
+Status DBImplZNS::Put(const WriteOptions& options,
+                      ColumnFamilyHandle* column_family, const Slice& key,
+                      const Slice& value) {
+  return Status::NotSupported();
 }
-Status DBImplZNS::Put(const WriteOptions& options, ColumnFamilyHandle* column_family,
-             const Slice& key, const Slice& ts, const Slice& value) {
-        return Status::NotSupported();               
+Status DBImplZNS::Put(const WriteOptions& options,
+                      ColumnFamilyHandle* column_family, const Slice& key,
+                      const Slice& ts, const Slice& value) {
+  return Status::NotSupported();
 }
 
 Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
-             std::string* value) {
-  char* val = (char*)ZnsDevice::z_calloc(*this->qpair_, 4096, sizeof(char));
-  int rc = ZnsDevice::z_read(*this->qpair_, 0, val, 4096);
-  int walker = 0;
-  while(walker < 4096 && val[walker] != ':') {
-    walker++;
-  }
-  if (walker == 4096) {
+                      std::string* value) {
+  uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
+  char* val = (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
+  int rc = ZnsDevice::z_read(*this->qpair_, 0, val, lba_size);
+  if (strncmp(val, "SStable", strlen("sstable")) != 0) {
     return Status::NotFound("Invalid block");
   }
-  if (strncmp(val, key.data(), walker) == 0) {
-    *value = std::string(val+walker+1);
+  val += strlen("SStable");
+  // get next 4 bytes for kv count
+  Slice reader = Slice(val);
+  uint32_t kv_count, first_key, last_key;
+  bool s = GetVarint32(&reader, &kv_count);
+  s = GetVarint32(&reader, &first_key);
+  s = GetVarint32(&reader, &first_key);
+
+  uint64_t walker = 0;
+  while (walker < lba_size && val[walker] != ':') {
+    walker++;
+  }
+  if (walker == lba_size) {
+    return Status::NotFound("Invalid block");
+  }
+  if (s && strncmp(val, key.data(), walker) == 0) {
+    *value = std::string(val + walker + 1);
     return Status::OK();
   }
   return Status::NotFound("Key not found");
 }
 
 Status DBImplZNS::Get(const ReadOptions& options,
-                     ColumnFamilyHandle* column_family, const Slice& key,
-                     PinnableSlice* value) {
-        return Status::NotSupported();
+                      ColumnFamilyHandle* column_family, const Slice& key,
+                      PinnableSlice* value) {
+  return Status::NotSupported();
 }
 
 Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
   return Status::OK();
-
 }
 
-  Status DBImplZNS::Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
-                const Slice& key) {
-                          return Status::NotSupported();
-                }
-  Status DBImplZNS::Delete(const WriteOptions& options, ColumnFamilyHandle* column_family,
-                const Slice& key, const Slice& ts) {
-                          return Status::NotSupported();
-                }
+Status DBImplZNS::Delete(const WriteOptions& options,
+                         ColumnFamilyHandle* column_family, const Slice& key) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::Delete(const WriteOptions& options,
+                         ColumnFamilyHandle* column_family, const Slice& key,
+                         const Slice& ts) {
+  return Status::NotSupported();
+}
 
-                  Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
-                                              return Status::NotSupported();
-                  }
+Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::Merge(const WriteOptions& options,
-                       ColumnFamilyHandle* column_family, const Slice& key,
-                       const Slice& value) {
-                                                                       return Status::OK();
-                       };
+Status DBImplZNS::Merge(const WriteOptions& options,
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        const Slice& value) {
+  return Status::OK();
+};
 
 bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
   return false;
 }
 
 Status DBImplZNS::InitDB() {
-  ZnsDevice::DeviceManager** device_manager = (ZnsDevice::DeviceManager**)calloc(1, sizeof(ZnsDevice::DeviceManager));
+  ZnsDevice::DeviceManager** device_manager =
+      (ZnsDevice::DeviceManager**)calloc(1, sizeof(ZnsDevice::DeviceManager));
   int rc = ZnsDevice::z_init(device_manager);
   this->device_manager_ = device_manager;
   if (rc != 0) {
@@ -129,290 +145,248 @@ Status DBImplZNS::InitDB() {
 
 DBImplZNS::~DBImplZNS() = default;
 
-
-Status DBImplZNS::Open(const DBOptions& db_options, const std::string& name,
-                     const std::vector<ColumnFamilyDescriptor>& column_families,
-                     std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
-                     const bool seq_per_batch, const bool batch_per_txn) {
-
+Status DBImplZNS::Open(
+    const DBOptions& db_options, const std::string& name,
+    const std::vector<ColumnFamilyDescriptor>& column_families,
+    std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
+    const bool seq_per_batch, const bool batch_per_txn) {
   DBImplZNS* impl = new DBImplZNS(db_options, name);
   *dbptr = (DB*)impl;
   return impl->InitDB();
 }
 
-const Snapshot* DBImplZNS::GetSnapshot() {
-  return nullptr;
-}
+const Snapshot* DBImplZNS::GetSnapshot() { return nullptr; }
 
-void DBImplZNS::ReleaseSnapshot(const Snapshot* snapshot) {
-
-}
-
+void DBImplZNS::ReleaseSnapshot(const Snapshot* snapshot) {}
 
 Status DBImplZNS::GetMergeOperands(
-      const ReadOptions& options, ColumnFamilyHandle* column_family,
-      const Slice& key, PinnableSlice* merge_operands,
-      GetMergeOperandsOptions* get_merge_operands_options,
-      int* number_of_operands) {
-        return Status::NotSupported();
+    const ReadOptions& options, ColumnFamilyHandle* column_family,
+    const Slice& key, PinnableSlice* merge_operands,
+    GetMergeOperandsOptions* get_merge_operands_options,
+    int* number_of_operands) {
+  return Status::NotSupported();
 }
 
 std::vector<Status> DBImplZNS::MultiGet(
-      const ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_family,
-      const std::vector<Slice>& keys,
-      std::vector<std::string>* values) {
-        std::vector<Status> test;
-        return test;
+    const ReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& column_family,
+    const std::vector<Slice>& keys, std::vector<std::string>* values) {
+  std::vector<Status> test;
+  return test;
 }
 std::vector<Status> DBImplZNS::MultiGet(
-      const ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_family,
-      const std::vector<Slice>& keys, std::vector<std::string>* values,
-      std::vector<std::string>* timestamps) {
-        std::vector<Status> test;
-        return test;
+    const ReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& column_family,
+    const std::vector<Slice>& keys, std::vector<std::string>* values,
+    std::vector<std::string>* timestamps) {
+  std::vector<Status> test;
+  return test;
 }
 
-  Status DBImplZNS::SingleDelete(const WriteOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      const Slice& ts) {
-        return Status::NotSupported();
-                      }
+Status DBImplZNS::SingleDelete(const WriteOptions& options,
+                               ColumnFamilyHandle* column_family,
+                               const Slice& key, const Slice& ts) {
+  return Status::NotSupported();
+}
 
-
-  Status DBImplZNS::SingleDelete(const WriteOptions& options,
-                      ColumnFamilyHandle* column_family,
-                      const Slice& key) {
-                              return Status::NotSupported();  
-                      }
+Status DBImplZNS::SingleDelete(const WriteOptions& options,
+                               ColumnFamilyHandle* column_family,
+                               const Slice& key) {
+  return Status::NotSupported();
+}
 
 Iterator* DBImplZNS::NewIterator(const ReadOptions& options,
-                                ColumnFamilyHandle* column_family) {
-                                  return NULL;
+                                 ColumnFamilyHandle* column_family) {
+  return NULL;
 }
 Status DBImplZNS::NewIterators(
-      const ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families,
-      std::vector<Iterator*>* iterators) {
-        return Status::NotSupported();
+    const ReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& column_families,
+    std::vector<Iterator*>* iterators) {
+  return Status::NotSupported();
 }
 bool DBImplZNS::GetProperty(ColumnFamilyHandle* column_family,
-                           const Slice& property, std::string* value) {
-                             return false;
+                            const Slice& property, std::string* value) {
+  return false;
 }
-bool DBImplZNS::GetMapProperty(
-      ColumnFamilyHandle* column_family, const Slice& property,
-      std::map<std::string, std::string>* value) {
-        return false;
+bool DBImplZNS::GetMapProperty(ColumnFamilyHandle* column_family,
+                               const Slice& property,
+                               std::map<std::string, std::string>* value) {
+  return false;
 }
 bool DBImplZNS::GetIntProperty(ColumnFamilyHandle* column_family,
-                              const Slice& property, uint64_t* value) {
-                                return false;
+                               const Slice& property, uint64_t* value) {
+  return false;
 }
 bool DBImplZNS::GetAggregatedIntProperty(const Slice& property,
-                                        uint64_t* aggregated_value) {
-                                         return false; 
-                                        };
-  Status DBImplZNS::GetApproximateSizes(const SizeApproximationOptions& options,
-                                     ColumnFamilyHandle* column_family,
-                                     const Range* range, int n,
-                                     uint64_t* sizes) {
-                                         return Status::NotSupported();      
-                                     };
-  void DBImplZNS::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
-                                           const Range& range,
-                                           uint64_t* const count,
-                                           uint64_t* const size) {};
-  Status DBImplZNS::CompactRange(const CompactRangeOptions& options,
-                              ColumnFamilyHandle* column_family,
-                              const Slice* begin, const Slice* end) {
-                                                                         return Status::NotSupported();      
-                              };
-  Status DBImplZNS::SetDBOptions(
-      const std::unordered_map<std::string, std::string>& options_map) {
-        return Status::NotSupported();       
-      }
-  Status DBImplZNS::CompactFiles(
-      const CompactionOptions& compact_options,
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& input_file_names, const int output_level,
-      const int output_path_id,
-      std::vector<std::string>* const output_file_names,
-      CompactionJobInfo* compaction_job_info) {
-             return Status::NotSupported();          
-      }
-  Status DBImplZNS::PauseBackgroundWork() {
-            return Status::NotSupported();       
-  }
-  Status DBImplZNS::ContinueBackgroundWork() {
-            return Status::NotSupported();       
-  }
-  Status DBImplZNS::EnableAutoCompaction(
-      const std::vector<ColumnFamilyHandle*>& column_family_handles) {
-                    return Status::NotSupported();       
-      }
-  void DBImplZNS::EnableManualCompaction() {}
-  void DBImplZNS::DisableManualCompaction() {}
-  int DBImplZNS::NumberLevels(ColumnFamilyHandle* column_family) {return 0;}
-  int DBImplZNS::MaxMemCompactionLevel(ColumnFamilyHandle* column_family) {return 0;}
-  int DBImplZNS::Level0StopWriteTrigger(
-      ColumnFamilyHandle* column_family) {return 0;}
-  const std::string& DBImplZNS::GetName() const {return NULL;}
-  Env* DBImplZNS::GetEnv() const {return NULL;}
-  Options DBImplZNS::GetOptions(ColumnFamilyHandle* column_family) const {
-        Options options_;
-        return options_;
-  }
-  DBOptions DBImplZNS::GetDBOptions() const {
-        DBOptions options_;
-        return options_;  
-  };
-  Status DBImplZNS::Flush(const FlushOptions& options,
-                       ColumnFamilyHandle* column_family) {
-                    return Status::NotSupported();       
-      }
-  Status DBImplZNS::Flush(
-      const FlushOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families) {
-                    return Status::NotSupported();       
-      }
+                                         uint64_t* aggregated_value) {
+  return false;
+};
+Status DBImplZNS::GetApproximateSizes(const SizeApproximationOptions& options,
+                                      ColumnFamilyHandle* column_family,
+                                      const Range* range, int n,
+                                      uint64_t* sizes) {
+  return Status::NotSupported();
+};
+void DBImplZNS::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
+                                            const Range& range,
+                                            uint64_t* const count,
+                                            uint64_t* const size){};
+Status DBImplZNS::CompactRange(const CompactRangeOptions& options,
+                               ColumnFamilyHandle* column_family,
+                               const Slice* begin, const Slice* end) {
+  return Status::NotSupported();
+};
+Status DBImplZNS::SetDBOptions(
+    const std::unordered_map<std::string, std::string>& options_map) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::CompactFiles(
+    const CompactionOptions& compact_options, ColumnFamilyHandle* column_family,
+    const std::vector<std::string>& input_file_names, const int output_level,
+    const int output_path_id, std::vector<std::string>* const output_file_names,
+    CompactionJobInfo* compaction_job_info) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::PauseBackgroundWork() { return Status::NotSupported(); }
+Status DBImplZNS::ContinueBackgroundWork() { return Status::NotSupported(); }
+Status DBImplZNS::EnableAutoCompaction(
+    const std::vector<ColumnFamilyHandle*>& column_family_handles) {
+  return Status::NotSupported();
+}
+void DBImplZNS::EnableManualCompaction() {}
+void DBImplZNS::DisableManualCompaction() {}
+int DBImplZNS::NumberLevels(ColumnFamilyHandle* column_family) { return 0; }
+int DBImplZNS::MaxMemCompactionLevel(ColumnFamilyHandle* column_family) {
+  return 0;
+}
+int DBImplZNS::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
+  return 0;
+}
+const std::string& DBImplZNS::GetName() const { return name_; }
+Env* DBImplZNS::GetEnv() const { return NULL; }
+Options DBImplZNS::GetOptions(ColumnFamilyHandle* column_family) const {
+  Options options_;
+  return options_;
+}
+DBOptions DBImplZNS::GetDBOptions() const {
+  DBOptions options_;
+  return options_;
+};
+Status DBImplZNS::Flush(const FlushOptions& options,
+                        ColumnFamilyHandle* column_family) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::Flush(
+    const FlushOptions& options,
+    const std::vector<ColumnFamilyHandle*>& column_families) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::SyncWAL() {
-                    return Status::NotSupported();       
-      }
+Status DBImplZNS::SyncWAL() { return Status::NotSupported(); }
 
-  SequenceNumber DBImplZNS::GetLatestSequenceNumber() const {
-    SequenceNumber n = 0;
-    return n;
-  }
+SequenceNumber DBImplZNS::GetLatestSequenceNumber() const {
+  SequenceNumber n = 0;
+  return n;
+}
 
-  Status DBImplZNS::DisableFileDeletions() {
-                        return Status::NotSupported();       
+Status DBImplZNS::DisableFileDeletions() { return Status::NotSupported(); }
 
-  }
+Status DBImplZNS::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
+                                           std::string ts_low) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
-                                  std::string ts_low) {
-                        return Status::NotSupported();       
+Status DBImplZNS::GetFullHistoryTsLow(ColumnFamilyHandle* column_family,
+                                      std::string* ts_low) {
+  return Status::NotSupported();
+}
 
-  }
+Status DBImplZNS::EnableFileDeletions(bool force) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::GetFullHistoryTsLow(ColumnFamilyHandle* column_family,
-                             std::string* ts_low) {
-                        return Status::NotSupported();       
+Status DBImplZNS::GetLiveFiles(std::vector<std::string>&,
+                               uint64_t* manifest_file_size,
+                               bool flush_memtable) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::GetSortedWalFiles(VectorLogPtr& files) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::GetCurrentWalFile(
+    std::unique_ptr<LogFile>* current_log_file) {
+  return Status::NotSupported();
+}
+Status DBImplZNS::GetCreationTimeOfOldestFile(uint64_t* creation_time) {
+  return Status::NotSupported();
+}
 
-  }
+Status DBImplZNS::GetUpdatesSince(
+    SequenceNumber seq_number, std::unique_ptr<TransactionLogIterator>* iter,
+    const TransactionLogIterator::ReadOptions& read_options) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::EnableFileDeletions(bool force) {
-                        return Status::NotSupported();       
+Status DBImplZNS::DeleteFile(std::string name) {
+  return Status::NotSupported();
+}
 
-  }
+Status DBImplZNS::GetLiveFilesChecksumInfo(FileChecksumList* checksum_list) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::GetLiveFiles(std::vector<std::string>&,
-                              uint64_t* manifest_file_size,
-                              bool flush_memtable) {
-                        return Status::NotSupported();       
+Status DBImplZNS::GetLiveFilesStorageInfo(
+    const LiveFilesStorageInfoOptions& opts,
+    std::vector<LiveFileStorageInfo>* files) {
+  return Status::NotSupported();
+}
 
-  }
-  Status DBImplZNS::GetSortedWalFiles(VectorLogPtr& files) {
-                        return Status::NotSupported();       
+Status DBImplZNS::IngestExternalFile(
+    ColumnFamilyHandle* column_family,
+    const std::vector<std::string>& external_files,
+    const IngestExternalFileOptions& ingestion_options) {
+  return Status::NotSupported();
+}
 
-  }
-  Status DBImplZNS::GetCurrentWalFile(
-      std::unique_ptr<LogFile>* current_log_file) {
-                        return Status::NotSupported();       
+Status DBImplZNS::IngestExternalFiles(
+    const std::vector<IngestExternalFileArg>& args) {
+  return Status::NotSupported();
+}
 
-  }
-  Status DBImplZNS::GetCreationTimeOfOldestFile(
-      uint64_t* creation_time) {
-                        return Status::NotSupported();       
+Status DBImplZNS::CreateColumnFamilyWithImport(
+    const ColumnFamilyOptions& options, const std::string& column_family_name,
+    const ImportColumnFamilyOptions& import_options,
+    const ExportImportFilesMetaData& metadata, ColumnFamilyHandle** handle) {
+  return Status::NotSupported();
+}
 
-  }
+Status DBImplZNS::VerifyChecksum(const ReadOptions& /*read_options*/) {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::GetUpdatesSince(
-      SequenceNumber seq_number, std::unique_ptr<TransactionLogIterator>* iter,
-      const TransactionLogIterator::ReadOptions& read_options) {
-                        return Status::NotSupported();       
+Status DBImplZNS::GetDbIdentity(std::string& identity) const {
+  return Status::NotSupported();
+}
 
-  }
+Status DBImplZNS::GetDbSessionId(std::string& session_id) const {
+  return Status::NotSupported();
+}
 
-  Status DBImplZNS::DeleteFile(std::string name) {
-                        return Status::NotSupported();       
+ColumnFamilyHandle* DBImplZNS::DefaultColumnFamily() const { return NULL; }
 
-  }
-
-  Status DBImplZNS::GetLiveFilesChecksumInfo(
-      FileChecksumList* checksum_list) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::GetLiveFilesStorageInfo(
-      const LiveFilesStorageInfoOptions& opts,
-      std::vector<LiveFileStorageInfo>* files) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::IngestExternalFile(
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& external_files,
-      const IngestExternalFileOptions& ingestion_options) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::IngestExternalFiles(
-      const std::vector<IngestExternalFileArg>& args) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::CreateColumnFamilyWithImport(
-      const ColumnFamilyOptions& options, const std::string& column_family_name,
-      const ImportColumnFamilyOptions& import_options,
-      const ExportImportFilesMetaData& metadata,
-      ColumnFamilyHandle** handle) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::VerifyChecksum(const ReadOptions& /*read_options*/) {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::GetDbIdentity(std::string& identity) const {
-                        return Status::NotSupported();       
-
-  }
-
-  Status DBImplZNS::GetDbSessionId(std::string& session_id) const {
-                        return Status::NotSupported();       
-
-  }
-
-  ColumnFamilyHandle* DBImplZNS::DefaultColumnFamily() const {
-    return NULL;
-  }
-
-  Status DBImplZNS::GetPropertiesOfAllTables(
-      ColumnFamilyHandle* column_family,
-      TablePropertiesCollection* props) {
-                        return Status::NotSupported();       
-
-  }
+Status DBImplZNS::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
+                                           TablePropertiesCollection* props) {
+  return Status::NotSupported();
+}
 Status DBImplZNS::GetPropertiesOfTablesInRange(
-      ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
-      TablePropertiesCollection* props) {
-                        return Status::NotSupported();       
-
-  }
-  
+    ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
+    TablePropertiesCollection* props) {
+  return Status::NotSupported();
+}
 
 Status DestroyDB(const std::string& dbname, const Options& options) {
   return Status::OK();
 }
 
-}  // namespace rocksdb
+}  // namespace ROCKSDB_NAMESPACE

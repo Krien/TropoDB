@@ -26,16 +26,16 @@ CompactedDBImpl::CompactedDBImpl(const DBOptions& options,
       version_(nullptr),
       user_comparator_(nullptr) {}
 
-CompactedDBImpl::~CompactedDBImpl() {
-}
+CompactedDBImpl::~CompactedDBImpl() {}
 
 size_t CompactedDBImpl::FindFile(const Slice& key) {
   size_t right = files_.num_files - 1;
   auto cmp = [&](const FdWithKeyRange& f, const Slice& k) -> bool {
     return user_comparator_->Compare(ExtractUserKey(f.largest_key), k) < 0;
   };
-  return static_cast<size_t>(std::lower_bound(files_.files,
-                            files_.files + right, key, cmp) - files_.files);
+  return static_cast<size_t>(
+      std::lower_bound(files_.files, files_.files + right, key, cmp) -
+      files_.files);
 }
 
 Status CompactedDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle*,
@@ -60,8 +60,8 @@ Status CompactedDBImpl::Get(const ReadOptions& options, ColumnFamilyHandle*,
   return Status::NotFound();
 }
 
-std::vector<Status> CompactedDBImpl::MultiGet(const ReadOptions& options,
-    const std::vector<ColumnFamilyHandle*>&,
+std::vector<Status> CompactedDBImpl::MultiGet(
+    const ReadOptions& options, const std::vector<ColumnFamilyHandle*>&,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
   assert(user_comparator_);
   if (user_comparator_->timestamp_size() || options.timestamp) {
@@ -157,8 +157,8 @@ Status CompactedDBImpl::Init(const Options& options) {
   return Status::NotSupported("no file exists");
 }
 
-Status CompactedDBImpl::Open(const Options& options,
-                             const std::string& dbname, DB** dbptr) {
+Status CompactedDBImpl::Open(const Options& options, const std::string& dbname,
+                             DB** dbptr) {
   *dbptr = nullptr;
 
   if (options.max_open_files != -1) {

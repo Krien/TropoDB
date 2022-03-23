@@ -11,6 +11,7 @@
 #include <cstring>
 #include <string>
 #include <utility>
+
 #include "db/db_impl/db_impl.h"
 #include "util/string_util.h"
 
@@ -29,7 +30,8 @@ const std::string kCompatibleVersionKeyString =
 const uint64_t kStatsCFCurrentFormatVersion = 1;
 const uint64_t kStatsCFCompatibleFormatVersion = 1;
 
-Status DecodePersistentStatsVersionNumber(DBImplZNS* db, StatsVersionKeyType type,
+Status DecodePersistentStatsVersionNumber(DBImplZNS* db,
+                                          StatsVersionKeyType type,
                                           uint64_t* version_number) {
   if (type >= StatsVersionKeyType::kKeyTypeMax) {
     return Status::InvalidArgument("Invalid stats version key type provided");
@@ -43,7 +45,8 @@ Status DecodePersistentStatsVersionNumber(DBImplZNS* db, StatsVersionKeyType typ
   ReadOptions options;
   options.verify_checksums = true;
   std::string result;
-  Status s = Status::OK();// db->Get(options, db->PersistentStatsColumnFamily(), key, &result);
+  Status s = Status::OK();  // db->Get(options,
+                            // db->PersistentStatsColumnFamily(), key, &result);
   if (!s.ok() || result.empty()) {
     return Status::NotFound("Persistent stats version key " + key +
                             " not found.");
