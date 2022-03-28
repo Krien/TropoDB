@@ -9,29 +9,31 @@
 #include <string>
 #include <vector>
 
-#include "db_impl_zns.h"
+#include "rocksdb/db.h"
+#include "rocksdb/options.h"
+#include "rocksdb/status.h"
 
-namespace ROCKSDB_NAMESPACE {
 int main_test(int argc, char** argv) {
   std::string dbname_ = "0000:00:04.0";
-  Options options_;
+  rocksdb::Options options_;
   options_.create_if_missing = true;
-  options_.compression = kNoCompression;
-  DB* db_;
-  std::vector<ColumnFamilyDescriptor> column_families;
-  std::vector<ColumnFamilyHandle*> handles;
-  Status s = DBImplZNS::Open(options_, dbname_, column_families, &handles, &db_,
-                             false, false);
+  options_.compression = rocksdb::kNoCompression;
+  options_.use_zns_impl = true;
+  rocksdb::DB* db_;
+  std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
+  std::vector<rocksdb::ColumnFamilyHandle*> handles;
+  rocksdb::Status s = rocksdb::DB::Open(options_, dbname_, &db_);
   assert(s.ok());
   // read false
-  ReadOptions ro = ReadOptions();
-  const Slice key_test = Slice("hello");
+  rocksdb::ReadOptions ro = rocksdb::ReadOptions();
+  const rocksdb::Slice key_test = rocksdb::Slice("hello");
   std::string value_test;
   s = db_->Get(ro, key_test, &value_test);
+  std::cout << value_test << "\n";
   assert(!s.ok());
   // put one pair
-  WriteOptions wo = WriteOptions();
-  const Slice test_value = Slice("lsmzns !");
+  rocksdb::WriteOptions wo = rocksdb::WriteOptions();
+  const rocksdb::Slice test_value = rocksdb::Slice("lsmzns !");
   s = db_->Put(wo, key_test, test_value);
   assert(s.ok());
   // read one correct pair
@@ -41,6 +43,5 @@ int main_test(int argc, char** argv) {
   printf("Time for coffee \n");
   return 0;
 }
-}  // namespace ROCKSDB_NAMESPACE
 
-int main(int argc, char** argv) { return rocksdb::main_test(argc, argv); }
+int main(int argc, char** argv) { return main_test(argc, argv); }

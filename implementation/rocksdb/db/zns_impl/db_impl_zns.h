@@ -70,6 +70,8 @@ class DBImplZNS : public DB {
                      const std::vector<ColumnFamilyDescriptor>& column_families,
                      std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
                      const bool seq_per_batch, const bool batch_per_txn);
+
+  virtual Status Close() override;
   // Implementations of the DB interface
   using DB::Put;
   Status Put(const WriteOptions& options, const Slice& key,
@@ -103,6 +105,8 @@ class DBImplZNS : public DB {
              std::string* value) override;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, PinnableSlice* value) override;
+
+  static Status DestroyDB(const std::string& dbname, const Options& options);
 
   Status GetMergeOperands(const ReadOptions& options,
                           ColumnFamilyHandle* column_family, const Slice& key,

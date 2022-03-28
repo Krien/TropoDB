@@ -12,6 +12,7 @@
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/periodic_work_scheduler.h"
+#include "db/zns_impl/db_impl_zns.h"
 #include "env/composite_env_wrapper.h"
 #include "file/filename.h"
 #include "file/read_write_util.h"
@@ -1507,43 +1508,6 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
       stats.bytes_written + stats.bytes_written_blob);
   RecordTick(stats_, COMPACT_WRITE_BYTES, meta.fd.GetFileSize());
   return s;
-}
-
-Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
-  DBOptions db_options(options);
-  ColumnFamilyOptions cf_options(options);
-  std::vector<ColumnFamilyDescriptor> column_families;
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
-  if (db_options.persist_stats_to_disk) {
-    column_families.push_back(
-        ColumnFamilyDescriptor(kPersistentStatsColumnFamilyName, cf_options));
-  }
-  std::vector<ColumnFamilyHandle*> handles;
-  Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
-  if (s.ok()) {
-    if (db_options.persist_stats_to_disk) {
-      assert(handles.size() == 2);
-    } else {
-      assert(handles.size() == 1);
-    }
-    // i can delete the handle since DBImpl is always holding a reference to
-    // default column family
-    if (db_options.persist_stats_to_disk && handles[1] != nullptr) {
-      delete handles[1];
-    }
-    delete handles[0];
-  }
-  return s;
-}
-
-Status DB::Open(const DBOptions& db_options, const std::string& dbname,
-                const std::vector<ColumnFamilyDescriptor>& column_families,
-                std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {
-  const bool kSeqPerBatch = true;
-  const bool kBatchPerTxn = true;
-  return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
-                      !kSeqPerBatch, kBatchPerTxn);
 }
 
 IOStatus DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,

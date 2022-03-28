@@ -657,6 +657,7 @@ set(SOURCES
         db/convenience.cc
         db/db_filesnapshot.cc
         db/db_impl/compacted_db_impl.cc
+        db/db_impl_switcher/db_impl_switcher.cc
         db/db_impl/db_impl.cc
         db/db_impl/db_impl_write.cc
         db/db_impl/db_impl_compaction_flush.cc
@@ -1039,7 +1040,7 @@ target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE ${SPDK_LIBRARY_DEPENDENCIES}
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_OBJ_LIB} OBJECT  ${SOURCES})
   target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE
-    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} znsdevice_lib)
   set_property(TARGET ${ROCKSDB_SHARED_OBJ_LIB}  PROPERTY POSITION_INDEPENDENT_CODE ON)
   add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
@@ -1489,11 +1490,18 @@ endif()
 
 
 add_executable(initialtest
-  "db/zns_impl/initial_test.cc"
+  "zns_tests/initial_test.cc"
 )
 target_link_libraries(initialtest ${ROCKSDB_LIB})
 target_link_libraries(initialtest znsdevice_lib)
 set_property(TARGET initialtest PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+add_executable(m5
+  "zns_tests/m45_test.cc"
+)
+target_link_libraries(m5 ${ROCKSDB_LIB})
+target_link_libraries(m5 znsdevice_lib)
+set_property(TARGET m5 PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 if(DEFINED ENV{CLANG_PATH})
     set(CLANG_FORMAT_PATH "$ENV{CLANG_FORMAT_PATH}")

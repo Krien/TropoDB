@@ -453,6 +453,9 @@ struct DBOptions {
   // cores. You almost definitely want to call this function if your system is
   // bottlenecked by RocksDB.
   DBOptions* IncreaseParallelism(int total_threads = 16);
+
+  // Set to true if the goal is to use impl_zns
+  bool use_zns_impl = false;
 #endif  // ROCKSDB_LITE
 
   // If true, the database will be created if it is missing.

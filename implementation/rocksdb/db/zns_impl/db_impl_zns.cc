@@ -39,10 +39,18 @@ Status DBImplZNS::NewDB() { return Status::OK(); }
 Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
                       const Slice& value) {
   uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
-  char* valpt =
+  char* payload =
       (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
-  snprintf(valpt, lba_size, "SStable%s:%s", key.data(), value.data());
-  int rc = ZnsDevice::z_append(*this->qpair_, 0, valpt, lba_size);
+  memset(payload, '\0', lba_size);
+  strncpy(payload, "SStable", 8);
+  char* payload_tmp = EncodeVarint32(payload + 7, key.size());
+  payload_tmp = EncodeVarint32(payload_tmp, value.size());
+  int w = 0;
+  memcpy(payload_tmp, key.data(), key.size());
+  w += key.size();
+  memcpy(payload_tmp + w, value.data(), value.size());
+  w += value.size();
+  int rc = ZnsDevice::z_append(*this->qpair_, 0, payload, lba_size);
   return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
   return Status::OK();
 }
@@ -66,23 +74,17 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   if (strncmp(val, "SStable", strlen("sstable")) != 0) {
     return Status::NotFound("Invalid block");
   }
-  val += strlen("SStable");
+  const char* val_tmp = val + strlen("SStable");
   // get next 4 bytes for kv count
-  Slice reader = Slice(val);
-  uint32_t kv_count, first_key, last_key;
-  bool s = GetVarint32(&reader, &kv_count);
-  s = GetVarint32(&reader, &first_key);
-  s = GetVarint32(&reader, &first_key);
+  uint32_t key_size, val_size;
+  val_tmp = GetVarint32Ptr(val_tmp, val_tmp + 5, &key_size);
+  val_tmp = GetVarint32Ptr(val_tmp, val_tmp + 5, &val_size);
 
-  uint64_t walker = 0;
-  while (walker < lba_size && val[walker] != ':') {
-    walker++;
+  if (key_size + val_size + (uint32_t)(val_tmp - val) > lba_size) {
+    return Status::NotFound("Invalid block, wrong offset");
   }
-  if (walker == lba_size) {
-    return Status::NotFound("Invalid block");
-  }
-  if (s && strncmp(val, key.data(), walker) == 0) {
-    *value = std::string(val + walker + 1);
+  if (strncmp(val_tmp, key.data(), key_size) == 0) {
+    (*value).append((const char*)(val_tmp + key_size), (size_t)val_size);
     return Status::OK();
   }
   return Status::NotFound("Key not found");
@@ -154,6 +156,8 @@ Status DBImplZNS::Open(
   *dbptr = (DB*)impl;
   return impl->InitDB();
 }
+
+Status DBImplZNS::Close() { return Status::OK(); }
 
 const Snapshot* DBImplZNS::GetSnapshot() { return nullptr; }
 
@@ -385,7 +389,7 @@ Status DBImplZNS::GetPropertiesOfTablesInRange(
   return Status::NotSupported();
 }
 
-Status DestroyDB(const std::string& dbname, const Options& options) {
+Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   return Status::OK();
 }
 
