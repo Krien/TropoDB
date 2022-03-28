@@ -14,7 +14,7 @@
 #include "spdk/vmd.h"
 
 extern "C" {
-#define ERROR_ON_NULL(x, err)                                                  \
+#define RETURN_CODE_ON_NULL(x, err)                                            \
   do {                                                                         \
     if ((x) == nullptr) {                                                      \
       return (err);                                                            \

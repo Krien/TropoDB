@@ -3,6 +3,7 @@ bin/
 lib/
 build/
 out/
+doc_doxygen/
 
 #ninja
 *.ninja*
@@ -57,3 +58,4 @@ _deps
 *.sw*
 .vscode
 .DS_Store
+implementation/rocksdb/initialtest

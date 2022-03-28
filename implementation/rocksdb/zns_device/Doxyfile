@@ -1,0 +1,2 @@
+OUTPUT_DIRECTORY       = /home/user/thesis/znslsm/implementation/rocksdb/zns_device/doc_doxygen/
+INPUT                  = /home/user/thesis/znslsm/implementation/rocksdb/zns_device/include/ /home/user/thesis/znslsm/implementation/rocksdb/zns_device/docs

@@ -52,9 +52,9 @@ setup_spdk_project_structure(znsdevice_lib)
 
 # Standalone CLI
 add_executable(znsdevice
-    "${common_sources}"
-    src/main.cpp
+    scripts/znscli.cpp
 )
+target_link_libraries(znsdevice znsdevice_lib)
 setup_spdk_project_structure(znsdevice)
 
 # Tests
@@ -71,15 +71,15 @@ add_test(
 )
 
 # Default to "default" location of clang-format, override if necessary
-if(DEFINED ENV{CLANG_PATH})
-    set(CLANG_PATH "$ENV{CLANG_PATH}")
-else(DEFINED ENV{CLANG_PATH})
-    set(CLANG_PATH "/home/$ENV{USER}/bin/clang-format")
+if(DEFINED ENV{CLANG_FORMAT_PATH})
+    set(CLANG_FORMAT_PATH "$ENV{CLANG_PATH}")
+else(DEFINED ENV{CLANG_FORMAT_PATH})
+    set(CLANG_FORMAT_PATH "/home/$ENV{USER}/bin/clang-format")
 endif()
 # format (DO NOT GLOB! instead let the formatter glob when necessary)
 add_custom_target(
     format
-    COMMAND ${CLANG_PATH}
+    COMMAND ${CLANG_FORMAT_PATH}
     -i
     "./src/*.cpp" "./include/*.h"
     "-style=file"
@@ -87,4 +87,25 @@ add_custom_target(
 
 set(SPDK_LIB_DIRS "${SPDK_LIB_DIRS}" PARENT_SCOPE)
 set(SPDK_LIBRARY_DEPENDENCIES "${SPDK_LIBRARY_DEPENDENCIES}" PARENT_SCOPE)
+# necessary to prevent issues when the upstream CMakeList.txt uses -Werror.
 string(REPLACE " -Werror" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+find_package(Doxygen
+             REQUIRED dot
+             OPTIONAL_COMPONENTS mscgen dia)
+
+if (DOXYGEN_FOUND)
+    # set input and output files
+    set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in)
+    set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
+         
+    # request to configure the file
+    configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
+    add_custom_target( docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating API documentation with Doxygen"
+        VERBATIM )
+else (DOXYGEN_FOUND)
+    message("No documentation can be generated, DOXYGEN is not found")
+endif (DOXYGEN_FOUND)

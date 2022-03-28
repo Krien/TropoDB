@@ -27,6 +27,14 @@ typedef struct {
 } Completion;
 
 typedef struct {
+  char **traddr;
+  bool *zns;
+  struct spdk_nvme_ctrlr **ctrlr;
+  uint8_t devices;
+  pthread_mutex_t *mut;
+} ProbeInformation;
+
+typedef struct {
   uint64_t lba_size;
   uint64_t zone_size;
   uint64_t mdts;
@@ -54,9 +62,22 @@ typedef struct {
   DeviceManager *man;
 } QPair;
 
+  /**
+   * @brief 
+   *  inits SPDK and the general device manager, always call before ANY other function.
+   * @param manager 
+   * @return int
+   *  - 0 if success
+   *  - 1 if manager is null
+   *  - 2 if spdk fails
+   */
 int z_init(DeviceManager **man);
 
+int z_reinit(DeviceManager **man);
+
 int z_shutdown(DeviceManager *man);
+
+int z_probe(DeviceManager *man, ProbeInformation **probe);
 
 int z_open(DeviceManager *man, const char *traddr);
 
@@ -89,6 +110,15 @@ void __attach_devices__cb(void *cb_ctx,
                           const struct spdk_nvme_ctrlr_opts *opts);
 
 void __remove_devices__cb(void *cb_ctx, struct spdk_nvme_ctrlr *ctrlr);
+
+bool __probe_devices_probe_cb(void *cb_ctx,
+                              const struct spdk_nvme_transport_id *trid,
+                              struct spdk_nvme_ctrlr_opts *opts);
+
+void __attach_devices__probe_cb(void *cb_ctx,
+                                const struct spdk_nvme_transport_id *trid,
+                                struct spdk_nvme_ctrlr *ctrlr,
+                                const struct spdk_nvme_ctrlr_opts *opts);
 
 void *__reserve_dma(uint64_t size);
 
