@@ -1,5 +1,7 @@
 #include "db/db_impl/db_impl.h"
+#ifdef ZNS_PLUGIN_ENABLED
 #include "db/zns_impl/db_impl_zns.h"
+#endif
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
 #include "rocksdb/listener.h"
@@ -24,7 +26,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   }
   std::vector<ColumnFamilyHandle*> handles;
   Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
-#ifndef ROCKSDB_LITE
+#ifdef ZNS_PLUGIN_ENABLED
   if (db_options.use_zns_impl) {
     return s;
   }
@@ -51,7 +53,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   const bool kSeqPerBatch = true;
   const bool kBatchPerTxn = true;
   // if this is the way to fix the antipattern than so be it.
-#ifndef ROCKSDB_LITE
+#ifdef ZNS_PLUGIN_ENABLED
   if (db_options.use_zns_impl) {
     return DBImplZNS::Open(db_options, dbname, column_families, handles, dbptr,
                            !kSeqPerBatch, kBatchPerTxn);
@@ -59,9 +61,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
 #endif
     return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                         !kSeqPerBatch, kBatchPerTxn);
-#ifndef ROCKSDB_LITE
   }
-#endif
 }
 
 FileSystem* DB::GetFileSystem() const {
@@ -71,7 +71,7 @@ FileSystem* DB::GetFileSystem() const {
 
 Status DestroyDB(const std::string& dbname, const Options& options,
                  const std::vector<ColumnFamilyDescriptor>& column_families) {
-#ifndef ROCKSDB_LITE
+#ifdef ZNS_PLUGIN_ENABLED
   if (options.use_zns_impl) {
     return DBImplZNS::DestroyDB(dbname, options);
   }
@@ -206,7 +206,7 @@ Status DestroyDB(const std::string& dbname, const Options& options,
 
 Status DestroyDB(const std::string& dbname, const Options& options) {
   const std::vector<ColumnFamilyDescriptor> column_families;
-#ifndef ROCKSDB_LITE
+#ifdef ZNS_PLUGIN_ENABLED
   if (options.use_zns_impl) {
     return DBImplZNS::DestroyDB(dbname, options);
   }

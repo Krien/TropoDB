@@ -454,10 +454,12 @@ struct DBOptions {
   // bottlenecked by RocksDB.
   DBOptions* IncreaseParallelism(int total_threads = 16);
 
-  // Set to true if the goal is to use impl_zns
-  bool use_zns_impl = false;
 #endif  // ROCKSDB_LITE
 
+#ifdef ZNS_PLUGIN_ENABLED
+  // Set to true if the goal is to use impl_zns
+  bool use_zns_impl = false;
+#endif
   // If true, the database will be created if it is missing.
   // Default: false
   bool create_if_missing = false;

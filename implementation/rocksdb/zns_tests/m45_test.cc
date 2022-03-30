@@ -28,17 +28,24 @@ SOFTWARE.
 #include <iostream>
 #include <memory>
 
-#include "MyRocksContext.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_system.h"
 
 using namespace std;
 
+struct MyRocksContext {
+    std::string uri;
+    rocksdb::Options options;
+    rocksdb::DB *db;
+    rocksdb::ConfigOptions config_options;
+    std::shared_ptr<rocksdb::Env> env_guard;
+};
+
 static std::string genrate_random_string(const int len) {
   std::string str;
   static const char alphanum_char[] =
-      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*("
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@!#$%^&*("
       ")";
   str.reserve(len);
   for (int i = 0; i < len; ++i) {
@@ -63,6 +70,7 @@ static int fill_up_map(std::map<std::string, std::string> &testmap, int entries,
                                  .append(to_string(count))});
     // this would fail if there were not unique keys
     assert(x.second);
+    (void)x;
     count++;
   }
   std::cout << "a testmap is filled with " << entries << " of max_size "
@@ -147,7 +155,7 @@ static int delete_rocksdb(struct MyRocksContext *context,
   cout << "Opening database at " << context->uri << " with uri " << uri_ext
        << " and the db_path as " << db_path << std::endl;
   if (uri_ext.compare("zns") == 0) {
-    s = DestroyDB(db_path, context->options);
+    s = rocksdb::DestroyDB(db_path, context->options);
     return s.ok() ? 0 : -1;
   }
   s = rocksdb::Env::CreateFromUri(context->config_options, "", context->uri,
@@ -159,7 +167,7 @@ static int delete_rocksdb(struct MyRocksContext *context,
   }
   std::cout << "Environment from URI " << context->uri << " for FS "
             << context->options.env->GetFileSystem()->Name() << " \n";
-  s = DestroyDB(db_path, context->options);
+  s = rocksdb::DestroyDB(db_path, context->options);
   if (!s.ok()) {
     fprintf(stderr, "DB deleting failed at %s due to %s \n\n",
             context->uri.c_str(), s.ToString().c_str());
@@ -210,7 +218,7 @@ int main(int argc, char **argv) {
 
   ctx_test->uri = "zns://0000:00:04.0";
   // ctx_test->uri = "posix:///tmp/shadow2db";
-  ctx_shadow->uri = "posix:///tmp/shadowdb";
+  ctx_shadow->uri = "zenfs://dev:nvme0n1";
   ctx_test->options.create_if_missing = true;
   ctx_shadow->options.create_if_missing = true;
 
@@ -293,6 +301,9 @@ int main(int argc, char **argv) {
 
   if (!single) {
     ret = open_rocksdb(ctx_shadow, delimiter);
+    if (ret != 0) {
+      return -1;
+    }
     print_myrocks_context(ctx_shadow);
     assert(ret == 0);
     assert(ctx_shadow->db != nullptr);

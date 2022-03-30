@@ -22,7 +22,10 @@ link_directories("${SPDK_LIB_DIRS}")
 
 function(SETUP_SPDK_PROJECT_STRUCTURE project_name)
     set_target_properties(${project_name} PROPERTIES LINKER_LANGUAGE CXX)
-    target_include_directories(${project_name} PUBLIC include)
+    target_include_directories(${project_name} PUBLIC 
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+        "$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_INCLUDEDIR}>"
+    )
     target_include_directories(${project_name} PRIVATE src)
     target_link_libraries(${project_name} ${SPDK_LIBRARY_DEPENDENCIES})
     set_property(TARGET ${project_name} PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -45,10 +48,10 @@ add_library(znsdevice_lib STATIC
 )
 setup_spdk_project_structure(znsdevice_lib)
 
-add_library(znsdevice_lib_shared SHARED
-    "${common_sources}"
-)
-setup_spdk_project_structure(znsdevice_lib)
+# add_library(znsdevice_lib_shared SHARED
+#     "${common_sources}"
+# )
+#setup_spdk_project_structure(znsdevice_lib_shared)
 
 # Standalone CLI
 add_executable(znsdevice

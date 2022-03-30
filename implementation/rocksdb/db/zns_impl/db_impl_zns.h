@@ -7,6 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
+#ifdef ZNS_PLUGIN_ENABLED
 
 #include <atomic>
 #include <deque>
@@ -282,3 +283,4 @@ class DBImplZNS : public DB {
   const std::string name_;
 };
 }  // namespace ROCKSDB_NAMESPACE
+#endif

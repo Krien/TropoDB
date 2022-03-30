@@ -30,7 +30,7 @@ const std::string kCompatibleVersionKeyString =
 const uint64_t kStatsCFCurrentFormatVersion = 1;
 const uint64_t kStatsCFCompatibleFormatVersion = 1;
 
-Status DecodePersistentStatsVersionNumber(DBImplZNS* db,
+Status DecodePersistentStatsVersionNumber(DBImpl* db,
                                           StatsVersionKeyType type,
                                           uint64_t* version_number) {
   if (type >= StatsVersionKeyType::kKeyTypeMax) {

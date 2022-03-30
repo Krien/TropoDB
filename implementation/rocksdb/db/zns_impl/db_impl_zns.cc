@@ -41,7 +41,6 @@ Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
   uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
   char* payload =
       (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
-  memset(payload, '\0', lba_size);
   strncpy(payload, "SStable", 8);
   char* payload_tmp = EncodeVarint32(payload + 7, key.size());
   payload_tmp = EncodeVarint32(payload_tmp, value.size());
