@@ -5,6 +5,7 @@
 
 #include "db/dbformat.h"
 #include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/zns_sstable_manager.h"
 #include "db/zns_impl/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
@@ -30,24 +31,15 @@ class ZnsVersionEdit {
   std::vector<std::pair<int, SSZoneMetaData>> new_ss_;
 };
 
-class ZnsVersion {
+class ZnsVersion : public RefCounter {
  public:
   void Clear(){};
   Status Get(const ReadOptions& options, const Slice& key, std::string* value);
-  inline void Ref() { ++refs_; }
-  inline void Unref() {
-    assert(refs_ >= 1);
-    --refs_;
-    if (refs_ == 0) {
-      delete this;
-    }
-  }
 
  private:
   friend class ZnsVersionSet;
   std::vector<SSZoneMetaData*> ss_[7];
   ZnsVersionSet* vset_;
-  int refs_;
 
   explicit ZnsVersion(ZnsVersionSet* vset) : vset_(vset) {}
   ZnsVersion() { Clear(); }

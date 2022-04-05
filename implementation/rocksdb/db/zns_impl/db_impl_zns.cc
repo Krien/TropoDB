@@ -46,7 +46,8 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       mem_(nullptr),
       imm_(nullptr),
       versions_(nullptr),
-      bg_work_finished_signal(&mutex_) {}
+      bg_work_finished_signal_(&mutex_),
+      bg_compaction_scheduled_(false) {}
 
 Status DBImplZNS::NewDB() { return Status::OK(); }
 
@@ -185,13 +186,14 @@ Status DBImplZNS::MakeRoomForWrite() {
     } else if (mem_->ShouldScheduleFlush() && imm_ != nullptr) {
       // flush is scheduled, wait...
       printf("is it done????\n");
-      bg_work_finished_signal.Wait();
+      bg_work_finished_signal_.Wait();
     } else {
       // Switch to fresh memtable
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
       mem_->Ref();
       printf("Scheduling...\n");
+      bg_compaction_scheduled_ = true;
       env_->Schedule(&DBImplZNS::ScheduleFlush, this, rocksdb::Env::HIGH);
     }
   }
@@ -205,6 +207,7 @@ void DBImplZNS::ScheduleFlush(void* db) {
 Status DBImplZNS::CompactMemtable() {
   MutexLock l(&mutex_);
   assert(imm_ != nullptr);
+  assert(bg_compaction_scheduled_);
   Status s;
   // Flush and set new version
   ZnsVersionEdit edit;
@@ -215,11 +218,13 @@ Status DBImplZNS::CompactMemtable() {
     edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
                          meta.smallest, meta.largest);
     s = versions_->LogAndApply(&edit);
+    s = wal_->Reset();
   }
   imm_->Unref();
   imm_ = nullptr;
   printf("Flushed!!\n");
-  bg_work_finished_signal.SignalAll();
+  bg_compaction_scheduled_ = false;
+  bg_work_finished_signal_.SignalAll();
   return s;
 }
 
@@ -260,9 +265,10 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   rc = ZnsDevice::z_reset(*this->qpair_, 0, true);
 
   qpair_factory_ = new QPairFactory(*device_manager_);
+  qpair_factory_->Ref();
 
-  this->wal_ = new ZNSWAL[1]{ZNSWAL(qpair_factory_, (*device_manager)->info, 0,
-                                    (*device_manager)->info.zone_size * 3)};
+  wal_ = new ZNSWAL[1]{ZNSWAL(qpair_factory_, (*device_manager)->info, 0,
+                              (*device_manager)->info.zone_size * 3)};
 
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, (*device_manager)->info,
                                       (*device_manager)->info.zone_size * 4,
@@ -277,11 +283,18 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
 }
 
 DBImplZNS::~DBImplZNS() {
-  // TODO background work should finish.
+  mutex_.Lock();
+  while (bg_compaction_scheduled_) {
+    bg_work_finished_signal_.Wait();
+  }
+  mutex_.Unlock();
+
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
+  if (wal_ != nullptr) wal_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
+  if (qpair_factory_ != nullptr) qpair_factory_->Unref();
 }
 
 Status DBImplZNS::Open(

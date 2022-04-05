@@ -5,14 +5,16 @@
 
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/ref_counter.h"
 #include "rocksdb/slice.h"
+#include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
 /**
  * @brief
  *
  */
-class ZNSWAL {
+class ZNSWAL : public RefCounter {
  public:
   ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
          const uint64_t min_zone_head, uint64_t max_zone_head);
@@ -21,6 +23,7 @@ class ZNSWAL {
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
   void Append(Slice data);
+  Status Reset();
 
  private:
   // data

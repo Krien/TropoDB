@@ -24,6 +24,7 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
   qpair_ = new ZnsDevice::QPair*[1];
+  qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
 }
 
@@ -32,6 +33,7 @@ ZNSSSTableManager::~ZNSSSTableManager() {
     qpair_factory_->unregister_qpair(*qpair_);
     delete qpair_;
   }
+  qpair_factory_->Unref();
 }
 
 Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,

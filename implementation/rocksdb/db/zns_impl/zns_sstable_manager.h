@@ -5,13 +5,14 @@
 
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZNSSSTableManager {
+class ZNSSSTableManager : public RefCounter {
  public:
   ZNSSSTableManager(QPairFactory* qpair_factory,
                     const ZnsDevice::DeviceInfo& info,
@@ -20,14 +21,6 @@ class ZNSSSTableManager {
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
   Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta);
   Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta);
-  inline void Ref() { ++refs_; }
-  inline void Unref() {
-    assert(refs_ >= 1);
-    --refs_;
-    if (refs_ == 0) {
-      delete this;
-    }
-  }
 
  private:
   // data
@@ -40,7 +33,6 @@ class ZNSSSTableManager {
   // references
   QPairFactory* qpair_factory_;
   ZnsDevice::QPair** qpair_;
-  int refs_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

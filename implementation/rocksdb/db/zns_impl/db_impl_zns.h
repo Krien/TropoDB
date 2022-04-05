@@ -302,7 +302,8 @@ class DBImplZNS : public DB {
   ZNSMemTable* imm_;
   ZnsVersionSet* versions_;
   port::Mutex mutex_;
-  port::CondVar bg_work_finished_signal;
+  port::CondVar bg_work_finished_signal_;
+  bool bg_compaction_scheduled_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif
