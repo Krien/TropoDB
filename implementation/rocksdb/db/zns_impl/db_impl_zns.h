@@ -20,7 +20,15 @@
 #include <utility>
 #include <vector>
 
+#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/zns_memtable.h"
+#include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/zns_version.h"
+#include "db/zns_impl/zns_wal.h"
+#include "db/zns_impl/zns_zonemetadata.h"
 #include "options/cf_options.h"
+#include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
 #include "rocksdb/listener.h"
@@ -29,11 +37,6 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/transaction_log.h"
-
-#ifndef ZNSDEV
-#define ZNSDEV
-#include <device.h>
-#endif
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -55,6 +58,8 @@ class WriteCallback;
 struct JobContext;
 struct ExternalSstFileInfo;
 struct MemTableInfo;
+class ColumnFamilyMemTables;
+class WriteBufferManager;
 
 class DBImplZNS : public DB {
  public:
@@ -71,7 +76,7 @@ class DBImplZNS : public DB {
                      const std::vector<ColumnFamilyDescriptor>& column_families,
                      std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
                      const bool seq_per_batch, const bool batch_per_txn);
-
+  static Status ValidateOptions(const DBOptions& db_options);
   virtual Status Close() override;
   // Implementations of the DB interface
   using DB::Put;
@@ -101,6 +106,12 @@ class DBImplZNS : public DB {
                const Slice& key, const Slice& value) override;
   using DB::Write;
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
+
+  Status MakeRoomForWrite();
+  static void ScheduleFlush(void* db);
+  Status CompactMemtable();
+  Status FlushL0SSTables(SSZoneMetaData* meta);
+
   using DB::Get;
   Status Get(const ReadOptions& options, const Slice& key,
              std::string* value) override;
@@ -272,15 +283,26 @@ class DBImplZNS : public DB {
   const Snapshot* GetSnapshot() override;
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
-  Status InitDB();
+  Status InitDB(const DBOptions& options);
 
  private:
   Status NewDB();
 
   // Constant after construction
+  const DBOptions options_;
   ZnsDevice::DeviceManager** device_manager_;
+  QPairFactory* qpair_factory_;
   ZnsDevice::QPair** qpair_;
+  ZNSWAL* wal_;
+  ZNSSSTableManager* ss_manager_;
   const std::string name_;
+  Env* const env_;
+  const InternalKeyComparator internal_comparator_;
+  ZNSMemTable* mem_;
+  ZNSMemTable* imm_;
+  ZnsVersionSet* versions_;
+  port::Mutex mutex_;
+  port::CondVar bg_work_finished_signal;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

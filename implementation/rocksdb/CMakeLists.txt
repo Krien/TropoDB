@@ -1038,7 +1038,12 @@ else()
 endif()
 
 set(ZNS_LSM_SOURCES
-  db/zns_impl/db_impl_zns.cc 
+  db/zns_impl/qpair_factory.cc
+  db/zns_impl/db_impl_zns.cc
+  db/zns_impl/zns_wal.cc
+  db/zns_impl/zns_memtable.cc
+  db/zns_impl/zns_sstable_manager.cc
+  db/zns_impl/zns_version.cc
 )
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
@@ -1530,14 +1535,12 @@ if ( ZNS_PLUGIN  )
     "zns_tests/initial_test.cc"
   )
   target_link_libraries(initialtest ${ROCKSDB_LIB})
-  target_link_libraries(initialtest znsdevice_lib)
   set_property(TARGET initialtest PROPERTY POSITION_INDEPENDENT_CODE ON)
 
   add_executable(m5
     "zns_tests/m45_test.cc"
   )
   target_link_libraries(m5 ${ROCKSDB_LIB})
-  target_link_libraries(m5 znsdevice_lib)
   set_property(TARGET m5 PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 if(DEFINED ENV{CLANG_PATH})

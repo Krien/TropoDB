@@ -13,6 +13,13 @@
 #include <string>
 #include <vector>
 
+#include "db/column_family.h"
+#include "db/memtable.h"
+#include "db/write_batch_internal.h"
+#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/zns_version.h"
+#include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
 #include "rocksdb/listener.h"
@@ -21,6 +28,8 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/transaction_log.h"
+#include "rocksdb/write_batch.h"
+#include "rocksdb/write_buffer_manager.h"
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -30,7 +39,14 @@ const int kNumNonTableCacheFiles = 10;
 DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
                      const bool seq_per_batch, const bool batch_per_txn,
                      bool read_only)
-    : name_(dbname) {}
+    : options_(options),
+      name_(dbname),
+      env_(options.env),
+      internal_comparator_(BytewiseComparator()),
+      mem_(nullptr),
+      imm_(nullptr),
+      versions_(nullptr),
+      bg_work_finished_signal(&mutex_) {}
 
 Status DBImplZNS::NewDB() { return Status::OK(); }
 
@@ -38,55 +54,85 @@ Status DBImplZNS::NewDB() { return Status::OK(); }
 // can call if they wish
 Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
                       const Slice& value) {
-  uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
-  char* payload =
-      (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
-  strncpy(payload, "SStable", 8);
-  char* payload_tmp = EncodeVarint32(payload + 7, key.size());
-  payload_tmp = EncodeVarint32(payload_tmp, value.size());
-  int w = 0;
-  memcpy(payload_tmp, key.data(), key.size());
-  w += key.size();
-  memcpy(payload_tmp + w, value.data(), value.size());
-  w += value.size();
-  int rc = ZnsDevice::z_append(*this->qpair_, 0, payload, lba_size);
-  return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
-  return Status::OK();
+  // create writebatch of size key + value + 24 bytes.8 bytes are taken by
+  // header(sequence number), 4 bytes for count, 1 byte for type + 11 for size.
+  // then write the batch. the batch does some stuff with cf, that we do not
+  // care about.  See top write_batch.cc for some awesome insights. Some flags
+  // are stored as well, protected information and save points and commits can
+  // be made (friend classes..) Then it moves into WriteImpl. writes have a prio
+  // which can be assigned (ignore for now I guess...) Get counts from
+  // WriteBatch back. Then write to WAL
+  //    Write to WAL: separate thread (WAL thread?) something with batch
+  //    groups..
+  // then one write to the memtable, which we can copy I guess.
+  // multiple variants, unordered writes, pipelined writes etc.
+  // NOTE, no flushing or compaction at all! probably a different threads
+  WriteBatch batch;
+  batch.Put(key, value);
+  return Write(options, &batch);
+  // old
+  // uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
+  // char* payload =
+  //     (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
+  // strncpy(payload, "SStable", 8);
+  // char* payload_tmp = EncodeVarint32(payload + 7, key.size());
+  // payload_tmp = EncodeVarint32(payload_tmp, value.size());
+  // int w = 0;
+  // memcpy(payload_tmp, key.data(), key.size());
+  // w += key.size();
+  // memcpy(payload_tmp + w, value.data(), value.size());
+  // w += value.size();
+  // int rc = ZnsDevice::z_append(*this->qpair_, 0, payload, lba_size);
+  // return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
+  // return Status::OK();
 }
 
 Status DBImplZNS::Put(const WriteOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       const Slice& value) {
-  return Status::NotSupported();
+  return Status::NotSupported("Column families not supported");
 }
 Status DBImplZNS::Put(const WriteOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       const Slice& ts, const Slice& value) {
-  return Status::NotSupported();
+  return Status::NotSupported("Column families not supported");
 }
 
 Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
                       std::string* value) {
-  uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
-  char* val = (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
-  int rc = ZnsDevice::z_read(*this->qpair_, 0, val, lba_size);
-  if (strncmp(val, "SStable", strlen("sstable")) != 0) {
-    return Status::NotFound("Invalid block");
-  }
-  const char* val_tmp = val + strlen("SStable");
-  // get next 4 bytes for kv count
-  uint32_t key_size, val_size;
-  val_tmp = GetVarint32Ptr(val_tmp, val_tmp + 5, &key_size);
-  val_tmp = GetVarint32Ptr(val_tmp, val_tmp + 5, &val_size);
+  assert(this->mem_ != nullptr);
+  MutexLock l(&mutex_);
+  Status s;
+  /* GetImpl
+  1. tracing, we dont care.
+  2. sequence number? not relevant as of now. probably problematic for
+  flushes...
+  3. memtable lookup, copy? requires the superversion...
+  4. if IsMergeInProgress!, look in immutable as well.
+  5. can also return merge operands??? then get does nothing on normal table
+  (except return) and gets operands for imm when exists. SLOW!
+  6. get version logic. think for sstable locations? differentiates on action.
+  **/
 
-  if (key_size + val_size + (uint32_t)(val_tmp - val) > lba_size) {
-    return Status::NotFound("Invalid block, wrong offset");
+  mem_->Ref();
+  if (imm_ != nullptr) imm_->Ref();
+  versions_->current()->Ref();
+
+  {
+    if (this->mem_->Get(options, key, value).ok()) {
+    } else if (imm_ != nullptr && imm_->Get(options, key, value).ok()) {
+      printf("read from immutable!\n");
+      // Done
+    } else {
+      s = versions_->current()->Get(options, key, value);
+    }
   }
-  if (strncmp(val_tmp, key.data(), key_size) == 0) {
-    (*value).append((const char*)(val_tmp + key_size), (size_t)val_size);
-    return Status::OK();
-  }
-  return Status::NotFound("Key not found");
+
+  mem_->Unref();
+  if (imm_ != nullptr) imm_->Unref();
+  versions_->current()->Unref();
+
+  return s;
 }
 
 Status DBImplZNS::Get(const ReadOptions& options,
@@ -110,7 +156,79 @@ Status DBImplZNS::Delete(const WriteOptions& options,
 }
 
 Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
-  return Status::NotSupported();
+  Status s;
+  MutexLock l(&mutex_);
+  // TODO: syncing
+
+  // TODO: Check for space
+  s = MakeRoomForWrite();
+
+  // Write to what is needed
+  if (s.ok() && updates != nullptr) {
+    // write to log
+    Slice log_entry = WriteBatchInternal::Contents(updates);
+    wal_[0].Append(log_entry);
+    // write to memtable
+    assert(this->mem_ != nullptr);
+    this->mem_->Write(options, updates);
+  }
+  return s;
+}
+
+Status DBImplZNS::MakeRoomForWrite() {
+  mutex_.AssertHeld();
+  Status s;
+  while (true) {
+    if (!mem_->ShouldScheduleFlush()) {
+      // space left in memory table
+      break;
+    } else if (mem_->ShouldScheduleFlush() && imm_ != nullptr) {
+      // flush is scheduled, wait...
+      printf("is it done????\n");
+      bg_work_finished_signal.Wait();
+    } else {
+      // Switch to fresh memtable
+      imm_ = mem_;
+      mem_ = new ZNSMemTable(options_, internal_comparator_);
+      mem_->Ref();
+      printf("Scheduling...\n");
+      env_->Schedule(&DBImplZNS::ScheduleFlush, this, rocksdb::Env::HIGH);
+    }
+  }
+  return Status::OK();
+}
+
+void DBImplZNS::ScheduleFlush(void* db) {
+  reinterpret_cast<DBImplZNS*>(db)->CompactMemtable();
+}
+
+Status DBImplZNS::CompactMemtable() {
+  MutexLock l(&mutex_);
+  assert(imm_ != nullptr);
+  Status s;
+  // Flush and set new version
+  ZnsVersionEdit edit;
+  SSZoneMetaData meta;
+  s = FlushL0SSTables(&meta);
+  int level = 0;
+  if (s.ok() && meta.lba_count > 0) {
+    edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
+                         meta.smallest, meta.largest);
+    s = versions_->LogAndApply(&edit);
+  }
+  imm_->Unref();
+  imm_ = nullptr;
+  printf("Flushed!!\n");
+  bg_work_finished_signal.SignalAll();
+  return s;
+}
+
+Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
+  Status s;
+  ss_manager_->Ref();
+  s = ss_manager_->FlushMemTable(imm_, meta);
+  ss_manager_->Unref();
+  return s;
 }
 
 Status DBImplZNS::Merge(const WriteOptions& options,
@@ -123,9 +241,8 @@ bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
   return false;
 }
 
-Status DBImplZNS::InitDB() {
-  ZnsDevice::DeviceManager** device_manager =
-      (ZnsDevice::DeviceManager**)calloc(1, sizeof(ZnsDevice::DeviceManager));
+Status DBImplZNS::InitDB(const DBOptions& options) {
+  ZnsDevice::DeviceManager** device_manager = new ZnsDevice::DeviceManager*;
   int rc = ZnsDevice::z_init(device_manager);
   this->device_manager_ = device_manager;
   if (rc != 0) {
@@ -141,19 +258,87 @@ Status DBImplZNS::InitDB() {
     return Status::IOError("Error creating QPair");
   }
   rc = ZnsDevice::z_reset(*this->qpair_, 0, true);
+
+  qpair_factory_ = new QPairFactory(*device_manager_);
+
+  this->wal_ = new ZNSWAL[1]{ZNSWAL(qpair_factory_, (*device_manager)->info, 0,
+                                    (*device_manager)->info.zone_size * 3)};
+
+  ss_manager_ = new ZNSSSTableManager(qpair_factory_, (*device_manager)->info,
+                                      (*device_manager)->info.zone_size * 4,
+                                      (*device_manager)->info.zone_size * 10);
+  ss_manager_->Ref();
+  mem_ = new ZNSMemTable(options, this->internal_comparator_);
+  mem_->Ref();
+  versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_,
+                                (*device_manager)->info.lba_size);
+
   return rc == 0 ? Status::OK() : Status::IOError("Error resetting device");
 }
 
-DBImplZNS::~DBImplZNS() = default;
+DBImplZNS::~DBImplZNS() {
+  // TODO background work should finish.
+  delete versions_;
+  if (mem_ != nullptr) mem_->Unref();
+  if (imm_ != nullptr) imm_->Unref();
+  if (ss_manager_ != nullptr) ss_manager_->Unref();
+}
 
 Status DBImplZNS::Open(
     const DBOptions& db_options, const std::string& name,
     const std::vector<ColumnFamilyDescriptor>& column_families,
     std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
     const bool seq_per_batch, const bool batch_per_txn) {
+  Status s;
+  s = ValidateOptions(db_options);
+  if (!s.ok()) {
+    return s;
+  }
+  // We do not support column families, so we just clear them
+  handles->clear();
+
   DBImplZNS* impl = new DBImplZNS(db_options, name);
-  *dbptr = (DB*)impl;
-  return impl->InitDB();
+  s = impl->InitDB(db_options);
+  // setup WAL (WAL DIR)
+
+  // recover?
+  //  !readonly: set directories, lockfile and check if current manifest exists
+  //  create_if_missing (NewDB). verify options and system compability readonly
+  //  find or error
+  // recover version
+  // setid
+  // recover from WAL
+  // mutex
+  // s = impl->Recover(column_families, false, false, false, &recovered_seq);
+  if (s.ok()) {
+    // do something
+    // new wall with higher version? max_write_buffer_size
+    // increment superversion
+  }
+  // write options file
+  if (s.ok()) {
+    // persist_options_status = impl->WriteOptionsFile(
+    //     false /*need_mutex_lock*/, false /*need_enter_write_thread*/);
+    // // delete obsolete files, maybe schedule or flush
+    *dbptr = (DB*)impl;
+  }
+
+  // get live files metadata
+
+  // reserve disk bufferspace
+  return s;
+}
+
+Status DBImplZNS::ValidateOptions(const DBOptions& db_options) {
+  if (db_options.db_paths.size() > 1) {
+    return Status::NotSupported("We do not support multiple db paths.");
+  }
+  // We do not support most other options, but rather we ignore them for now.
+  if (!db_options.use_zns_impl) {
+    return Status::NotSupported("ZNS must be enabled to use ZNS.");
+  }
+
+  return Status::OK();
 }
 
 Status DBImplZNS::Close() { return Status::OK(); }
@@ -267,14 +452,14 @@ int DBImplZNS::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
   return 0;
 }
 const std::string& DBImplZNS::GetName() const { return name_; }
-Env* DBImplZNS::GetEnv() const { return NULL; }
+Env* DBImplZNS::GetEnv() const { return env_; }
 Options DBImplZNS::GetOptions(ColumnFamilyHandle* column_family) const {
-  Options options_;
-  return options_;
+  Options options(options_, ColumnFamilyOptions());
+  return options;
 }
 DBOptions DBImplZNS::GetDBOptions() const {
-  DBOptions options_;
-  return options_;
+  Options options(options_, ColumnFamilyOptions());
+  return options;
 };
 Status DBImplZNS::Flush(const FlushOptions& options,
                         ColumnFamilyHandle* column_family) {
@@ -389,6 +574,8 @@ Status DBImplZNS::GetPropertiesOfTablesInRange(
 }
 
 Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
+  // Destroy "all" files from the DB. Since we do not use multitenancy, we might
+  // as well reset the device.
   return Status::OK();
 }
 

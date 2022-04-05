@@ -211,7 +211,7 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     return DBImplZNS::DestroyDB(dbname, options);
   }
 #endif
-  return Status::OK();
+  return DestroyDB(dbname, options, column_families);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

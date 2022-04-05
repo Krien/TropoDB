@@ -123,7 +123,13 @@ int open_rocksdb(struct MyRocksContext *context, const std::string delimiter) {
   cout << "Opening database at " << context->uri << " with uri " << uri_ext
        << " and the db_path as " << db_path << std::endl;
   if (uri_ext.compare("zns") == 0) {
-    return open_zns_rocksdb(context, db_path);
+    int rc =  open_zns_rocksdb(context, db_path);
+    if (rc != 0) {
+      return rc;
+    }
+    cout << "## Database opened at " << context->uri << " db name is "
+       << context->db->GetName() << "\n";
+    return rc; 
   }
   s = rocksdb::Env::CreateFromUri(context->config_options, "", context->uri,
                                   &(context->options.env), &context->env_guard);
@@ -218,7 +224,8 @@ int main(int argc, char **argv) {
 
   ctx_test->uri = "zns://0000:00:04.0";
   // ctx_test->uri = "posix:///tmp/shadow2db";
-  ctx_shadow->uri = "zenfs://dev:nvme0n1";
+  // ctx_shadow->uri = "zenfs://dev:nvme1n1";
+  ctx_shadow->uri = "posix:///tmp/shadowdb";
   ctx_test->options.create_if_missing = true;
   ctx_shadow->options.create_if_missing = true;
 
@@ -348,7 +355,9 @@ int main(int argc, char **argv) {
     rocksdb::Iterator *it = ctx_shadow->db->NewIterator(ro);
     std::string test_value;
     uint64_t ent = 0;
+    uint64_t ent_total = 0;
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      ent_total++;
       if (debug) {
         cout << "reading: " << it->key().ToString() << " : "
              << it->value().ToString() << endl;
@@ -358,6 +367,12 @@ int main(int argc, char **argv) {
         cout << "reading of test DB failed with " << s.ToString()
              << " for the key (read from the shadowdb): "
              << it->key().ToString() << "\n";
+             continue;
+      }
+      if (debug) {
+        cout << "reading of test DB succeeeded with " << s.ToString()
+             << " for the key (read from the shadowdb): "
+             << test_value << " == " << it->key().ToString() << "\n";
       }
       assert(s.ok());
       // now we have shadow value and test value - they must be the same
@@ -366,7 +381,7 @@ int main(int argc, char **argv) {
       ent++;
     }
     cout << "********************************************** \n";
-    std::cout << "OK: all " << ent << " values matched successfully \n ";
+    std::cout << "OK: all " << ent << " out of " << ent_total << " values matched successfully \n ";
     cout << "********************************************** \n";
     assert(it->status().ok());  // Check for any errors found during the scan
     delete it;

@@ -335,7 +335,7 @@ void *z_calloc(QPair *qpair, int nr, int size) {
 }
 
 void z_free(QPair *qpair, void *buffer) {
-  (void)buffer;
+  spdk_free(buffer);
   (void)qpair;
   // free(buffer);
 }
