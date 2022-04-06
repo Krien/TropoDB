@@ -80,7 +80,7 @@ Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
 }
 
 Status ZNSSSTableManager::Get(const Slice& key_ptr, std::string* value_ptr,
-                              SSZoneMetaData* meta) {
+                              SSZoneMetaData* meta, EntryStatus* status) {
   Slice sstable;
   Status s;
   s = ReadSSTable(&sstable, meta);
@@ -102,10 +102,12 @@ Status ZNSSSTableManager::Get(const Slice& key_ptr, std::string* value_ptr,
     walker = walker + valuesize;
     if (key_ptr.compare(key) == 0) {
       *value_ptr = std::string(value.data());
+      *status = value.size() > 0 ? EntryStatus::found : EntryStatus::deleted;
       return Status::OK();
     }
     counter++;
   }
+  *status = EntryStatus::notfound;
   return Status::NotFound();
 }
 

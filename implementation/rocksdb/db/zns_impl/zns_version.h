@@ -25,6 +25,7 @@ class ZnsVersionEdit {
   void AddSSDefinition(int level, uint64_t lba, uint64_t lba_count,
                        uint64_t numbers, const InternalKey& smallest,
                        const InternalKey& largest);
+  void RemoveSSDefinition(int level, uint64_t lba) {}
 
  private:
   friend class ZnsVersionSet;
@@ -77,6 +78,12 @@ class ZnsVersionSet {
 
   inline ZnsVersion* current() { return current_; }
 
+  inline uint64_t LastSequence() const { return last_sequence_; }
+  inline void SetLastSequence(uint64_t s) {
+    assert(s >= last_sequence_);
+    last_sequence_ = s;
+  }
+
   inline int NumLevelZones(int level) const {
     assert(level >= 0 && level < 7);
     return current_->ss_[level].size();
@@ -99,6 +106,7 @@ class ZnsVersionSet {
   const InternalKeyComparator icmp_;
   ZNSSSTableManager* znssstable_;
   uint64_t lba_size_;
+  uint64_t last_sequence_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

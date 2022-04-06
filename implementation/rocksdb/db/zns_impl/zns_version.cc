@@ -22,10 +22,14 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
       tmp.push_back(z);
     }
   }
+  EntryStatus status;
   for (uint32_t i = 0; i < tmp.size(); i++) {
-    s = znssstable->Get(key, value, tmp[i]);
+    s = znssstable->Get(key, value, tmp[i], &status);
     if (s.ok()) {
       znssstable->Unref();
+      if (status != EntryStatus::found) {
+        return Status::NotFound();
+      }
       return s;
     }
   }

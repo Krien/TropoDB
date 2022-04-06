@@ -21,8 +21,6 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
 ZNSMemTable::~ZNSMemTable() {}
 
 Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
-  assert(this->meNewIteratorm_ != nullptr);
-  WriteBatchInternal::SetSequence(updates, 100);
   Status s =
       WriteBatchInternal::InsertInto(updates, this->mem_, nullptr, nullptr);
   return s;

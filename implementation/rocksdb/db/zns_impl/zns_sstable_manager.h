@@ -12,6 +12,8 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
+enum class EntryStatus { found, deleted, notfound };
+
 class ZNSSSTableManager : public RefCounter {
  public:
   ZNSSSTableManager(QPairFactory* qpair_factory,
@@ -19,7 +21,8 @@ class ZNSSSTableManager : public RefCounter {
                     const uint64_t min_zone_head, uint64_t max_zone_head);
   ~ZNSSSTableManager();
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
-  Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta);
+  Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta,
+             EntryStatus* entry);
   Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta);
 
  private:

@@ -148,7 +148,9 @@ Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
 
 Status DBImplZNS::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key) {
-  return Status::NotSupported();
+  WriteBatch batch;
+  batch.Delete(key);
+  return Write(options, &batch);
 }
 Status DBImplZNS::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key,
@@ -163,15 +165,21 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
 
   // TODO: Check for space
   s = MakeRoomForWrite();
+  uint64_t last_sequence = versions_->LastSequence();
 
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
-    // write to log
-    Slice log_entry = WriteBatchInternal::Contents(updates);
-    wal_[0].Append(log_entry);
-    // write to memtable
-    assert(this->mem_ != nullptr);
-    this->mem_->Write(options, updates);
+    WriteBatchInternal::SetSequence(updates, last_sequence);
+    last_sequence += WriteBatchInternal::Count(updates);
+    {
+      // write to log
+      Slice log_entry = WriteBatchInternal::Contents(updates);
+      wal_[0].Append(log_entry);
+      // write to memtable
+      assert(this->mem_ != nullptr);
+      this->mem_->Write(options, updates);
+    }
+    versions_->SetLastSequence(last_sequence);
   }
   return s;
 }
