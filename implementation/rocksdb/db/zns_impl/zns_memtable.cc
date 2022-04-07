@@ -11,14 +11,20 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
                          const InternalKeyComparator& ikc) {
   Options options(db_options, ColumnFamilyOptions());
   ImmutableOptions ioptions(options);
-  this->wb_ = new WriteBufferManager(options.db_write_buffer_size);
-  this->mem_ = new ColumnFamilyMemTablesDefault(
+  wb_ = new WriteBufferManager(options.db_write_buffer_size);
+  mem_ = new ColumnFamilyMemTablesDefault(
       new MemTable(ikc, ioptions, MutableCFOptions(options), this->wb_,
                    kMaxSequenceNumber, 0 /* column_family_id */));
-  this->write_buffer_size_ = 4096 * 8;  // options.write_buffer_size;
+  mem_->GetMemTable()->Ref();
+  write_buffer_size_ = 4096 * 8;  // options.write_buffer_size;
 }
 
-ZNSMemTable::~ZNSMemTable() {}
+ZNSMemTable::~ZNSMemTable() {
+  printf("Deleting memtable.\n");
+  mem_->GetMemTable()->Unref();
+  delete mem_;
+  delete wb_;
+}
 
 Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s =

@@ -29,11 +29,13 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
 }
 
 ZNSSSTableManager::~ZNSSSTableManager() {
+  printf("Deleting SSTable manager.\n");
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
     delete qpair_;
   }
   qpair_factory_->Unref();
+  qpair_factory_ = nullptr;
 }
 
 Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,

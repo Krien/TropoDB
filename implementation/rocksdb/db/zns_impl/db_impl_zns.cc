@@ -18,6 +18,7 @@
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/zns_manifest.h"
 #include "db/zns_impl/zns_version.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
@@ -115,23 +116,30 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   6. get version logic. think for sstable locations? differentiates on action.
   **/
 
-  mem_->Ref();
-  if (imm_ != nullptr) imm_->Ref();
-  versions_->current()->Ref();
+  // This is absolutely necessary for locking logic.
+  ZNSMemTable* mem = mem_;
+  ZNSMemTable* imm = imm_;
+  ZnsVersion* current = versions_->current();
+  mem->Ref();
+  if (imm != nullptr) imm->Ref();
+  current->Ref();
 
   {
-    if (this->mem_->Get(options, key, value).ok()) {
-    } else if (imm_ != nullptr && imm_->Get(options, key, value).ok()) {
+    mutex_.Unlock();
+    if (mem->Get(options, key, value).ok()) {
+    } else if (imm != nullptr && imm->Get(options, key, value).ok()) {
       printf("read from immutable!\n");
       // Done
     } else {
-      s = versions_->current()->Get(options, key, value);
+      s = current->Get(options, key, value);
     }
+    mutex_.Lock();
   }
 
-  mem_->Unref();
-  if (imm_ != nullptr) imm_->Unref();
-  versions_->current()->Unref();
+  // Ensures that old data can be removed.
+  mem->Unref();
+  if (imm != nullptr) imm->Unref();
+  current->Unref();
 
   return s;
 }
@@ -163,21 +171,24 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   MutexLock l(&mutex_);
   // TODO: syncing
 
-  // TODO: Check for space
   s = MakeRoomForWrite();
   uint64_t last_sequence = versions_->LastSequence();
+
+  // TODO make threadsafe for multiple writes and add writebatch optimisations...
 
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
     WriteBatchInternal::SetSequence(updates, last_sequence);
     last_sequence += WriteBatchInternal::Count(updates);
     {
-      // write to log
+      // write to log (needs to be locked because log can be deleted)
       Slice log_entry = WriteBatchInternal::Contents(updates);
       wal_[0].Append(log_entry);
       // write to memtable
+      mutex_.Unlock();
       assert(this->mem_ != nullptr);
       this->mem_->Write(options, updates);
+      mutex_.Lock();
     }
     versions_->SetLastSequence(last_sequence);
   }
@@ -187,14 +198,24 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
 Status DBImplZNS::MakeRoomForWrite() {
   mutex_.AssertHeld();
   Status s;
+  bool allow_delay = true;
   while (true) {
-    if (!mem_->ShouldScheduleFlush()) {
+    if (allow_delay && versions_->NumLevelZones(0) > 3) {
+      mutex_.Unlock();
+      env_->SleepForMicroseconds(1000);
+      allow_delay = false;
+      mutex_.Lock();
+    }
+    else if (!mem_->ShouldScheduleFlush()) {
       // space left in memory table
       break;
-    } else if (mem_->ShouldScheduleFlush() && imm_ != nullptr) {
+    } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
       printf("is it done????\n");
       bg_work_finished_signal_.Wait();
+    } else if (versions_->NumLevelZones(0) > 3) { 
+        printf("waiting for compaction\n");
+        bg_work_finished_signal_.Wait();
     } else {
       // Switch to fresh memtable
       imm_ = mem_;
@@ -218,19 +239,29 @@ Status DBImplZNS::CompactMemtable() {
   assert(bg_compaction_scheduled_);
   Status s;
   // Flush and set new version
-  ZnsVersionEdit edit;
-  SSZoneMetaData meta;
-  s = FlushL0SSTables(&meta);
-  int level = 0;
-  if (s.ok() && meta.lba_count > 0) {
-    edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
-                         meta.smallest, meta.largest);
-    s = versions_->LogAndApply(&edit);
-    s = wal_->Reset();
+  {
+    ZnsVersionEdit edit;
+    SSZoneMetaData meta;
+    s = FlushL0SSTables(&meta);
+    int level = 0;
+    if (s.ok() && meta.lba_count > 0) {
+      edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
+                          meta.smallest, meta.largest);
+      s = versions_->LogAndApply(&edit);
+      s = wal_->Reset();
+    }
+    imm_->Unref();
+    imm_ = nullptr;
+    printf("Flushed!!\n");
   }
-  imm_->Unref();
-  imm_ = nullptr;
-  printf("Flushed!!\n");
+  // for now direct manual compaction from L0 to L1.
+  if (versions_->NumLevelZones(0) > 3) {
+    ZnsVersionEdit edit;
+    s = versions_->Compact(&edit);
+    s = versions_->LogAndApply(&edit);
+    printf("Compacted!!\n");
+  }
+
   bg_compaction_scheduled_ = false;
   bg_work_finished_signal_.SignalAll();
   return s;
@@ -275,16 +306,23 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   qpair_factory_ = new QPairFactory(*device_manager_);
   qpair_factory_->Ref();
 
-  wal_ = new ZNSWAL[1]{ZNSWAL(qpair_factory_, (*device_manager)->info, 0,
-                              (*device_manager)->info.zone_size * 3)};
+  manifest_ = new ZnsManifest(qpair_factory_, (*device_manager)->info,
+    0,
+    (*device_manager)->info.zone_size * 2);
+  manifest_->Ref();
+
+  wal_ = new ZNSWAL(qpair_factory_, (*device_manager)->info, 
+                              (*device_manager)->info.zone_size * 2,
+                              (*device_manager)->info.zone_size * 5);
+  wal_->Ref();
 
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, (*device_manager)->info,
-                                      (*device_manager)->info.zone_size * 4,
-                                      (*device_manager)->info.zone_size * 10);
+                                      (*device_manager)->info.zone_size * 5,
+                                      (*device_manager)->info.zone_size * 20);
   ss_manager_->Ref();
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();
-  versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_,
+  versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
                                 (*device_manager)->info.lba_size);
 
   return rc == 0 ? Status::OK() : Status::IOError("Error resetting device");
@@ -302,7 +340,12 @@ DBImplZNS::~DBImplZNS() {
   if (imm_ != nullptr) imm_->Unref();
   if (wal_ != nullptr) wal_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
+  if (manifest_ != nullptr) manifest_->Unref();
   if (qpair_factory_ != nullptr) qpair_factory_->Unref();
+  if (device_manager_ != nullptr) {
+    ZnsDevice::z_shutdown(*device_manager_);
+    free(device_manager_);
+  }
 }
 
 Status DBImplZNS::Open(

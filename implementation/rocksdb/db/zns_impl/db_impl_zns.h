@@ -24,6 +24,7 @@
 #include "db/zns_impl/qpair_factory.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/zns_manifest.h"
 #include "db/zns_impl/zns_version.h"
 #include "db/zns_impl/zns_wal.h"
 #include "db/zns_impl/zns_zonemetadata.h"
@@ -51,9 +52,6 @@ class PeriodicWorkTestScheduler;
 #endif  // !NDEBUG
 class TableCache;
 class TaskLimiterToken;
-class Version;
-class VersionEdit;
-class VersionSet;
 class WriteCallback;
 struct JobContext;
 struct ExternalSstFileInfo;
@@ -294,6 +292,7 @@ class DBImplZNS : public DB {
   QPairFactory* qpair_factory_;
   ZnsDevice::QPair** qpair_;
   ZNSWAL* wal_;
+  ZnsManifest* manifest_;
   ZNSSSTableManager* ss_manager_;
   const std::string name_;
   Env* const env_;

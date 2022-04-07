@@ -3,6 +3,7 @@
 #ifndef ZNS_MEMTABLE_H
 #define ZNS_MEMTABLE_H
 
+#include "db/zns_impl/ref_counter.h"
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
 #include "rocksdb/options.h"
@@ -12,7 +13,7 @@
 #include "table/internal_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZNSMemTable {
+class ZNSMemTable : public RefCounter {
  public:
   ZNSMemTable(const DBOptions& options, const InternalKeyComparator& ikc);
   ~ZNSMemTable();
@@ -20,8 +21,6 @@ class ZNSMemTable {
   Status Get(const ReadOptions& options, const Slice& key, std::string* value);
   bool ShouldScheduleFlush();
   InternalIterator* NewIterator();
-  inline void Ref() { mem_->GetMemTable()->Ref(); }
-  inline void Unref() { mem_->GetMemTable()->Unref(); }
 
  private:
   ColumnFamilyMemTables* mem_;

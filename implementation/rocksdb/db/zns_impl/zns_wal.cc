@@ -15,8 +15,8 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       qpair_factory_(qpair_factory) {
-  assert(zone_head < info.lba_cap);
-  assert(zone_head % info.lba_size == 0);
+  assert(zone_head_ < info.lba_cap);
+  assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
   qpair_ = new ZnsDevice::QPair*[1];
   qpair_factory_->Ref();
@@ -24,11 +24,13 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
 }
 
 ZNSWAL::~ZNSWAL() {
+  printf("Deleting WAL.\n");
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
-    qpair_factory_->Unref();
     delete qpair_;
   }
+  qpair_factory_->Unref();
+  qpair_factory_ = nullptr;
 }
 
 void ZNSWAL::Append(Slice data) {

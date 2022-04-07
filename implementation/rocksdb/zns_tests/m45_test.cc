@@ -35,11 +35,11 @@ SOFTWARE.
 using namespace std;
 
 struct MyRocksContext {
-    std::string uri;
-    rocksdb::Options options;
-    rocksdb::DB *db;
-    rocksdb::ConfigOptions config_options;
-    std::shared_ptr<rocksdb::Env> env_guard;
+  std::string uri;
+  rocksdb::Options options;
+  rocksdb::DB *db;
+  rocksdb::ConfigOptions config_options;
+  std::shared_ptr<rocksdb::Env> env_guard;
 };
 
 static std::string genrate_random_string(const int len) {
@@ -123,13 +123,13 @@ int open_rocksdb(struct MyRocksContext *context, const std::string delimiter) {
   cout << "Opening database at " << context->uri << " with uri " << uri_ext
        << " and the db_path as " << db_path << std::endl;
   if (uri_ext.compare("zns") == 0) {
-    int rc =  open_zns_rocksdb(context, db_path);
+    int rc = open_zns_rocksdb(context, db_path);
     if (rc != 0) {
       return rc;
     }
     cout << "## Database opened at " << context->uri << " db name is "
-       << context->db->GetName() << "\n";
-    return rc; 
+         << context->db->GetName() << "\n";
+    return rc;
   }
   s = rocksdb::Env::CreateFromUri(context->config_options, "", context->uri,
                                   &(context->options.env), &context->env_guard);
@@ -195,6 +195,7 @@ static void show_help() {
   cout << " -k integer: max size of the key\n ";
   cout << " -v integer: max size of the value\n ";
   cout << " -e integer: total number of entries to test for \n";
+  cout << " -l integer: total number of entries to delete after e\n";
   cout << "-D delete the databases at the test and shadow locations\n";
   cout << "-S do a single DB test on the test_db with -p, no comparison \n";
   cout << "-d show debugging information\n";
@@ -210,7 +211,7 @@ int main(int argc, char **argv) {
                "RocksDB (also: congratulations for bearing with us so far!)\n";
   printf("============================================================== \n");
   const std::string delimiter = "://";
-  int ksize = 10, vsize = 90, entires = 1;
+  int ksize = 10, vsize = 90, entires = 1, deletes = 0;
   std::map<std::string, std::string> testdata;
   rocksdb::Status s;
   int c, ret;
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
   ctx_test->options.create_if_missing = true;
   ctx_shadow->options.create_if_missing = true;
 
-  while ((c = getopt(argc, argv, "p:t:rv:k:e:dDhS")) != -1) {
+  while ((c = getopt(argc, argv, "p:t:rv:k:e:l:dDhS")) != -1) {
     switch (c) {
       case 'h':
         show_help();
@@ -248,6 +249,9 @@ int main(int argc, char **argv) {
         break;
       case 'e':
         entires = atoi(optarg);
+        break;
+      case 'l':
+        deletes = atoi(optarg);
         break;
       case 'D':
         deleteall = true;
@@ -287,6 +291,15 @@ int main(int argc, char **argv) {
   }
   if (single && roverify) {
     std::cout << "Single and roverify both are set, I cannot do that \n";
+    return -EINVAL;
+  }
+  if (deletes > 0 && roverify) {
+    std::cout
+        << "Multiple deletes and roverify both are set, I cannot do that \n";
+    return -EINVAL;
+  }
+  if (deletes > entires) {
+    std::cout << "More data will be deleted than is add, I cannot do that \n";
     return -EINVAL;
   }
 
@@ -345,6 +358,20 @@ int main(int argc, char **argv) {
     std::cout << "All values inserted, number of entries " << entires
               << ", expected size stores would be "
               << ((ksize + vsize) * entires) << " bytes \n";
+
+    int i = deletes;
+    for (auto it = testdata.begin(); it != testdata.end(); ++it) {
+      s = ctx_test->db->Delete(wo, (*it).first);
+      assert(s.ok());
+      if (!single) {
+        s = ctx_shadow->db->Delete(wo, (*it).first);
+        assert(s.ok());
+      }
+      i--;
+      if (i == 0) {
+        break;
+      }
+    }
   }
   // shadow DB must be a posix db so we know it works
   // lets get an iterator
@@ -367,12 +394,7 @@ int main(int argc, char **argv) {
         cout << "reading of test DB failed with " << s.ToString()
              << " for the key (read from the shadowdb): "
              << it->key().ToString() << "\n";
-             continue;
-      }
-      if (debug) {
-        cout << "reading of test DB succeeeded with " << s.ToString()
-             << " for the key (read from the shadowdb): "
-             << test_value << " == " << it->key().ToString() << "\n";
+        continue;
       }
       assert(s.ok());
       // now we have shadow value and test value - they must be the same
@@ -381,7 +403,8 @@ int main(int argc, char **argv) {
       ent++;
     }
     cout << "********************************************** \n";
-    std::cout << "OK: all " << ent << " out of " << ent_total << " values matched successfully \n ";
+    std::cout << "OK: all " << ent << " out of " << ent_total
+              << " values matched successfully \n ";
     cout << "********************************************** \n";
     assert(it->status().ok());  // Check for any errors found during the scan
     delete it;
@@ -390,7 +413,12 @@ int main(int argc, char **argv) {
     rocksdb::ReadOptions ro = rocksdb::ReadOptions();
     std::string test_value;
     uint64_t ent = 0;
+    int i = deletes;
     for (auto it = testdata.begin(); it != testdata.end(); ++it) {
+      if (i > 0) {
+        i--;
+        continue;
+      }
       s = ctx_test->db->Get(ro, it->first, &test_value);
       assert(s.ok());
       if (test_value != it->second) {
@@ -401,10 +429,36 @@ int main(int argc, char **argv) {
       }
     }
     cout << "********************************************** \n";
-    std::cout << "OK: " << ent << " out of " << testdata.size()
-              << " values matched successfully in the SINGLE mode \n ";
+    std::cout << "OK: " << ent << " out of " << testdata.size() - deletes
+              << " values matched successfully in the SINGLE mode \n";
     cout << "********************************************** \n";
   }
+
+  if (deletes > 0) {
+    int i = deletes;
+    rocksdb::ReadOptions ro = rocksdb::ReadOptions();
+    std::string test_value;
+    for (auto it = testdata.begin(); it != testdata.end(); ++it) {
+      s = ctx_test->db->Get(ro, it->first, &test_value);
+      assert(!s.ok() && test_value.length() == 0);
+      if (!single) {
+        s = ctx_shadow->db->Get(ro, it->first, &test_value);
+        assert(!s.ok() && test_value.length() == 0);
+      }
+      i--;
+      if (i == 0) {
+        break;
+      }
+    }
+    cout << "********************************************** \n";
+    std::cout << "OK: all " << deletes
+              << " deleted entries succesfully not found \n";
+    if (single) {
+      std::cout << " in the SINGLE mode \n";
+    }
+    cout << "********************************************** \n";
+  }
+
   // will close the db - for now shadow context is created unconditionally, but
   // can be moved in the single mode
   destroy_myrocks_context(ctx_shadow);
