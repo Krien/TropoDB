@@ -17,8 +17,8 @@
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/zns_sstable_manager.h"
 #include "db/zns_impl/zns_manifest.h"
+#include "db/zns_impl/zns_sstable_manager.h"
 #include "db/zns_impl/zns_version.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
@@ -174,7 +174,8 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   s = MakeRoomForWrite();
   uint64_t last_sequence = versions_->LastSequence();
 
-  // TODO make threadsafe for multiple writes and add writebatch optimisations...
+  // TODO make threadsafe for multiple writes and add writebatch
+  // optimisations...
 
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
@@ -205,17 +206,16 @@ Status DBImplZNS::MakeRoomForWrite() {
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    }
-    else if (!mem_->ShouldScheduleFlush()) {
+    } else if (!mem_->ShouldScheduleFlush()) {
       // space left in memory table
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
       printf("is it done????\n");
       bg_work_finished_signal_.Wait();
-    } else if (versions_->NumLevelZones(0) > 3) { 
-        printf("waiting for compaction\n");
-        bg_work_finished_signal_.Wait();
+    } else if (versions_->NumLevelZones(0) > 3) {
+      printf("waiting for compaction\n");
+      bg_work_finished_signal_.Wait();
     } else {
       // Switch to fresh memtable
       imm_ = mem_;
@@ -246,7 +246,7 @@ Status DBImplZNS::CompactMemtable() {
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
       edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
-                          meta.smallest, meta.largest);
+                           meta.smallest, meta.largest);
       s = versions_->LogAndApply(&edit);
       s = wal_->Reset();
     }
@@ -258,7 +258,8 @@ Status DBImplZNS::CompactMemtable() {
   if (versions_->NumLevelZones(0) > 3) {
     ZnsVersionEdit edit;
     s = versions_->Compact(&edit);
-    s = versions_->LogAndApply(&edit);
+    s = s.ok() ? versions_->LogAndApply(&edit) : s;
+    s = s.ok() ? versions_->RemoveObsoleteL0(&edit) : s;
     printf("Compacted!!\n");
   }
 
@@ -306,14 +307,13 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   qpair_factory_ = new QPairFactory(*device_manager_);
   qpair_factory_->Ref();
 
-  manifest_ = new ZnsManifest(qpair_factory_, (*device_manager)->info,
-    0,
-    (*device_manager)->info.zone_size * 2);
+  manifest_ = new ZnsManifest(qpair_factory_, (*device_manager)->info, 0,
+                              (*device_manager)->info.zone_size * 2);
   manifest_->Ref();
 
-  wal_ = new ZNSWAL(qpair_factory_, (*device_manager)->info, 
-                              (*device_manager)->info.zone_size * 2,
-                              (*device_manager)->info.zone_size * 5);
+  wal_ = new ZNSWAL(qpair_factory_, (*device_manager)->info,
+                    (*device_manager)->info.zone_size * 2,
+                    (*device_manager)->info.zone_size * 5);
   wal_->Ref();
 
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, (*device_manager)->info,

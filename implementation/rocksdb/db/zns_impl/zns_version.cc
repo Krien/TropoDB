@@ -38,6 +38,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
   for (int level = 1; level < 7; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
+    // TODO: binary search
     for (size_t i = ss_[level].size(); i != 0; --i) {
       SSZoneMetaData* z = ss_[level][i - 1];
       if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
@@ -203,11 +204,12 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst) {
   ZnsVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stufff
-  for (int level=0; level < 7; level++) {
+  for (int level = 0; level < 7; level++) {
     const std::vector<SSZoneMetaData*>& ss = current_->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData* m = ss[i];
-      edit.AddSSDefinition(level, m->lba, m->lba_count, m->numbers, m->smallest, m->largest);
+      edit.AddSSDefinition(level, m->lba, m->lba_count, m->numbers, m->smallest,
+                           m->largest);
     }
   }
   edit.EncodeTo(snapshot_dst);
@@ -216,10 +218,10 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst) {
 
 Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   Status s = Status::OK();
-  // TODO sanity checking...
+  // TODO: sanity checking...
   edit->SetLastSequence(last_sequence_);
 
-  // TODO improve... this is horrendous
+  // TODO: improve... this is horrendous
   ZnsVersion* v = new ZnsVersion(this);
   {
     Builder builder(this, current_);
@@ -243,7 +245,7 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   edit->SetComparatorName(icmp_.user_comparator()->Name());
   std::string record;
   edit->EncodeTo(&record);
-  s = manifest_->NewManifest(snapshot+record);
+  s = manifest_->NewManifest(snapshot + record);
   if (s.ok()) {
     s = manifest_->SetCurrent(current_lba);
   }
@@ -264,8 +266,7 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   v->Ref();
 }
 
-void 
-ZnsVersionEdit::AddSSDefinition(int level, uint64_t lba,
+void ZnsVersionEdit::AddSSDefinition(int level, uint64_t lba,
                                      uint64_t lba_count, uint64_t numbers,
                                      const InternalKey& smallest,
                                      const InternalKey& largest) {
@@ -278,40 +279,37 @@ ZnsVersionEdit::AddSSDefinition(int level, uint64_t lba,
   new_ss_.push_back(std::make_pair(level, f));
 }
 
-void 
-ZnsVersionEdit::EncodeTo(std::string* dst) {
-      // comparator
-    if (has_comparator_) {
-      PutVarint32(dst, static_cast<uint32_t>(VersionTag::kComparator));
-      PutLengthPrefixedSlice(dst, comparator_);
-    }
-    // last sequence
-    if (has_last_sequence_) {
-      PutVarint32(dst, static_cast<uint32_t>(VersionTag::kLastSequence));
-      PutVarint64(dst, last_sequence_);
-    }
+void ZnsVersionEdit::EncodeTo(std::string* dst) {
+  // comparator
+  if (has_comparator_) {
+    PutVarint32(dst, static_cast<uint32_t>(VersionTag::kComparator));
+    PutLengthPrefixedSlice(dst, comparator_);
+  }
+  // last sequence
+  if (has_last_sequence_) {
+    PutVarint32(dst, static_cast<uint32_t>(VersionTag::kLastSequence));
+    PutVarint64(dst, last_sequence_);
+  }
 
-    // compaction pointers
+  // compaction pointers
 
-    // deleted pointers
-    for (const auto& deleted_file_kvp : deleted_ss_) {
-      PutVarint32(dst, static_cast<uint32_t>(VersionTag::kDeletedFile));
-      PutVarint32(dst, deleted_file_kvp.first);   // level
-      PutVarint64(dst, deleted_file_kvp.second);  // lba
-    }
+  // deleted pointers
+  for (const auto& deleted_file_kvp : deleted_ss_) {
+    PutVarint32(dst, static_cast<uint32_t>(VersionTag::kDeletedFile));
+    PutVarint32(dst, deleted_file_kvp.first);   // level
+    PutVarint64(dst, deleted_file_kvp.second);  // lba
+  }
 
-    // new files
-    for (size_t i = 0; i < new_ss_.size(); i++) {
-      const SSZoneMetaData& m =  new_ss_[i].second;
-      PutVarint32(dst, static_cast<uint32_t>(VersionTag::kNewFile));
-      PutVarint32(dst, new_ss_[i].first); // level
-      PutVarint64(dst, m.lba);
-      PutVarint64(dst, m.lba_count);
-      PutLengthPrefixedSlice(dst, m.smallest.Encode());
-      PutLengthPrefixedSlice(dst, m.largest.Encode());
-    }
+  // new files
+  for (size_t i = 0; i < new_ss_.size(); i++) {
+    const SSZoneMetaData& m = new_ss_[i].second;
+    PutVarint32(dst, static_cast<uint32_t>(VersionTag::kNewFile));
+    PutVarint32(dst, new_ss_[i].first);  // level
+    PutVarint64(dst, m.lba);
+    PutVarint64(dst, m.lba_count);
+    PutLengthPrefixedSlice(dst, m.smallest.Encode());
+    PutLengthPrefixedSlice(dst, m.largest.Encode());
+  }
 }
-
-
 
 }  // namespace ROCKSDB_NAMESPACE

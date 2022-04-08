@@ -3,9 +3,9 @@
 #ifndef ZNS_MEMTABLE_H
 #define ZNS_MEMTABLE_H
 
-#include "db/zns_impl/ref_counter.h"
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/ref_counter.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -21,6 +21,10 @@ class ZNSMemTable : public RefCounter {
   Status Get(const ReadOptions& options, const Slice& key, std::string* value);
   bool ShouldScheduleFlush();
   InternalIterator* NewIterator();
+  // not thread safe, I think.
+  inline uint64_t GetInternalSize() {
+    return this->mem_->GetMemTable()->get_data_size();
+  }
 
  private:
   ColumnFamilyMemTables* mem_;

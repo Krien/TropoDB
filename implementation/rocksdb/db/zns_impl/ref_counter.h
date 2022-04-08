@@ -3,8 +3,10 @@
 #ifndef REF_COUNTER_H
 #define REF_COUNTER_H
 
-#include <cstdio>
 #include <assert.h>
+
+#include <cstdio>
+
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -15,18 +17,15 @@ class RefCounter {
   inline void Ref() { ++refs_; }
   inline void Unref() {
     assert(refs_ >= 1);
-    --refs_;
-    if (refs_ == 0) {
+    if (--refs_ == 0) {
       delete this;
     }
   }
 
-  inline int Getref() {
-    return refs_;
-  }
+  inline int Getref() { return refs_; }
 
  protected:
-  int refs_;
+  int refs_ = 0;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

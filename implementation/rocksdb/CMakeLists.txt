@@ -1544,6 +1544,17 @@ if ( ZNS_PLUGIN  )
   )
   target_link_libraries(m5 ${ROCKSDB_LIB})
   set_property(TARGET m5 PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+  add_executable(zns_sstable_manager_test 
+      "db/zns_impl/tests/zns_sstable_manager_test.cc"
+      ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC}
+  )
+  target_link_libraries(zns_sstable_manager_test PRIVATE
+     ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
+     testharness gtest
+     znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
+  set_property(TARGET zns_sstable_manager_test PROPERTY POSITION_INDEPENDENT_CODE ON)
+
 endif()
 if(DEFINED ENV{CLANG_PATH})
   set(CLANG_FORMAT_PATH "$ENV{CLANG_FORMAT_PATH}")

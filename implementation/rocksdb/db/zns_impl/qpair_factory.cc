@@ -5,9 +5,9 @@
 namespace ROCKSDB_NAMESPACE {
 QPairFactory::QPairFactory(ZnsDevice::DeviceManager* device_manager)
     : qpair_count_(0), device_manager_(device_manager) {}
-QPairFactory::~QPairFactory() { 
+QPairFactory::~QPairFactory() {
   printf("Deleting QPairFactory.\n");
-  assert(qpair_count_ == 0); 
+  assert(qpair_count_ == 0);
 }
 
 int QPairFactory::register_qpair(ZnsDevice::QPair** qpair) {
