@@ -20,7 +20,7 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
 }
 
 ZNSMemTable::~ZNSMemTable() {
-  printf("Deleting memtable.\n");
+  // printf("Deleting memtable.\n");
   mem_->GetMemTable()->Unref();
   delete mem_;
   delete wb_;

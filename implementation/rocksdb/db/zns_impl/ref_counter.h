@@ -17,7 +17,7 @@ class RefCounter {
   inline void Ref() { ++refs_; }
   inline void Unref() {
     assert(refs_ >= 1);
-    if (--refs_ == 0) {
+    if (--refs_ <= 0) {
       delete this;
     }
   }

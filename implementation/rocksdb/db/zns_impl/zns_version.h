@@ -159,7 +159,7 @@ class ZnsVersionSet {
         edit->RemoveSSDefinition(i, old_meta->lba);
         edit->deleted_ss_seq_.push_back(std::make_pair(i, *old_meta));
         SSZoneMetaData new_meta(*old_meta);
-        s = znssstable_->RewriteSSTable(&new_meta);
+        s = znssstable_->CopySSTable(0, 1, &new_meta);
         if (!s.ok()) {
           return s;
         }
@@ -181,7 +181,7 @@ class ZnsVersionSet {
         base_end = base_ss.end();
     for (; base_iter != base_end; ++base_iter) {
       SSZoneMetaData m = (*base_iter).second;
-      s = znssstable_->InvalidateSSZone(&m);
+      s = znssstable_->InvalidateSSZone(0, &m);
       if (!s.ok()) {
         return s;
       }

@@ -26,36 +26,42 @@ static void SetupDev(Device* device, int first_zone, int last_zone) {
   device->qpair_factory = new QPairFactory(*(device->device_manager));
   device->qpair_factory->Ref();
   ASSERT_EQ(device->qpair_factory->Getref(), 1);
+  uint64_t zsize = (*device->device_manager)->info.zone_size;
+  std::pair<uint64_t, uint64_t> ranges[7] = {
+      std::make_pair(zsize * first_zone, zsize * last_zone),
+      std::make_pair(zsize * last_zone, zsize * (last_zone + 5)),
+      std::make_pair(zsize * (last_zone + 5), zsize * (last_zone + 10)),
+      std::make_pair(zsize * (last_zone + 10), zsize * (last_zone + 15)),
+      std::make_pair(zsize * (last_zone + 15), zsize * (last_zone + 20)),
+      std::make_pair(zsize * (last_zone + 20), zsize * (last_zone + 25)),
+      std::make_pair(zsize * (last_zone + 25), zsize * (last_zone + 30))};
   device->ss_manager = new ZNSSSTableManager(
-      device->qpair_factory, (*device->device_manager)->info,
-      (*device->device_manager)->info.zone_size * first_zone,
-      (*device->device_manager)->info.zone_size * last_zone);
-  ASSERT_EQ(device->qpair_factory->Getref(), 2);
+      device->qpair_factory, (*device->device_manager)->info, ranges);
+  ASSERT_EQ(device->qpair_factory->Getref(), 2 + 7);
   device->ss_manager->Ref();
   ASSERT_EQ(device->ss_manager->Getref(), 1);
 }
 
 static void TearDownDev(Device* device) {
+  ASSERT_EQ(device->ss_manager->Getref(), 1);
   device->ss_manager->Unref();
   ASSERT_EQ(device->qpair_factory->Getref(), 1);
   device->qpair_factory->Unref();
   int rc = ZnsDevice::z_destroy_qpair(*device->qpair);
   ASSERT_EQ(rc, 0);
   rc = ZnsDevice::z_shutdown(*device->device_manager);
-  delete device->device_manager;
   if (device->qpair != nullptr) delete device->qpair;
 }
 
 static void ValidateMeta(Device* device, int first_zone, int last_zone) {
   ZnsDevice::DeviceInfo info = (*device->device_manager)->info;
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetMinZoneHead(device->ss_manager),
+  L0ZnsSSTable* sstable = device->ss_manager->GetL0SSTableLog();
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetMinZoneHead(sstable),
             info.zone_size * first_zone);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetMaxZoneHead(device->ss_manager),
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetMaxZoneHead(sstable),
             info.zone_size * last_zone);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneSize(device->ss_manager),
-            info.zone_size);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetLbaSize(device->ss_manager),
-            info.lba_size);
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneSize(sstable), info.zone_size);
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetLbaSize(sstable), info.lba_size);
 }
 
 static void WasteLba(Device* device) {
@@ -84,9 +90,10 @@ TEST_F(SSTableTest, FILL) {
   SetupDev(&dev, begin, end);
   ZnsDevice::DeviceInfo info = (*dev.device_manager)->info;
   ValidateMeta(&dev, begin, end);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneHead(dev.ss_manager),
+  L0ZnsSSTable* sstable = dev.ss_manager->GetL0SSTableLog();
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneHead(sstable),
             info.zone_size * begin);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetWriteHead(dev.ss_manager),
+  ASSERT_EQ(ZnsSSTableManagerInternal::GetWriteHead(sstable),
             info.zone_size * begin);
   // 1 pair
   ZNSMemTable* mem = new ZNSMemTable(options, icmp);
@@ -99,7 +106,7 @@ TEST_F(SSTableTest, FILL) {
   dev.ss_manager->FlushMemTable(mem, &meta);
   std::string value;
   EntryStatus stata;
-  s = dev.ss_manager->Get(Slice("123"), &value, &meta, &stata);
+  s = dev.ss_manager->Get(0, Slice("123"), &value, &meta, &stata);
   ASSERT_TRUE(s.ok());
   ASSERT_TRUE(Slice(value) == Slice("456"));
   ASSERT_EQ(meta.lba, info.zone_size * begin);
@@ -118,7 +125,6 @@ TEST_F(SSTableTest, FILL) {
   ASSERT_TRUE(mem->GetInternalSize() > info.lba_size);
   dev.ss_manager->FlushMemTable(mem, &meta);
   uint64_t lbas = (mem->GetInternalSize() + info.lba_size - 1) / info.lba_size;
-  mem->Unref();
   ASSERT_EQ(meta.lba, info.zone_size * begin + 1);
   ASSERT_EQ(meta.numbers, 1000);
   ASSERT_EQ(meta.lba_count, lbas);
@@ -128,7 +134,7 @@ TEST_F(SSTableTest, FILL) {
               InternalKey(Slice("999"), 0, kTypeValue).user_key());
   for (int i = 0; i < 1000; i++) {
     value.clear();
-    s = dev.ss_manager->Get(Slice(std::to_string(i)), &value, &meta, &stata);
+    s = dev.ss_manager->Get(0, Slice(std::to_string(i)), &value, &meta, &stata);
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(stata == EntryStatus::found);
     ASSERT_TRUE(Slice(std::to_string(i % 20)) == Slice(value));
@@ -158,20 +164,19 @@ TEST_F(SSTableTest, FILL) {
   ASSERT_EQ(meta_border.lba_count, lbas);
   ASSERT_TRUE(meta_border.smallest.user_key() ==
               InternalKey(Slice("0"), 0, kTypeValue).user_key());
-  printf("%s\n", meta_border.largest.user_key().data());
   ASSERT_TRUE(meta_border.largest.user_key() ==
               InternalKey(Slice("999"), 0, kTypeValue).user_key());
   for (int i = 0; i < 1000; i++) {
     value.clear();
-    s = dev.ss_manager->Get(Slice(std::to_string(i)), &value, &meta_border,
+    s = dev.ss_manager->Get(0, Slice(std::to_string(i)), &value, &meta_border,
                             &stata);
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(stata == EntryStatus::found);
     ASSERT_TRUE(Slice(std::to_string(i)) == Slice(value));
   }
   // fill
-  for (uint64_t i = ZnsSSTableManagerInternal::GetWriteHead(dev.ss_manager);
-       i < ZnsSSTableManagerInternal::GetMaxZoneHead(dev.ss_manager); i++) {
+  for (uint64_t i = ZnsSSTableManagerInternal::GetWriteHead(sstable);
+       i < ZnsSSTableManagerInternal::GetMaxZoneHead(sstable); i++) {
     WasteLba(&dev);
   }
   // check what happens when no space.
@@ -184,15 +189,14 @@ TEST_F(SSTableTest, FILL) {
     s = dev.ss_manager->FlushMemTable(mem, &meta);
     ASSERT_FALSE(s.ok());
     // try to eat parts of the tail
-    s = ZnsSSTableManagerInternal::ConsumeTail(
-        dev.ss_manager, begin * info.zone_size, begin * info.zone_size + 3);
-    ASSERT_TRUE(s.ok());
-    s = ZnsSSTableManagerInternal::ConsumeTail(dev.ss_manager,
-                                               begin * info.zone_size + 3,
-                                               (begin + 1) * info.zone_size);
+    s = ZnsSSTableManagerInternal::ConsumeTail(sstable, begin * info.zone_size,
+                                               begin * info.zone_size + 3);
     ASSERT_TRUE(s.ok());
     s = ZnsSSTableManagerInternal::ConsumeTail(
-        dev.ss_manager, (begin + 1) * info.zone_size, info.zone_size * end);
+        sstable, begin * info.zone_size + 3, (begin + 1) * info.zone_size);
+    ASSERT_TRUE(s.ok());
+    s = ZnsSSTableManagerInternal::ConsumeTail(
+        sstable, (begin + 1) * info.zone_size, info.zone_size * end);
     ASSERT_TRUE(s.ok());
   }
   TearDownDev(&dev);

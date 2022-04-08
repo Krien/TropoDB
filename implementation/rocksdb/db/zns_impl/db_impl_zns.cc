@@ -316,9 +316,17 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
                     (*device_manager)->info.zone_size * 5);
   wal_->Ref();
 
-  ss_manager_ = new ZNSSSTableManager(qpair_factory_, (*device_manager)->info,
-                                      (*device_manager)->info.zone_size * 5,
-                                      (*device_manager)->info.zone_size * 20);
+  uint64_t zsize = (*device_manager)->info.zone_size;
+  std::pair<uint64_t, uint64_t> ranges[7] = {
+      std::make_pair(zsize * 5, zsize * 10),
+      std::make_pair(zsize * 10, zsize * 15),
+      std::make_pair(zsize * 15, zsize * 20),
+      std::make_pair(zsize * 20, zsize * 25),
+      std::make_pair(zsize * 25, zsize * 30),
+      std::make_pair(zsize * 30, zsize * 35),
+      std::make_pair(zsize * 35, zsize * 40)};
+  ss_manager_ =
+      new ZNSSSTableManager(qpair_factory_, (*device_manager)->info, ranges);
   ss_manager_->Ref();
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();

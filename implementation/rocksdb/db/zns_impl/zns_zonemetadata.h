@@ -8,7 +8,14 @@
 namespace ROCKSDB_NAMESPACE {
 struct SSZoneMetaData {
   SSZoneMetaData() : refs(0), allowed_seeks(1 << 30), lba_count(0) {}
-
+  SSZoneMetaData(SSZoneMetaData* other)
+      : refs(other->refs),
+        allowed_seeks(other->allowed_seeks),
+        lba(other->lba),
+        numbers(other->numbers),
+        lba_count(other->lba_count),
+        smallest(other->smallest),
+        largest(other->largest) {}
   int refs;
   int allowed_seeks;  // Seeks allowed until compaction
   uint64_t lba;

@@ -1,5 +1,7 @@
 #include "db/zns_impl/zns_version.h"
 
+#include <iostream>
+
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -24,7 +26,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
   }
   EntryStatus status;
   for (uint32_t i = 0; i < tmp.size(); i++) {
-    s = znssstable->Get(key, value, tmp[i], &status);
+    s = znssstable->Get(0, key, value, tmp[i], &status);
     if (s.ok()) {
       znssstable->Unref();
       if (status != EntryStatus::found) {
@@ -43,7 +45,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
       SSZoneMetaData* z = ss_[level][i - 1];
       if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
           ucmp->Compare(key, z->largest.user_key()) <= 0) {
-        s = znssstable->Get(key, value, z, &status);
+        s = znssstable->Get(level, key, value, z, &status);
         if (s.ok()) {
           znssstable->Unref();
           if (status != EntryStatus::found) {
