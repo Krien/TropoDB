@@ -24,15 +24,17 @@ class ZNSSSTableManager : public RefCounter {
   bool EnoughSpaceAvailable(size_t level, Slice slice);
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
   Status CopySSTable(size_t l1, size_t l2, SSZoneMetaData* meta);
+  Status WriteSSTable(size_t l, Slice content, SSZoneMetaData* meta);
   Status ReadSSTable(size_t level, Slice* sstable, SSZoneMetaData* meta);
   Status Get(size_t level, const Slice& key, std::string* value,
              SSZoneMetaData* meta, EntryStatus* entry);
   Status InvalidateSSZone(size_t level, SSZoneMetaData* meta);
   L0ZnsSSTable* GetL0SSTableLog();
+  Iterator* NewIterator(size_t level, SSZoneMetaData* meta);
 
  private:
   // wals
-  L0ZnsSSTable* sstable_wal_level_[7];
+  ZnsSSTable* sstable_wal_level_[7];
   // references
   QPairFactory* qpair_factory_;
 };

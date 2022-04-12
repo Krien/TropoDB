@@ -11,6 +11,7 @@ struct SSZoneMetaData {
   SSZoneMetaData(SSZoneMetaData* other)
       : refs(other->refs),
         allowed_seeks(other->allowed_seeks),
+        number(other->number),
         lba(other->lba),
         numbers(other->numbers),
         lba_count(other->lba_count),
@@ -18,8 +19,9 @@ struct SSZoneMetaData {
         largest(other->largest) {}
   int refs;
   int allowed_seeks;  // Seeks allowed until compaction
-  uint64_t lba;
-  uint64_t numbers;
+  uint64_t number; // version identifuer
+  uint64_t lba; // start lba
+  uint64_t numbers; // number of kv pairs
   uint64_t lba_count;    // data size in lbas
   InternalKey smallest;  // Smallest internal key served by table
   InternalKey largest;   // Largest internal key served by table

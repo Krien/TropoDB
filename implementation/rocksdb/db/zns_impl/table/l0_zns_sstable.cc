@@ -46,7 +46,7 @@ Status L0ZnsSSTable::GenerateSSTableString(std::string* dst, ZNSMemTable* mem,
   uint64_t kv_pairs = 0;
   meta->smallest.DecodeFrom(iter->key());
   for (; iter->Valid(); iter->Next()) {
-    const Slice& key = iter->key();
+    const Slice& key = iter->user_key();
     const Slice& value = iter->value();
     PutKVPair(dst, key, value);
     meta->largest.DecodeFrom(iter->key());
@@ -145,18 +145,26 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   if (!ValidateReadAddress(meta)) {
     return Status::Corruption("Invalid metadata");
   }
-  // printf("read from sstable at %lu \n", meta->lba);
+  // Lba by lba...
   void* payload =
-      ZnsDevice::z_calloc(*qpair_, meta->lba_count * lba_size_, sizeof(char));
-  mutex_.Lock();
-  int rc = ZnsDevice::z_read(*qpair_, meta->lba, payload,
-                             meta->lba_count * lba_size_);
-  mutex_.Unlock();
-  if (rc != 0) {
-    return Status::IOError("Error reading SSTable");
+        ZnsDevice::z_calloc(*qpair_, lba_size_, sizeof(char));
+  if (payload == nullptr) {
+    return Status::IOError("Error allocating DMA\n");
   }
   char* payloadc = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
-  memcpy(payloadc, payload, meta->lba_count * lba_size_);
+  for (uint64_t i=0; i<meta->lba_count;i++) {
+    mutex_.Lock();
+    int rc = ZnsDevice::z_read(*qpair_, meta->lba+i, payload,
+                              lba_size_);
+    mutex_.Unlock();
+    if (rc != 0) {
+      ZnsDevice::z_free(*qpair_, payload);
+      free(payloadc);
+      return Status::IOError("Error reading SSTable");
+    }
+    memcpy(payloadc+i*lba_size_, payload, lba_size_);
+  }
+  ZnsDevice::z_free(*qpair_, payload);
   *sstable = Slice((char*)payloadc, meta->lba_count * lba_size_);
   return Status::OK();
 }
@@ -178,7 +186,7 @@ Status L0ZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
   while (counter < count) {
     walker = (char*)GetVarint32Ptr(walker, walker + 5, &keysize);
     walker = (char*)GetVarint32Ptr(walker, walker + 5, &valuesize);
-    key = Slice(walker, keysize - 8);
+    key = Slice(walker, keysize);
     walker = walker + keysize;
     value = Slice(walker, valuesize);
     walker = walker + valuesize;
@@ -230,5 +238,29 @@ Status L0ZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
     pseudo_write_head_ = max_zone_head_;
   }
   return s;
+}
+
+void L0ZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
+    uint32_t keysize, valuesize;
+    *src = (char*)GetVarint32Ptr(*src, *src + 5, &keysize);
+    *src = (char*)GetVarint32Ptr(*src, *src + 5, &valuesize);
+    *key = Slice(*src, keysize);
+    *src += keysize;
+    *value = Slice(*src, valuesize);
+    *src += valuesize;
+}
+
+Iterator* L0ZnsSSTable::NewIterator(SSZoneMetaData* meta) {
+  Status s;
+  Slice sstable;
+  s = ReadSSTable(&sstable, meta);
+  if (!s.ok()) {
+    return nullptr;
+  }
+  char* data = new char[sstable.size()+1];
+  memcpy(data, sstable.data(), sstable.size());
+  uint32_t count;
+  data = (char*)GetVarint32Ptr(data, data + 5, &count);
+  return new L0ZnsSSTableIterator(data, (size_t)count, &ParseNext);
 }
 }  // namespace ROCKSDB_NAMESPACE

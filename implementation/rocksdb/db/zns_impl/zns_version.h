@@ -29,6 +29,8 @@ enum class VersionTag : uint32_t {
   kPrevLogNumber = 9
 };
 
+int FindSS(const InternalKeyComparator& icmp, const std::vector<SSZoneMetaData*>& ss, const Slice& key);
+
 class ZnsVersionEdit {
  public:
   ZnsVersionEdit() { Clear(); }
@@ -46,11 +48,11 @@ class ZnsVersionEdit {
 
   void EncodeTo(std::string* dst);
 
-  void AddSSDefinition(int level, uint64_t lba, uint64_t lba_count,
+  void AddSSDefinition(int level, uint64_t number, uint64_t lba, uint64_t lba_count,
                        uint64_t numbers, const InternalKey& smallest,
                        const InternalKey& largest);
-  void RemoveSSDefinition(int level, uint64_t lba) {
-    deleted_ss_.insert(std::make_pair(level, lba));
+  void RemoveSSDefinition(int level, uint64_t number) {
+    deleted_ss_.insert(std::make_pair(level, number));
   }
 
   void SetLastSequence(SequenceNumber seq) {
@@ -84,6 +86,9 @@ class ZnsVersion : public RefCounter {
 
  private:
   friend class ZnsVersionSet;
+
+  class SSNumIterator;
+
   std::vector<SSZoneMetaData*> ss_[7];
   ZnsVersionSet* vset_;
 
@@ -116,6 +121,7 @@ class ZnsVersionSet {
         znssstable_(znssstable),
         manifest_(manifest),
         lba_size_(lba_size),
+        ss_number_(0),
         logged_(false) {
     AppendVersion(new ZnsVersion());
   };
@@ -134,6 +140,8 @@ class ZnsVersionSet {
     last_sequence_ = s;
   }
 
+  inline uint64_t NewSSNumber() { return ss_number_++;}
+
   inline int NumLevelZones(int level) const {
     assert(level >= 0 && level < 7);
     return current_->ss_[level].size();
@@ -148,28 +156,35 @@ class ZnsVersionSet {
     return sum;
   }
 
-  Status Compact(ZnsVersionEdit* edit) {
-    Status s = Status::OK();
-    for (size_t i = 0; i < 1; i++) {
-      const std::vector<SSZoneMetaData*>& base_ss = current_->ss_[i];
-      std::vector<SSZoneMetaData*>::const_iterator base_iter = base_ss.begin();
-      std::vector<SSZoneMetaData*>::const_iterator base_end = base_ss.end();
-      for (; base_iter != base_end; ++base_iter) {
-        SSZoneMetaData* old_meta = *base_iter;
-        edit->RemoveSSDefinition(i, old_meta->lba);
-        edit->deleted_ss_seq_.push_back(std::make_pair(i, *old_meta));
-        SSZoneMetaData new_meta(*old_meta);
-        s = znssstable_->CopySSTable(0, 1, &new_meta);
-        if (!s.ok()) {
-          return s;
-        }
-        edit->AddSSDefinition(i + 1, new_meta.lba, new_meta.lba_count,
+  bool IsTrivialMove() const {
+    // add grandparent stuff level + 2
+    return current_->ss_[1].size() == 0 && current_->ss_[0].size() == 1;
+  }
+
+  Status MoveUp(ZnsVersionEdit* edit, int original_level) {
+      SSZoneMetaData* ss = current_->ss_[0][0];
+      Status s = Status::OK();
+      edit->RemoveSSDefinition(original_level, ss->number);
+      edit->deleted_ss_seq_.push_back(std::make_pair(original_level, *ss));
+      SSZoneMetaData new_meta(ss);
+      s = znssstable_->CopySSTable(original_level, original_level+1, &new_meta);
+      if (!s.ok()) {
+        return s;
+      }
+      new_meta.number = NewSSNumber();
+      edit->AddSSDefinition(original_level + 1, new_meta.number, new_meta.lba, new_meta.lba_count,
                               new_meta.numbers, new_meta.smallest,
                               new_meta.largest);
-      }
-    }
-    return s;
+      return s;
   }
+
+  static Iterator* GetSSIterator(void* arg, const ReadOptions& options,
+                                  const Slice& ss_value);
+
+
+  // Iterator* MakeInputIterator();
+ 
+  Status Compact(ZnsVersionEdit* edit);
 
   Status RemoveObsoleteL0(ZnsVersionEdit* edit) {
     Status s = Status::OK();
@@ -202,6 +217,7 @@ class ZnsVersionSet {
   ZnsManifest* manifest_;
   uint64_t lba_size_;
   uint64_t last_sequence_;
+  uint64_t ss_number_;
   bool logged_;
 };
 

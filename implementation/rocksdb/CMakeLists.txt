@@ -1042,6 +1042,9 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/db_impl_zns.cc
   db/zns_impl/zns_wal.cc
   db/zns_impl/zns_memtable.cc
+  db/zns_impl/table/zns_sstable.cc
+  db/zns_impl/table/l0_zns_sstable.cc
+  db/zns_impl/table/merger.cc
   db/zns_impl/zns_sstable_manager.cc
   db/zns_impl/zns_manifest.cc
   db/zns_impl/zns_version_builder.cc
@@ -1545,21 +1548,31 @@ if ( ZNS_PLUGIN  )
   target_link_libraries(m5 ${ROCKSDB_LIB})
   set_property(TARGET m5 PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-  add_executable(zns_sstable_manager_test 
-      "db/zns_impl/tests/zns_sstable_manager_test.cc"
-      ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC}
-  )
-  target_link_libraries(zns_sstable_manager_test PRIVATE
-     ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
-     testharness gtest
-     znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
-  set_property(TARGET zns_sstable_manager_test PROPERTY POSITION_INDEPENDENT_CODE ON)
+  function(add_zns_test test_name test_source)
+    set(ZNS_TESTS ${ZNS_TESTS} ${test_name} PARENT_SCOPE)
+    set(${test_name}_SOURCES ${test_source} PARENT_SCOPE)
+  endfunction()
+  add_zns_test(zns_sstable_manager_test db/zns_impl/tests/zns_sstable_manager_test.cc)
+  add_zns_test(zns_sstable_iterator_test db/zns_impl/tests/zns_sstable_iterator_test.cc)
+
+  foreach(test ${ZNS_TESTS})
+    add_executable(${test} 
+        ${${test}_SOURCES}
+        ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC}
+    )
+    target_link_libraries(${test}  PRIVATE
+      ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
+      testharness gtest
+      znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
+    set_property(TARGET ${test} PROPERTY POSITION_INDEPENDENT_CODE ON)
+  endforeach()
+
 
 endif()
-if(DEFINED ENV{CLANG_PATH})
+if(DEFINED ENV{CLANG_FORMAT_PATH})
   set(CLANG_FORMAT_PATH "$ENV{CLANG_FORMAT_PATH}")
 else(DEFINED ENV{CLANG_FORMAT_PATH})
-  set(CLANG_FORMAT_PATH "/home/$ENV{USER}/bin/clang-format")
+  set(CLANG_FORMAT_PATH "/usr/bin/clang-format")
 message("Clang-format path: ${CLANG_FORMAT_PATH}")
 endif()
 add_custom_target(

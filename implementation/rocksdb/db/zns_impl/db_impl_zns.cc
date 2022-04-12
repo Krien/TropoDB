@@ -242,10 +242,11 @@ Status DBImplZNS::CompactMemtable() {
   {
     ZnsVersionEdit edit;
     SSZoneMetaData meta;
+    meta.number = versions_->NewSSNumber();
     s = FlushL0SSTables(&meta);
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
-      edit.AddSSDefinition(level, meta.lba, meta.lba_count, meta.numbers,
+      edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count, meta.numbers,
                            meta.smallest, meta.largest);
       s = versions_->LogAndApply(&edit);
       s = wal_->Reset();
@@ -257,7 +258,12 @@ Status DBImplZNS::CompactMemtable() {
   // for now direct manual compaction from L0 to L1.
   if (versions_->NumLevelZones(0) > 3) {
     ZnsVersionEdit edit;
-    s = versions_->Compact(&edit);
+    if (versions_->IsTrivialMove()) {
+      printf("Trivial \n");
+      s = versions_->MoveUp(&edit, 0);
+    } else {
+      s = versions_->Compact(&edit);
+    }
     s = s.ok() ? versions_->LogAndApply(&edit) : s;
     s = s.ok() ? versions_->RemoveObsoleteL0(&edit) : s;
     printf("Compacted!!\n");

@@ -36,8 +36,14 @@ ZNSSSTableManager::~ZNSSSTableManager() {
 Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
                                         SSZoneMetaData* meta) {
   // printf("Write to L0\n");
-  return sstable_wal_level_[0]->FlushMemTable(mem, meta);
+  return GetL0SSTableLog()->FlushMemTable(mem, meta);
 }
+
+Status ZNSSSTableManager::WriteSSTable(size_t level, Slice content, SSZoneMetaData* meta) {
+    assert(level < 7);
+    return sstable_wal_level_[level]->WriteSSTable(content, meta);
+}
+
 
 Status ZNSSSTableManager::CopySSTable(size_t l1, size_t l2,
                                       SSZoneMetaData* meta) {
@@ -75,6 +81,12 @@ Status ZNSSSTableManager::ReadSSTable(size_t level, Slice* sstable,
 }
 
 L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() {
-  return sstable_wal_level_[0];
+  return dynamic_cast<L0ZnsSSTable*>(sstable_wal_level_[0]);
 }
+
+Iterator* ZNSSSTableManager::NewIterator(size_t level, SSZoneMetaData* meta) {
+  assert(level < 7);
+  return sstable_wal_level_[level]->NewIterator(meta);
+}
+
 }  // namespace ROCKSDB_NAMESPACE
