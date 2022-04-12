@@ -1,28 +1,14 @@
 #include "db/zns_impl/zns_version.h"
-#include "db/zns_impl/table/merger.h"
 
 #include <iostream>
 
+#include "db/zns_impl/table/iterators/merging_iterator.h"
+#include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
+#include "db/zns_impl/table/zns_sstable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-int FindSS(const InternalKeyComparator& icmp, const std::vector<SSZoneMetaData*>& ss, const Slice& key) {
-  uint32_t left = 0;
-  uint32_t right = ss.size();
-  // binary search I guess.
-  while (left < right) {
-    uint32_t mid = (left + right) / 2;
-    const SSZoneMetaData* m = ss[mid];
-    if (icmp.InternalKeyComparator::Compare(m->largest.Encode(), key) < 0) {
-      left = mid + 1;
-    } else {
-      right = mid;
-    }
-  }
-  return right;
-}
 
 Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
                        std::string* value) {
@@ -44,7 +30,9 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
   }
   EntryStatus status;
   if (!tmp.empty()) {
-    std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {return a->number > b->number;});
+    std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
+      return a->number > b->number;
+    });
     for (uint32_t i = 0; i < tmp.size(); i++) {
       s = znssstable->Get(0, key, value, tmp[i], &status);
       if (s.ok()) {
@@ -78,8 +66,6 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
           }
           return s;
         }
-      } else {
-        std::cout << "je moeder " << key.ToString() << + "__" << z->largest.user_key().ToString() << "\n";
       }
     }
   }
@@ -87,55 +73,6 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
   znssstable->Unref();
   return Status::NotFound();
 }
-
-class ZnsVersion::SSNumIterator : public Iterator {
-  public:
-    SSNumIterator(const InternalKeyComparator& icmp,
-      const std::vector<SSZoneMetaData*>* slist) 
-      : icmp_(icmp), slist_(slist), index_(slist->size()) {  // Marks as invalid
-    }
-    bool Valid() const override { return index_ < slist_->size(); }
-    void Seek(const Slice& target) override {
-      index_ = FindSS(icmp_, *slist_, target);
-    }
-    void SeekForPrev(const Slice& target) override {
-      Seek(target);
-      Prev();
-    }
-    void SeekToFirst() override { index_ = 0; }
-    void SeekToLast() override {
-      index_ = slist_->empty() ? 0 : slist_->size() - 1;
-    }
-    void Next() override {
-      assert(Valid());
-      index_++;
-    }
-    void Prev() override {
-      assert(Valid());
-      index_ = index_ == 0 ? slist_->size() : index_-1;
-    }
-    Slice key() const override {
-      assert(Valid());
-      return (*slist_)[index_]->largest.Encode();
-    }
-    Slice value() const override {
-      assert(Valid());
-      EncodeFixed64(value_buf_, (*slist_)[index_]->number);
-      EncodeFixed64(value_buf_+8, (*slist_)[index_]->lba_count);
-      return Slice(value_buf_, sizeof(value_buf_));
-    }
-    Status status() const override {
-      return Status::OK();
-    }
-  private:
-    const InternalKeyComparator icmp_;
-    const std::vector<SSZoneMetaData*>* const slist_;
-    size_t index_;
-
-    // Backing store for value().  Holds the file number and size.
-    mutable char value_buf_[16];
-};
-
 
 class ZnsVersionSet::Builder {
  private:
@@ -286,8 +223,8 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst) {
     const std::vector<SSZoneMetaData*>& ss = current_->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData* m = ss[i];
-      edit.AddSSDefinition(level, m->number, m->lba, m->lba_count, m->numbers, m->smallest,
-                           m->largest);
+      edit.AddSSDefinition(level, m->number, m->lba, m->lba_count, m->numbers,
+                           m->smallest, m->largest);
     }
   }
   edit.EncodeTo(snapshot_dst);
@@ -345,121 +282,105 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
 }
 
 Iterator* ZnsVersionSet::GetSSIterator(void* arg, const ReadOptions& options,
-                                  const Slice& ss_value) {
-    ZNSSSTableManager* ssman = reinterpret_cast<ZNSSSTableManager*>(arg);
-    SSZoneMetaData* meta = new SSZoneMetaData;
-    meta->lba = DecodeFixed64(ss_value.data());
-    meta->lba_count = DecodeFixed64(ss_value.data() + 8);
-    return ssman->NewIterator(1, meta);
-  }
+                                       const Slice& ss_value) {
+  ZNSSSTableManager* ssman = reinterpret_cast<ZNSSSTableManager*>(arg);
+  SSZoneMetaData* meta = new SSZoneMetaData;
+  meta->lba = DecodeFixed64(ss_value.data());
+  meta->lba_count = DecodeFixed64(ss_value.data() + 8);
+  return ssman->NewIterator(1, meta);
+}
 
-
-  // Iterator* ZnsVersionSet::MakeInputIterator() {
-  //   const std::vector<SSZoneMetaData*>& l0ss = current_->ss_[0]; 
-  //   const std::vector<SSZoneMetaData*>& l1ss = current_->ss_[1]; 
-  //   Iterator** list = new Iterator*[l0ss.size() + l1ss.size()];
-  //   int num = 0;
-  //   // l0
-  //   for (size_t i=0; i<l0ss.size(); i++) {
-  //     list[num++] = znssstable_->NewIterator(0, l0ss[i]);
-  //   }
-  //   ReadOptions options;
-  //   if (l1ss.size() > 0) {
-  //     list[num++] = NewTwoLevelIterator(
-  //       new ZnsVersion::SSNumIterator(icmp_, &l1ss),
-  //       znssstable_, options
-  //     );
-  //   }
-  //   Iterator* result = NewMergingIterator(&icmp_, list, num);
-  //   return result;
-  // }
-
-
+// Iterator* ZnsVersionSet::MakeInputIterator() {
+//   const std::vector<SSZoneMetaData*>& l0ss = current_->ss_[0];
+//   const std::vector<SSZoneMetaData*>& l1ss = current_->ss_[1];
+//   Iterator** list = new Iterator*[l0ss.size() + l1ss.size()];
+//   int num = 0;
+//   // l0
+//   for (size_t i=0; i<l0ss.size(); i++) {
+//     list[num++] = znssstable_->NewIterator(0, l0ss[i]);
+//   }
+//   ReadOptions options;
+//   if (l1ss.size() > 0) {
+//     list[num++] = NewTwoLevelIterator(
+//       new ZnsVersion::SSNumIterator(icmp_, &l1ss),
+//       znssstable_, options
+//     );
+//   }
+//   Iterator* result = NewMergingIterator(&icmp_, list, num);
+//   return result;
+// }
 
 static Iterator* GetLNIterator(void* arg, const Slice& file_value) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
   SSZoneMetaData* meta = new SSZoneMetaData();
   uint64_t lba_start = DecodeFixed64(file_value.data());
-  uint64_t lba_count =  DecodeFixed64(file_value.data() + 8);
+  uint64_t lba_count = DecodeFixed64(file_value.data() + 8);
   return zns->NewIterator(1, meta);
+}
+
+Iterator* ZnsVersionSet::MakeCompactionIterator() {
+  // 1 for each SStable in L0, 1 for each later level
+  size_t iterators_needed = current_->ss_[0].size();
+  iterators_needed += 1;
+  Iterator** iterators = new Iterator*[iterators_needed];
+  size_t iterator_index = 0;
+  // L0
+  {
+    const std::vector<SSZoneMetaData*>& l0ss = current_->ss_[0];
+    std::vector<SSZoneMetaData*>::const_iterator base_iter = l0ss.begin();
+    std::vector<SSZoneMetaData*>::const_iterator base_end = l0ss.end();
+    for (; base_iter != base_end; ++base_iter) {
+      iterators[iterator_index++] = znssstable_->NewIterator(0, *base_iter);
+    }
+  }
+  // LN
+  {
+    iterators[iterator_index++] =
+        new LNIterator(new LNZoneIterator(icmp_, &current_->ss_[1]),
+                       &GetLNIterator, znssstable_);
+  }
+  return NewMergingIterator(&icmp_, iterators, iterators_needed);
 }
 
 Status ZnsVersionSet::Compact(ZnsVersionEdit* edit) {
   printf("Starting compaction..\n");
   Status s = Status::OK();
-  const std::vector<SSZoneMetaData*>& l0ss = current_->ss_[0]; 
-  const std::vector<SSZoneMetaData*>& l1ss = current_->ss_[1]; 
-  size_t space = l0ss.size() + l1ss.size();
-  Iterator** iterator = new Iterator*[space];
-  size_t index = 0;
+  // TODO: drastic fix, this is inefficient, out of place and wrong...
   {
-    std::vector<SSZoneMetaData*>::const_iterator base_iter = l0ss.begin();
-    std::vector<SSZoneMetaData*>::const_iterator base_end = l0ss.end();
-    for(; base_iter != base_end; ++base_iter) {
-      iterator[index++] = znssstable_->NewIterator(0, *base_iter);
-      edit->RemoveSSDefinition(0, (*base_iter)->number);
-      edit->deleted_ss_seq_.push_back(std::make_pair(0, *base_iter));
+    for (int i = 0; i <= 0; i++) {
+      std::vector<SSZoneMetaData*>::const_iterator base_iter =
+          current_->ss_[i].begin();
+      std::vector<SSZoneMetaData*>::const_iterator base_end =
+          current_->ss_[i].end();
+      for (; base_iter != base_end; ++base_iter) {
+        edit->RemoveSSDefinition(i, (*base_iter)->number);
+        edit->deleted_ss_seq_.push_back(std::make_pair(i, *base_iter));
+      }
     }
   }
   {
-    iterator[index++] = NewLNIterator(
-      new ZnsVersion::SSNumIterator(icmp_, &current_->ss_[1]),
-      &GetLNIterator, znssstable_
-    );
-  }
-  Iterator* merger = NewMergingIterator(&icmp_, iterator, space);
-  {
-    merger->SeekToFirst();
-    if (!merger->Valid()) {
-      return Status::Corruption("No valid merging iterator");
-    }
-    uint64_t kv_pairs = 0;
-    std::string dst;
     SSZoneMetaData meta;
-    meta.smallest = InternalKey(merger->key(), kMaxSequenceNumber, kTypeValue);
-    for (; merger->Valid(); merger->Next()) {
-      const Slice& key = merger->key();
-      const Slice& value = merger->value();
-      PutVarint32(&dst, key.size());
-      PutVarint32(&dst, value.size());
-      dst.append(key.data(), key.size());
-      dst.append(value.data(), value.size());
-      meta.largest = InternalKey(merger->key(), kMaxSequenceNumber, kTypeValue);
-      kv_pairs++;
-    }
-    meta.numbers = kv_pairs;
-    std::string preamble;
-    PutVarint32(&preamble, kv_pairs);
-    dst = preamble.append(dst);
     meta.number = NewSSNumber();
-    printf("Writing L1 table\n");
-    znssstable_->WriteSSTable(1, Slice(dst), &meta);
-
-    edit->AddSSDefinition(1, meta.number, meta.lba, meta.lba_count, meta.numbers, meta.smallest, meta.largest);
+    SSTableBuilder* builder = znssstable_->NewBuilder(1, &meta);
+    {
+      Iterator* merger = MakeCompactionIterator();
+      merger->SeekToFirst();
+      if (!merger->Valid()) {
+        return Status::Corruption("No valid merging iterator");
+      }
+      for (; merger->Valid(); merger->Next()) {
+        const Slice& key = merger->key();
+        const Slice& value = merger->value();
+        s = builder->Apply(key, value);
+      }
+      s = builder->Finalise();
+      s = builder->Flush();
+    }
+    edit->AddSSDefinition(1, meta.number, meta.lba, meta.lba_count,
+                          meta.numbers, meta.smallest, meta.largest);
+    delete builder;
   }
   return s;
-
-    //   Status s = Status::OK();
-    // for (size_t i = 0; i < 1; i++) {
-    //   const std::vector<SSZoneMetaData*>& base_ss = current_->ss_[i];
-    //   std::vector<SSZoneMetaData*>::const_iterator base_iter = base_ss.begin();
-    //   std::vector<SSZoneMetaData*>::const_iterator base_end = base_ss.end();
-    //   for (; base_iter != base_end; ++base_iter) {
-    //     SSZoneMetaData* old_meta = *base_iter;
-    //     edit->RemoveSSDefinition(i, old_meta->number);
-    //     edit->deleted_ss_seq_.push_back(std::make_pair(i, *old_meta));
-    //     SSZoneMetaData new_meta(*old_meta);
-    //     s = znssstable_->CopySSTable(i, i+1, &new_meta);
-    //     if (!s.ok()) {
-    //       return s;
-    //     }
-    //     new_meta.number = NewSSNumber();
-    //     edit->AddSSDefinition(i + 1, new_meta.number, new_meta.lba, new_meta.lba_count,
-    //                           new_meta.numbers, new_meta.smallest,
-    //                           new_meta.largest);
-    //   }
-    // }
-    // return s;
 }
 
 void ZnsVersionEdit::AddSSDefinition(int level, uint64_t number, uint64_t lba,

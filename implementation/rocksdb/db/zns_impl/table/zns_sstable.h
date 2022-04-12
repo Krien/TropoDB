@@ -8,16 +8,23 @@
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_zonemetadata.h"
+#include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
-#include "rocksdb/iterator.h"
-
-#include <iostream>
 
 namespace ROCKSDB_NAMESPACE {
 enum class EntryStatus { found, deleted, notfound };
 
 class ZNSSSTableManager;
+
+class SSTableBuilder {
+ public:
+  SSTableBuilder(){};
+  virtual ~SSTableBuilder(){};
+  virtual Status Apply(const Slice& key, const Slice& value) = 0;
+  virtual Status Finalise() = 0;
+  virtual Status Flush() = 0;
+};
 
 class ZnsSSTable {
  public:
@@ -29,11 +36,14 @@ class ZnsSSTable {
                      EntryStatus* entry) = 0;
   virtual bool EnoughSpaceAvailable(Slice slice) = 0;
   virtual Status InvalidateSSZone(SSZoneMetaData* meta) = 0;
+  virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(Slice content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(SSZoneMetaData* meta) = 0;
 
  protected:
+  friend class SSTableBuilder;
   void PutKVPair(std::string* dst, const Slice& key, const Slice& value);
+  void GeneratePreamble(std::string* dst, uint32_t count);
 
   // data
   uint64_t zone_head_;
@@ -60,15 +70,14 @@ class L0ZnsSSTable : public ZnsSSTable {
   Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta,
              EntryStatus* entry) override;
   bool EnoughSpaceAvailable(Slice slice) override;
+  SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
   Status InvalidateSSZone(SSZoneMetaData* meta);
   Status WriteSSTable(Slice content, SSZoneMetaData* meta) override;
   Iterator* NewIterator(SSZoneMetaData* meta) override;
 
-
  private:
+  class Builder;
   friend class ZnsSSTableManagerInternal;
-  Status GenerateSSTableString(std::string* dst, ZNSMemTable* mem,
-                               SSZoneMetaData* meta);
   Status SetWriteAddress(Slice slice);
   Status ConsumeTail(uint64_t begin_lba, uint64_t end_lba);
   bool ValidateReadAddress(SSZoneMetaData* meta);
@@ -77,83 +86,13 @@ class L0ZnsSSTable : public ZnsSSTable {
   port::Mutex mutex_;
 };
 
-class L0ZnsSSTableIterator : public Iterator {
-  public:
-    L0ZnsSSTableIterator(char* data, size_t count, 
-    void(*nextf)(char** src, Slice*key, Slice*value))
-      : data_(data), walker_(data), nextf_(nextf), index_(0), count_(count), current_val_("deadbeef"),
-      current_key_("deadbeef") {
-    }
-    bool Valid() const override { return index_ <= count_;}
-    void Seek(const Slice& target) override {
-      walker_ = data_;
-      index_ = 0;
-      while (Valid()) {
-        index_++;
-        nextf_(&walker_, &current_key_, &current_val_);
-        if (target.compare(current_key_) == 0) {
-          break;
-        }
-      }
-    }
-    void SeekForPrev(const Slice& target) override {
-      Seek(target);
-      Prev();
-    }
-    void SeekToFirst() override { 
-      walker_ = data_;
-      nextf_(&walker_, &current_key_, &current_val_);
-      index_ = 1; 
-    }
-    void SeekToLast() override {
-      while (index_ < count_) {
-        index_++;
-        nextf_(&walker_, &current_key_, &current_val_);
-      }
-    }
-    void Next() override {
-      assert(Valid());
-      nextf_(&walker_, &current_key_, &current_val_);
-      index_++;
-    }
-    void Prev() override {
-      size_t target = index_-1;
-      walker_ = data_;
-      index_ = 0; 
-      while (index_ < target) {
-        index_++;
-        nextf_(&walker_, &current_key_, &current_val_);
-      }
-      // set to invalid next iteration.
-      if (index_ == 1) {
-          index_ = count_+1;
-      }
-    }
-    Slice key() const override {
-      assert(Valid());
-      return current_key_;
-    }
-    Slice value() const override {
-      assert(Valid());
-      return current_val_;
-    }
-    Status status() const override {
-      return Status::OK();
-    }
-  private:
-    char* data_;
-    char* walker_;
-    void(*nextf_)(char** src, Slice*key, Slice*value);
-    size_t index_;
-    size_t count_;
-    Slice current_val_;
-    Slice current_key_;
-};
-
 // Can have holes.
 // class LnZnsSSTable : public ZnsSSTable {
 
 // };
+
+int FindSS(const InternalKeyComparator& icmp,
+           const std::vector<SSZoneMetaData*>& ss, const Slice& key);
 
 /**
  * @brief To be used for debugging private variables of ZNSSSTableManager only.

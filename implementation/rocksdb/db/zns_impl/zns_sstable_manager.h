@@ -31,6 +31,7 @@ class ZNSSSTableManager : public RefCounter {
   Status InvalidateSSZone(size_t level, SSZoneMetaData* meta);
   L0ZnsSSTable* GetL0SSTableLog();
   Iterator* NewIterator(size_t level, SSZoneMetaData* meta);
+  SSTableBuilder* NewBuilder(size_t level, SSZoneMetaData* meta);
 
  private:
   // wals

@@ -9,9 +9,11 @@ struct Device {
   ZNSSSTableManager* ss_manager = nullptr;
 };
 
-static void SetupDev(Device* device, int first_zone, int last_zone, bool reinit) {
+static void SetupDev(Device* device, int first_zone, int last_zone,
+                     bool reinit) {
   device->device_manager = new ZnsDevice::DeviceManager*;
-  int rc = reinit ? ZnsDevice::z_reinit(device->device_manager) : ZnsDevice::z_init(device->device_manager);
+  int rc = reinit ? ZnsDevice::z_reinit(device->device_manager)
+                  : ZnsDevice::z_init(device->device_manager);
   ASSERT_EQ(rc, 0);
   rc = ZnsDevice::z_open(*(device->device_manager), "0000:00:04.0");
   ASSERT_EQ(rc, 0);
@@ -61,4 +63,4 @@ static void ValidateMeta(Device* device, int first_zone, int last_zone) {
   ASSERT_EQ(ZnsSSTableManagerInternal::GetLbaSize(sstable), info.lba_size);
 }
 
-}
+}  // namespace ROCKSDB_NAMESPACE

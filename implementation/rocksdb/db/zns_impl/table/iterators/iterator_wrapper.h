@@ -1,7 +1,8 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-
+#pragma once
+#ifdef ZNS_PLUGIN_ENABLED
 #ifndef STORAGE_LEVELDB_TABLE_ITERATOR_WRAPPER_H_
 #define STORAGE_LEVELDB_TABLE_ITERATOR_WRAPPER_H_
 
@@ -10,10 +11,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// A internal wrapper class with an interface similar to Iterator that
-// caches the valid() and key() results for an underlying iterator.
-// This can help avoid virtual function calls and also gives better
-// cache locality.
+/* A internal wrapper class with an interface similar to Iterator that
+caches the valid() and key() results for an underlying iterator.
+This can help avoid virtual function calls and also gives better
+cache locality. */
 class IteratorWrapper {
  public:
   IteratorWrapper() : iter_(nullptr), valid_(false) {}
@@ -87,6 +88,7 @@ class IteratorWrapper {
   Slice key_;
 };
 
-}  // namespace leveldb
+}  // namespace ROCKSDB_NAMESPACE
 
 #endif  // STORAGE_LEVELDB_TABLE_ITERATOR_WRAPPER_H_
+#endif

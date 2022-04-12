@@ -4,10 +4,10 @@
 #pragma once
 #ifndef STORAGE_LEVELDB_TABLE_MERGER_H_
 #define STORAGE_LEVELDB_TABLE_MERGER_H_
-#include "rocksdb/iterator.h"
 #include "rocksdb/comparator.h"
+#include "rocksdb/iterator.h"
 
-namespace ROCKSDB_NAMESPACE{
+namespace ROCKSDB_NAMESPACE {
 // Return an iterator that provided the union of the data in
 // children[0,n-1].  Takes ownership of the child iterators and
 // will delete them when the result iterator is deleted.
@@ -18,9 +18,5 @@ namespace ROCKSDB_NAMESPACE{
 // REQUIRES: n >= 0
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
                              int n);
-
-typedef Iterator* (*ZoneFunction)(void*, const Slice&);
-Iterator* NewLNIterator(Iterator* index_iter,
-                              ZoneFunction block_function, void* arg);
-}
+}  // namespace ROCKSDB_NAMESPACE
 #endif  // STORAGE_LEVELDB_TABLE_MERGER_H_

@@ -1,6 +1,7 @@
+#include "db/zns_impl/table/zns_sstable.h"
+
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
-#include "db/zns_impl/zns_sstable_manager.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory,
@@ -40,4 +41,28 @@ void ZnsSSTable::PutKVPair(std::string* dst, const Slice& key,
   dst->append(key.data(), key.size());
   dst->append(value.data(), value.size());
 }
+
+void ZnsSSTable::GeneratePreamble(std::string* dst, uint32_t count) {
+  std::string preamble;
+  PutVarint32(&preamble, count);
+  *dst = preamble.append(*dst);
+}
+
+int FindSS(const InternalKeyComparator& icmp,
+           const std::vector<SSZoneMetaData*>& ss, const Slice& key) {
+  uint32_t left = 0;
+  uint32_t right = ss.size();
+  // binary search I guess.
+  while (left < right) {
+    uint32_t mid = (left + right) / 2;
+    const SSZoneMetaData* m = ss[mid];
+    if (icmp.InternalKeyComparator::Compare(m->largest.Encode(), key) < 0) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+  return right;
+}
+
 }  // namespace ROCKSDB_NAMESPACE
