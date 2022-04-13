@@ -20,7 +20,7 @@
 namespace ROCKSDB_NAMESPACE {
 class ZnsCompaction {
  public:
-  ZnsCompaction(ZnsVersionSet* vset, int first_level);
+  ZnsCompaction(ZnsVersionSet* vset);
   ~ZnsCompaction();
 
   bool IsTrivialMove() const;
@@ -34,7 +34,8 @@ class ZnsCompaction {
   static Iterator* GetLNIterator(void* arg, const Slice& file_value);
 
   int first_level_;
-  uint64_t max_lba_count;
+  // arbitrary???
+  uint64_t max_lba_count = 8;
   ZnsVersionSet* vset_;
   ZnsVersion* version_;
   ZnsVersionEdit edit_;

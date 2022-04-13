@@ -21,12 +21,12 @@
 #include <vector>
 
 #include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/index/zns_version.h"
+#include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/qpair_factory.h"
 #include "db/zns_impl/zns_manifest.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_sstable_manager.h"
-#include "db/zns_impl/index/zns_version.h"
-#include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/zns_wal.h"
 #include "db/zns_impl/zns_zonemetadata.h"
 #include "options/cf_options.h"
@@ -107,7 +107,10 @@ class DBImplZNS : public DB {
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
 
   Status MakeRoomForWrite();
-  static void ScheduleFlush(void* db);
+  void MaybeScheduleCompaction();
+  static void BGWork(void* db);
+  void BackgroundCall();
+  void BackgroundCompaction();
   Status CompactMemtable();
   Status FlushL0SSTables(SSZoneMetaData* meta);
 
@@ -301,6 +304,7 @@ class DBImplZNS : public DB {
   ZNSMemTable* mem_;
   ZNSMemTable* imm_;
   ZnsVersionSet* versions_;
+  bool background_compaction_scheduled_;
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;

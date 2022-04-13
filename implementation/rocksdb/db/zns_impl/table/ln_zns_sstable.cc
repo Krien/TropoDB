@@ -37,6 +37,10 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
     return table_->WriteSSTable(Slice(buffer_), meta_);
   }
 
+  uint64_t GetSize() override {
+    return (uint64_t)buffer_.size();
+  }
+
  private:
   LNZnsSSTable* table_;
   SSZoneMetaData* meta_;

@@ -8,8 +8,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 LNZoneIterator::LNZoneIterator(const InternalKeyComparator& icmp,
-                               const std::vector<SSZoneMetaData*>* slist)
-    : icmp_(icmp), slist_(slist), index_(slist->size()) {}
+                               const std::vector<SSZoneMetaData*>* slist,
+                               const uint16_t level)
+    : icmp_(icmp), slist_(slist), index_(slist->size()), level_(level) {}
 
 LNZoneIterator::~LNZoneIterator() = default;
 

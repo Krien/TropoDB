@@ -3,8 +3,8 @@
 #ifndef L0_ZNS_SSTABLE_H
 #define L0_ZNS_SSTABLE_H
 
-#include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_zonemetadata.h"
 #include "rocksdb/iterator.h"
@@ -72,7 +72,7 @@ class ZnsSSTableManagerInternal {
   }
 };
 
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 #endif
 #endif

@@ -55,30 +55,14 @@ class ZnsVersionSet {
     return sum;
   }
 
-  //   bool IsTrivialMove() const;
+  bool NeedsCompaction() const {
+    printf("Score %f \n", current_->compaction_score_);
+    return current_->compaction_score_ >= 1;
+  }
 
-  //   Status MoveUp(ZnsVersionEdit* edit, int original_level) {
-  //     SSZoneMetaData* ss = current_->ss_[0][0];
-  //     Status s = Status::OK();
-  //     edit->RemoveSSDefinition(original_level, ss->number);
-  //     edit->deleted_ss_seq_.push_back(std::make_pair(original_level, *ss));
-  //     SSZoneMetaData new_meta(ss);
-  //     s = znssstable_->CopySSTable(original_level, original_level + 1,
-  //     &new_meta); if (!s.ok()) {
-  //       return s;
-  //     }
-  //     new_meta.number = NewSSNumber();
-  //     edit->AddSSDefinition(original_level + 1, new_meta.number,
-  //     new_meta.lba,
-  //                           new_meta.lba_count, new_meta.numbers,
-  //                           new_meta.smallest, new_meta.largest);
-  //     return s;
-  //   }
-
-  //   Iterator* MakeCompactionIterator();
   Status Compact(ZnsCompaction* c);
 
-  Status RemoveObsoleteL0(ZnsVersionEdit* edit) {
+  Status RemoveObsoleteZones(ZnsVersionEdit* edit) {
     Status s = Status::OK();
     std::vector<std::pair<int, rocksdb::SSZoneMetaData>>& base_ss =
         edit->deleted_ss_seq_;
@@ -87,8 +71,10 @@ class ZnsVersionSet {
     std::vector<std::pair<int, rocksdb::SSZoneMetaData>>::const_iterator
         base_end = base_ss.end();
     for (; base_iter != base_end; ++base_iter) {
+      const int level = (*base_iter).first;
       SSZoneMetaData m = (*base_iter).second;
-      s = znssstable_->InvalidateSSZone(0, &m);
+      printf("cleaning... %u %lu %lu\n", level, m.lba, m.lba_count);
+      s = znssstable_->InvalidateSSZone(level, &m);
       if (!s.ok()) {
         return s;
       }

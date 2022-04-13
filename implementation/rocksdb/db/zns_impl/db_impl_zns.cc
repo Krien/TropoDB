@@ -49,6 +49,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       mem_(nullptr),
       imm_(nullptr),
       versions_(nullptr),
+      background_compaction_scheduled_(false),
       bg_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false) {}
 
@@ -74,21 +75,6 @@ Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
   WriteBatch batch;
   batch.Put(key, value);
   return Write(options, &batch);
-  // old
-  // uint64_t lba_size = (*this->qpair_)->man->info.lba_size;
-  // char* payload =
-  //     (char*)ZnsDevice::z_calloc(*this->qpair_, lba_size, sizeof(char));
-  // strncpy(payload, "SStable", 8);
-  // char* payload_tmp = EncodeVarint32(payload + 7, key.size());
-  // payload_tmp = EncodeVarint32(payload_tmp, value.size());
-  // int w = 0;
-  // memcpy(payload_tmp, key.data(), key.size());
-  // w += key.size();
-  // memcpy(payload_tmp + w, value.data(), value.size());
-  // w += value.size();
-  // int rc = ZnsDevice::z_append(*this->qpair_, 0, payload, lba_size);
-  // return rc == 0 ? Status::OK() : Status::IOError("Error appending to zone");
-  // return Status::OK();
 }
 
 Status DBImplZNS::Put(const WriteOptions& options,
@@ -118,7 +104,8 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   6. get version logic. think for sstable locations? differentiates on action.
   **/
 
-  // This is absolutely necessary for locking logic.
+  // This is absolutely necessary for locking logic because private pointers can
+  // be changed in background work.
   ZNSMemTable* mem = mem_;
   ZNSMemTable* imm = imm_;
   ZnsVersion* current = versions_->current();
@@ -223,20 +210,73 @@ Status DBImplZNS::MakeRoomForWrite() {
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
       mem_->Ref();
-      printf("Scheduling...\n");
-      bg_compaction_scheduled_ = true;
-      env_->Schedule(&DBImplZNS::ScheduleFlush, this, rocksdb::Env::HIGH);
+      MaybeScheduleCompaction();
     }
   }
   return Status::OK();
 }
 
-void DBImplZNS::ScheduleFlush(void* db) {
-  reinterpret_cast<DBImplZNS*>(db)->CompactMemtable();
+void DBImplZNS::MaybeScheduleCompaction() {
+  printf("Scheduling?\n");
+  mutex_.AssertHeld();
+  if (background_compaction_scheduled_) {
+    return;
+  }
+  if (imm_ == nullptr && !versions_->NeedsCompaction()) {
+    return;
+  }
+  background_compaction_scheduled_ = true;
+  env_->Schedule(&DBImplZNS::BGWork, this, rocksdb::Env::HIGH);
+}
+
+void DBImplZNS::BGWork(void* db) {
+  reinterpret_cast<DBImplZNS*>(db)->BackgroundCall();
+}
+
+void DBImplZNS::BackgroundCall() {
+  MutexLock l(&mutex_);
+  assert(background_compaction_scheduled_);
+  {
+    printf("starting background work\n");
+    BackgroundCompaction();
+  }
+  background_compaction_scheduled_ = false;
+  // cascading.
+  MaybeScheduleCompaction();
+  bg_work_finished_signal_.SignalAll();
+}
+
+void DBImplZNS::BackgroundCompaction() {
+  mutex_.AssertHeld();
+  Status s;
+  if (imm_ != nullptr) {
+    printf("  Compact memtable...\n");
+    s = CompactMemtable();
+    return;
+  }
+  {
+    printf("  Compact LN...\n");
+    ZnsVersionEdit edit;
+    ZnsCompaction compaction(versions_);
+    versions_->Compact(&compaction);
+    if (compaction.IsTrivialMove()) {
+      printf("Trivial \n");
+      // s = compaction.MoveUp(&edit, 0);
+    } else {
+      s = compaction.Compact(&edit);
+    }
+    if (!s.ok()) {
+      printf("ERROR during compaction!!!\n");
+      return;
+    }
+    s = versions_->LogAndApply(&edit);
+    s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+    printf("Compacted!!\n");
+  }
 }
 
 Status DBImplZNS::CompactMemtable() {
-  MutexLock l(&mutex_);
+  mutex_.AssertHeld();
   assert(imm_ != nullptr);
   assert(bg_compaction_scheduled_);
   Status s;
@@ -257,24 +297,6 @@ Status DBImplZNS::CompactMemtable() {
     imm_ = nullptr;
     printf("Flushed!!\n");
   }
-  // for now direct manual compaction from L0 to L1.
-  if (versions_->NumLevelZones(0) > 3) {
-    ZnsVersionEdit edit;
-    ZnsCompaction compaction(versions_, 0);
-    versions_->Compact(&compaction);
-    if (compaction.IsTrivialMove()) {
-      printf("Trivial \n");
-      // s = compaction.MoveUp(&edit, 0);
-    } else {
-      s = compaction.Compact(&edit);
-    }
-    s = s.ok() ? versions_->LogAndApply(&edit) : s;
-    s = s.ok() ? versions_->RemoveObsoleteL0(&edit) : s;
-    printf("Compacted!!\n");
-  }
-
-  bg_compaction_scheduled_ = false;
-  bg_work_finished_signal_.SignalAll();
   return s;
 }
 

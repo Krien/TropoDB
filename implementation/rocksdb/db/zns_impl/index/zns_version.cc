@@ -14,7 +14,8 @@ namespace ROCKSDB_NAMESPACE {
 
 ZnsVersion::ZnsVersion() { Clear(); }
 
-ZnsVersion::ZnsVersion(ZnsVersionSet* vset) : vset_(vset) {}
+ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
+    : vset_(vset), compaction_score_(-1), compaction_level_(-1) {}
 
 ZnsVersion::~ZnsVersion() {
   printf("Deleting version structure.\n");

@@ -1,8 +1,9 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable.h"
+
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
+#include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/zns_utils.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -36,6 +37,8 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
   Status Flush() override {
     return table_->WriteSSTable(Slice(buffer_), meta_);
   }
+
+  uint64_t GetSize() override { return (uint64_t)buffer_.size(); }
 
  private:
   L0ZnsSSTable* table_;

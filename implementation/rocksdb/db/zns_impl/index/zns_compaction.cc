@@ -13,8 +13,10 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, int first_level)
-    : first_level_(first_level), vset_(vset) {}
+ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
+  first_level_ = vset->current_->compaction_level_;
+  printf("Compacting from <%d>\n", first_level_);
+}
 
 ZnsCompaction::~ZnsCompaction() {}
 
@@ -29,7 +31,11 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value) {
   SSZoneMetaData* meta = new SSZoneMetaData();
   uint64_t lba_start = DecodeFixed64(file_value.data());
   uint64_t lba_count = DecodeFixed64(file_value.data() + 8);
-  return zns->NewIterator(1, meta);
+  int level = (int)DecodeFixed16(file_value.data() + 16);
+  meta->lba = lba_start;
+  meta->lba_count = lba_count;
+  Iterator* iterator = zns->NewIterator(level, meta);
+  return iterator;
 }
 
 bool ZnsCompaction::IsTrivialMove() const {
@@ -56,9 +62,10 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
   // LN
   int i = first_level_ == 0 ? 1 : 0;
   for (; i <= 1; i++) {
-    iterators[iterator_index++] =
-        new LNIterator(new LNZoneIterator(vset_->icmp_, &targets_[i]),
-                       &GetLNIterator, vset_->znssstable_);
+    iterators[iterator_index++] = new LNIterator(
+        new LNZoneIterator(vset_->icmp_, &targets_[i], first_level_ + i),
+        &GetLNIterator, vset_->znssstable_);
+    printf("Iterators... %d %lu\n", i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }
@@ -66,15 +73,15 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
 Status ZnsCompaction::Compact(ZnsVersionEdit* edit) {
   printf("Starting compaction..\n");
   Status s = Status::OK();
-  // TODO: drastic fix, this is inefficient, out of place and wrong...
   {
-    for (int i = 0; i <= 0; i++) {
+    for (int i = 0; i <= 1; i++) {
       std::vector<SSZoneMetaData*>::const_iterator base_iter =
           targets_[i].begin();
       std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
       for (; base_iter != base_end; ++base_iter) {
-        edit->RemoveSSDefinition(i, (*base_iter)->number);
-        edit->deleted_ss_seq_.push_back(std::make_pair(i, *base_iter));
+        edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
+        edit->deleted_ss_seq_.push_back(
+            std::make_pair(i + first_level_, *base_iter));
       }
     }
   }
@@ -93,13 +100,29 @@ Status ZnsCompaction::Compact(ZnsVersionEdit* edit) {
         const Slice& key = merger->key();
         const Slice& value = merger->value();
         s = builder->Apply(key, value);
+        if (builder->GetSize() / vset_->lba_size_ >= max_lba_count) {
+          s = builder->Finalise();
+          s = builder->Flush();
+          edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba,
+                                meta.lba_count, meta.numbers, meta.smallest,
+                                meta.largest);
+          printf("adding... %u %lu %lu\n", first_level_ + 1, meta.lba,
+                 meta.lba_count);
+          delete builder;
+          builder = vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
+        }
       }
-      s = builder->Finalise();
-      s = builder->Flush();
+      if (builder->GetSize() > 0) {
+        s = builder->Finalise();
+        s = builder->Flush();
+        edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba,
+                              meta.lba_count, meta.numbers, meta.smallest,
+                              meta.largest);
+        printf("adding... %u %lu %lu\n", first_level_ + 1, meta.lba,
+               meta.lba_count);
+        delete builder;
+      }
     }
-    edit->AddSSDefinition(1, meta.number, meta.lba, meta.lba_count,
-                          meta.numbers, meta.smallest, meta.largest);
-    delete builder;
   }
   return s;
 }

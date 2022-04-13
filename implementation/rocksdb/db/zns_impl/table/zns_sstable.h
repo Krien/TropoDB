@@ -24,6 +24,7 @@ class SSTableBuilder {
   virtual Status Apply(const Slice& key, const Slice& value) = 0;
   virtual Status Finalise() = 0;
   virtual Status Flush() = 0;
+  virtual uint64_t GetSize() = 0;
 };
 
 class ZnsSSTable {

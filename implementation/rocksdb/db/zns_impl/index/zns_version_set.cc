@@ -66,6 +66,18 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
     builder.Apply(edit);
     builder.SaveTo(v);
   }
+  int best_level = -1;
+  double best_score = -1;
+  double score;
+  for (int i = 0; i < 7 - 1; i++) {
+    score = v->ss_[i].size() / (3 + i * 3);
+    if (score > best_score) {
+      best_score = score;
+      best_level = i;
+    }
+  }
+  v->compaction_level_ = best_level;
+  v->compaction_score_ = best_score;
   std::string snapshot = "";
   if (!logged_) {
     s = WriteSnapshot(&snapshot);
@@ -95,7 +107,8 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
 }
 
 Status ZnsVersionSet::Compact(ZnsCompaction* c) {
-  c->SetupTargets(current_->ss_[0], current_->ss_[1]);
+  c->SetupTargets(current_->ss_[current_->compaction_level_],
+                  current_->ss_[current_->compaction_level_ + 1]);
   return Status::OK();
 }
 }  // namespace ROCKSDB_NAMESPACE
