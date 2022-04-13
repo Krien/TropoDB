@@ -1,4 +1,4 @@
-#include "db/zns_impl/table/l0_zns_sstable.h"
+#include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
@@ -7,9 +7,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class L0ZnsSSTable::Builder : public SSTableBuilder {
+class LNZnsSSTable::Builder : public SSTableBuilder {
  public:
-  Builder(L0ZnsSSTable* table, SSZoneMetaData* meta)
+  Builder(LNZnsSSTable* table, SSZoneMetaData* meta)
       : table_(table), meta_(meta), buffer_(""), kv_pairs_(0), started_(false) {
     meta_->lba_count = 0;
     buffer_.clear();
@@ -38,26 +38,26 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
   }
 
  private:
-  L0ZnsSSTable* table_;
+  LNZnsSSTable* table_;
   SSZoneMetaData* meta_;
   std::string buffer_;
   uint32_t kv_pairs_;
   bool started_;
 };
 
-L0ZnsSSTable::L0ZnsSSTable(QPairFactory* qpair_factory,
+LNZnsSSTable::LNZnsSSTable(QPairFactory* qpair_factory,
                            const ZnsDevice::DeviceInfo& info,
                            const uint64_t min_zone_head, uint64_t max_zone_head)
     : ZnsSSTable(qpair_factory, info, min_zone_head, max_zone_head),
       pseudo_write_head_(max_zone_head) {}
 
-L0ZnsSSTable::~L0ZnsSSTable() {}
+LNZnsSSTable::~LNZnsSSTable() {}
 
-SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new L0ZnsSSTable::Builder(this, meta);
+SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
+  return new LNZnsSSTable::Builder(this, meta);
 }
 
-bool L0ZnsSSTable::EnoughSpaceAvailable(Slice slice) {
+bool LNZnsSSTable::EnoughSpaceAvailable(Slice slice) {
   uint64_t zcalloc_size = 0;
   ZnsUtils::allign_size(&zcalloc_size, Slice(slice), lba_size_);
   uint64_t blocks_needed = zcalloc_size / lba_size_;
@@ -77,7 +77,7 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(Slice slice) {
   return false;
 }
 
-Status L0ZnsSSTable::SetWriteAddress(Slice slice) {
+Status LNZnsSSTable::SetWriteAddress(Slice slice) {
   uint64_t zcalloc_size = 0;
   ZnsUtils::allign_size(&zcalloc_size, Slice(slice), lba_size_);
   uint64_t blocks_needed = zcalloc_size / lba_size_;
@@ -107,7 +107,7 @@ Status L0ZnsSSTable::SetWriteAddress(Slice slice) {
   return Status::OK();
 }
 
-Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
+Status LNZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!SetWriteAddress(content).ok()) {
     return Status::IOError("Not enough space available for L0");
@@ -134,7 +134,7 @@ Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   return Status::OK();
 }
 
-Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
+Status LNZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   Status s = Status::OK();
   SSTableBuilder* builder = NewBuilder(meta);
   {
@@ -155,7 +155,7 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   return s;
 }
 
-bool L0ZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
+bool LNZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
   if (write_head_ >= write_tail_) {
     // [---------------WTvvvvWH--]
     if (meta->lba < write_tail_ || meta->lba + meta->lba_count > write_head_) {
@@ -172,7 +172,7 @@ bool L0ZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
   return true;
 }
 
-Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
+Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   if (!ValidateReadAddress(meta)) {
     return Status::Corruption("Invalid metadata");
   }
@@ -198,7 +198,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   return Status::OK();
 }
 
-void L0ZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
+void LNZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
   uint32_t keysize, valuesize;
   *src = (char*)GetVarint32Ptr(*src, *src + 5, &keysize);
   *src = (char*)GetVarint32Ptr(*src, *src + 5, &valuesize);
@@ -208,7 +208,7 @@ void L0ZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
   *src += valuesize;
 }
 
-Status L0ZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
+Status LNZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
                          SSZoneMetaData* meta, EntryStatus* status) {
   Slice sstable;
   Status s;
@@ -235,7 +235,7 @@ Status L0ZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
   return Status::OK();
 }
 
-Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
+Status LNZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   if (begin_lba != write_tail_ || begin_lba > end_lba) {
     return Status::InvalidArgument("begin lba is malformed");
   }
@@ -259,7 +259,7 @@ Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   return Status::OK();
 }
 
-Status L0ZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
+Status LNZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
   Status s = ConsumeTail(meta->lba, meta->lba + meta->lba_count);
   if (!s.ok()) {
     return s;
@@ -274,7 +274,7 @@ Status L0ZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
   return s;
 }
 
-Iterator* L0ZnsSSTable::NewIterator(SSZoneMetaData* meta) {
+Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);

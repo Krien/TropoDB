@@ -1044,13 +1044,17 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/zns_memtable.cc
   db/zns_impl/table/zns_sstable.cc
   db/zns_impl/table/l0_zns_sstable.cc
+  db/zns_impl/table/ln_zns_sstable.cc
   db/zns_impl/table/iterators/sstable_iterator.cc
   db/zns_impl/table/iterators/sstable_ln_iterator.cc
   db/zns_impl/table/iterators/merging_iterator.cc
   db/zns_impl/zns_sstable_manager.cc
   db/zns_impl/zns_manifest.cc
-  db/zns_impl/zns_version_builder.cc
-  db/zns_impl/zns_version.cc
+  db/zns_impl/index/zns_version.cc
+  db/zns_impl/index/zns_version_edit.cc
+  db/zns_impl/index/zns_version_set_builder.cc
+  db/zns_impl/index/zns_version_set.cc
+  db/zns_impl/index/zns_compaction.cc
 )
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})

@@ -2,6 +2,9 @@
 
 #include <iostream>
 
+#include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/l0_zns_sstable.h"
+#include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_utils.h"
@@ -18,8 +21,10 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
     : qpair_factory_(qpair_factory) {
   assert(qpair_factory_ != nullptr);
   qpair_factory_->Ref();
-  for (int level = 0; level < 7; level++) {
-    sstable_wal_level_[level] = new L0ZnsSSTable(
+  sstable_wal_level_[0] = new L0ZnsSSTable(
+    qpair_factory_, info, ranges[0].first, ranges[0].second);
+  for (int level = 1; level < 7; level++) {
+    sstable_wal_level_[level] = new LNZnsSSTable(
         qpair_factory_, info, ranges[level].first, ranges[level].second);
   }
 }
@@ -35,7 +40,6 @@ ZNSSSTableManager::~ZNSSSTableManager() {
 
 Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
                                         SSZoneMetaData* meta) {
-  // printf("Write to L0\n");
   return GetL0SSTableLog()->FlushMemTable(mem, meta);
 }
 

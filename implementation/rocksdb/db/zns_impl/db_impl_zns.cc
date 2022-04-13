@@ -17,9 +17,11 @@
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/index/zns_compaction.h"
+#include "db/zns_impl/index/zns_version.h"
+#include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/zns_manifest.h"
 #include "db/zns_impl/zns_sstable_manager.h"
-#include "db/zns_impl/zns_version.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -246,8 +248,8 @@ Status DBImplZNS::CompactMemtable() {
     s = FlushL0SSTables(&meta);
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
-      edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count, meta.numbers,
-                           meta.smallest, meta.largest);
+      edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count,
+                           meta.numbers, meta.smallest, meta.largest);
       s = versions_->LogAndApply(&edit);
       s = wal_->Reset();
     }
@@ -258,11 +260,13 @@ Status DBImplZNS::CompactMemtable() {
   // for now direct manual compaction from L0 to L1.
   if (versions_->NumLevelZones(0) > 3) {
     ZnsVersionEdit edit;
-    if (versions_->IsTrivialMove()) {
+    ZnsCompaction compaction(versions_, 0);
+    versions_->Compact(&compaction);
+    if (compaction.IsTrivialMove()) {
       printf("Trivial \n");
-      s = versions_->MoveUp(&edit, 0);
+      // s = compaction.MoveUp(&edit, 0);
     } else {
-      s = versions_->Compact(&edit);
+      s = compaction.Compact(&edit);
     }
     s = s.ok() ? versions_->LogAndApply(&edit) : s;
     s = s.ok() ? versions_->RemoveObsoleteL0(&edit) : s;
