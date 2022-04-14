@@ -16,6 +16,9 @@ namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
   printf("Compacting from <%d>\n", first_level_);
+  for (int i = 0; i < 7; i++) {
+    level_ptrs_[i] = 0;
+  }
 }
 
 ZnsCompaction::~ZnsCompaction() {}
@@ -31,7 +34,7 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value) {
   SSZoneMetaData* meta = new SSZoneMetaData();
   uint64_t lba_start = DecodeFixed64(file_value.data());
   uint64_t lba_count = DecodeFixed64(file_value.data() + 8);
-  int level = (int)DecodeFixed16(file_value.data() + 16);
+  size_t level = (size_t)DecodeFixed16(file_value.data() + 16);
   meta->lba = lba_start;
   meta->lba_count = lba_count;
   Iterator* iterator = zns->NewIterator(level, meta);
@@ -41,6 +44,21 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value) {
 bool ZnsCompaction::IsTrivialMove() const {
   // add grandparent stuff level + 2
   return targets_[1].size() == 0 && targets_[0].size() == 1;
+}
+
+Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
+  Status s = Status::OK();
+  SSZoneMetaData new_meta(targets_[0][0]);
+  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1,
+                                      &new_meta);
+  if (!s.ok()) {
+    return s;
+  }
+  new_meta.number = vset_->NewSSNumber();
+  edit->AddSSDefinition(first_level_ + 1, new_meta.number, new_meta.lba,
+                        new_meta.lba_count, new_meta.numbers, new_meta.smallest,
+                        new_meta.largest);
+  return s;
 }
 
 Iterator* ZnsCompaction::MakeCompactionIterator() {
@@ -70,21 +88,60 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }
 
-Status ZnsCompaction::Compact(ZnsVersionEdit* edit) {
-  printf("Starting compaction..\n");
-  Status s = Status::OK();
-  {
-    for (int i = 0; i <= 1; i++) {
-      std::vector<SSZoneMetaData*>::const_iterator base_iter =
-          targets_[i].begin();
-      std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
-      for (; base_iter != base_end; ++base_iter) {
-        edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
-        edit->deleted_ss_seq_.push_back(
-            std::make_pair(i + first_level_, *base_iter));
-      }
+void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
+  for (int i = 0; i <= 1; i++) {
+    std::vector<SSZoneMetaData*>::const_iterator base_iter =
+        targets_[i].begin();
+    std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
+    for (; base_iter != base_end; ++base_iter) {
+      edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
+      edit->deleted_ss_seq_.push_back(
+          std::make_pair(i + first_level_, *base_iter));
     }
   }
+}
+
+Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
+                                   ZnsVersionEdit* edit, SSZoneMetaData* meta) {
+  Status s = Status::OK();
+  SSTableBuilder* current_builder = *builder;
+  s = current_builder->Finalise();
+  s = current_builder->Flush();
+  printf("adding... %u %lu %lu\n", first_level_ + 1, meta->lba,
+         meta->lba_count);
+  edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
+                        meta->lba_count, meta->numbers, meta->smallest,
+                        meta->largest);
+  delete current_builder;
+  current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
+
+  *builder = current_builder;
+  return s;
+}
+
+bool ZnsCompaction::IsBaseLevelForKey(const Slice& user_key) {
+  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  for (int lvl = first_level_ + 1; lvl < 7; lvl++) {
+    const std::vector<SSZoneMetaData*>& ss = vset_->current_->ss_[lvl];
+    while (level_ptrs_[lvl] < ss.size()) {
+      SSZoneMetaData* m = ss[level_ptrs_[lvl]];
+      if (user_cmp->Compare(user_key, m->largest.user_key()) <= 0) {
+        // We've advanced far enough
+        if (user_cmp->Compare(user_key, m->smallest.user_key()) >= 0) {
+          // Key falls in this file's range, so definitely not base level
+          return false;
+        }
+        break;
+      }
+      level_ptrs_[lvl]++;
+    }
+  }
+  return true;
+}
+
+Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
+  printf("Starting compaction..\n");
+  Status s = Status::OK();
   {
     SSZoneMetaData meta;
     meta.number = vset_->NewSSNumber();
@@ -96,53 +153,55 @@ Status ZnsCompaction::Compact(ZnsVersionEdit* edit) {
       if (!merger->Valid()) {
         return Status::Corruption("No valid merging iterator");
       }
+      ParsedInternalKey ikey;
+      std::string current_user_key;
+      bool has_current_user_key = false;
+      SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
+      SequenceNumber min_seq = vset_->LastSequence();
+      const Comparator* ucmp = vset_->icmp_.user_comparator();
       for (; merger->Valid(); merger->Next()) {
         const Slice& key = merger->key();
         const Slice& value = merger->value();
-        s = builder->Apply(key, value);
-        if (builder->GetSize() / vset_->lba_size_ >= max_lba_count) {
-          s = builder->Finalise();
-          s = builder->Flush();
-          edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba,
-                                meta.lba_count, meta.numbers, meta.smallest,
-                                meta.largest);
-          printf("adding... %u %lu %lu\n", first_level_ + 1, meta.lba,
-                 meta.lba_count);
-          delete builder;
-          builder = vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
+        // verify
+        bool drop = false;
+        if (!ParseInternalKey(key, &ikey, false).ok()) {
+          // Do not hide error keys
+          current_user_key.clear();
+          has_current_user_key = false;
+          last_sequence_for_key = kMaxSequenceNumber;
+        } else {
+          if (!has_current_user_key ||
+              ucmp->Compare(ikey.user_key, Slice(current_user_key)) != 0) {
+            // first occurrence of this user key
+            current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());
+            has_current_user_key = true;
+            last_sequence_for_key = kMaxSequenceNumber;
+          }
+          if (last_sequence_for_key <= min_seq) {
+            drop = true;
+          } else if (ikey.type == kTypeDeletion && ikey.sequence <= min_seq &&
+                     IsBaseLevelForKey(ikey.user_key)) {
+            drop = true;
+          }
+        }
+        last_sequence_for_key = ikey.sequence;
+        // add
+        if (drop) {
+        } else {
+          s = builder->Apply(key, value);
+          if (builder->GetSize() / vset_->lba_size_ >= max_lba_count) {
+            s = FlushSSTable(&builder, edit, &meta);
+          }
         }
       }
       if (builder->GetSize() > 0) {
-        s = builder->Finalise();
-        s = builder->Flush();
-        edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba,
-                              meta.lba_count, meta.numbers, meta.smallest,
-                              meta.largest);
-        printf("adding... %u %lu %lu\n", first_level_ + 1, meta.lba,
-               meta.lba_count);
-        delete builder;
+        s = FlushSSTable(&builder, edit, &meta);
       }
+    }
+    if (builder != nullptr) {
+      delete builder;
     }
   }
   return s;
 }
-
-Status ZnsCompaction::MoveUp(ZnsVersionEdit* edit, SSZoneMetaData* ss,
-                             int original_level) {
-  Status s = Status::OK();
-  edit->RemoveSSDefinition(original_level, ss->number);
-  edit->deleted_ss_seq_.push_back(std::make_pair(original_level, *ss));
-  SSZoneMetaData new_meta(ss);
-  s = vset_->znssstable_->CopySSTable(original_level, original_level + 1,
-                                      &new_meta);
-  if (!s.ok()) {
-    return s;
-  }
-  new_meta.number = vset_->NewSSNumber();
-  edit->AddSSDefinition(original_level + 1, new_meta.number, new_meta.lba,
-                        new_meta.lba_count, new_meta.numbers, new_meta.smallest,
-                        new_meta.largest);
-  return s;
-}
-
 }  // namespace ROCKSDB_NAMESPACE

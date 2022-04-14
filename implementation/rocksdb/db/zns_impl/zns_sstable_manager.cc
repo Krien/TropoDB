@@ -2,10 +2,10 @@
 
 #include <iostream>
 
-#include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
-#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/zns_memtable.h"
 #include "db/zns_impl/zns_utils.h"
 #include "db/zns_impl/zns_zonemetadata.h"
@@ -21,8 +21,8 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
     : qpair_factory_(qpair_factory) {
   assert(qpair_factory_ != nullptr);
   qpair_factory_->Ref();
-  sstable_wal_level_[0] = new L0ZnsSSTable(
-    qpair_factory_, info, ranges[0].first, ranges[0].second);
+  sstable_wal_level_[0] =
+      new L0ZnsSSTable(qpair_factory_, info, ranges[0].first, ranges[0].second);
   for (int level = 1; level < 7; level++) {
     sstable_wal_level_[level] = new LNZnsSSTable(
         qpair_factory_, info, ranges[level].first, ranges[level].second);
@@ -71,11 +71,11 @@ Status ZNSSSTableManager::InvalidateSSZone(size_t level, SSZoneMetaData* meta) {
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::Get(size_t level, const Slice& key_ptr,
-                              std::string* value_ptr, SSZoneMetaData* meta,
-                              EntryStatus* status) {
+Status ZNSSSTableManager::Get(size_t level, const InternalKeyComparator& icmp,
+                              const Slice& key_ptr, std::string* value_ptr,
+                              SSZoneMetaData* meta, EntryStatus* status) {
   assert(level < 7);
-  return sstable_wal_level_[level]->Get(key_ptr, value_ptr, meta, status);
+  return sstable_wal_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
 }
 
 Status ZNSSSTableManager::ReadSSTable(size_t level, Slice* sstable,

@@ -23,7 +23,7 @@ ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
       lba_size_(lba_size),
       ss_number_(0),
       logged_(false) {
-  AppendVersion(new ZnsVersion());
+  AppendVersion(new ZnsVersion(this));
 };
 
 ZnsVersionSet::~ZnsVersionSet() { current_->Unref(); }

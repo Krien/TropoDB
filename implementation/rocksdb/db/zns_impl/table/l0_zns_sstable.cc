@@ -19,11 +19,11 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
 
   Status Apply(const Slice& key, const Slice& value) override {
     if (!started_) {
-      meta_->smallest = InternalKey(key, kMaxSequenceNumber, kTypeValue);
+      meta_->smallest.DecodeFrom(key);
       started_ = true;
     }
     table_->PutKVPair(&buffer_, key, value);
-    meta_->largest = InternalKey(key, kMaxSequenceNumber, kTypeValue);
+    meta_->largest.DecodeFrom(key);
     ++kv_pairs_;
     return Status::OK();
   }
@@ -147,7 +147,7 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
       return Status::Corruption("No valid iterator in the memtable");
     }
     for (; iter->Valid(); iter->Next()) {
-      const Slice& key = iter->user_key();
+      const Slice& key = iter->key();
       const Slice& value = iter->value();
       s = builder->Apply(key, value);
     }
@@ -211,7 +211,8 @@ void L0ZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
   *src += valuesize;
 }
 
-Status L0ZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
+Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
+                         const Slice& key_ptr, std::string* value_ptr,
                          SSZoneMetaData* meta, EntryStatus* status) {
   Slice sstable;
   Status s;
@@ -225,9 +226,11 @@ Status L0ZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
   uint32_t count, counter;
   counter = 0;
   walker = (char*)GetVarint32Ptr(walker, walker + 5, &count);
+  const Comparator* user_comparator = icmp.user_comparator();
+  Slice key_ptr_stripped = ExtractUserKey(key_ptr);
   while (counter < count) {
     ParseNext(&walker, &key, &value);
-    if (key_ptr.compare(key) == 0) {
+    if (user_comparator->Compare(ExtractUserKey(key), key_ptr_stripped) == 0) {
       *status = value.size() > 0 ? EntryStatus::found : EntryStatus::deleted;
       *value_ptr = std::string(value.data(), value.size());
       return Status::OK();

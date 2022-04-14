@@ -18,7 +18,8 @@ class ZNSMemTable : public RefCounter {
   ZNSMemTable(const DBOptions& options, const InternalKeyComparator& ikc);
   ~ZNSMemTable();
   Status Write(const WriteOptions& options, WriteBatch* updates);
-  Status Get(const ReadOptions& options, const Slice& key, std::string* value);
+  bool Get(const ReadOptions& options, const LookupKey& key, std::string* value,
+           Status* s);
   bool ShouldScheduleFlush();
   InternalIterator* NewIterator();
   // not thread safe, I think.

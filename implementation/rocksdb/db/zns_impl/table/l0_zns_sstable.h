@@ -21,7 +21,8 @@ class L0ZnsSSTable : public ZnsSSTable {
   bool EnoughSpaceAvailable(Slice slice) override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
   Iterator* NewIterator(SSZoneMetaData* meta) override;
-  Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta,
+  Status Get(const InternalKeyComparator& icmp, const Slice& key,
+             std::string* value, SSZoneMetaData* meta,
              EntryStatus* entry) override;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
   Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta) override;

@@ -7,6 +7,7 @@
 #define ZNS_VERSION_H
 
 #include "db/dbformat.h"
+#include "db/lookup_key.h"
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/zns_manifest.h"
@@ -40,7 +41,8 @@ enum class VersionTag : uint32_t {
 class ZnsVersion : public RefCounter {
  public:
   void Clear();
-  Status Get(const ReadOptions& options, const Slice& key, std::string* value);
+  Status Get(const ReadOptions& options, const LookupKey& key,
+             std::string* value);
 
  private:
   friend class ZnsVersionSet;

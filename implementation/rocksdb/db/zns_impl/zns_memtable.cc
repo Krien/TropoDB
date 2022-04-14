@@ -32,20 +32,14 @@ Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
   return s;
 }
 
-Status ZNSMemTable::Get(const ReadOptions& options, const Slice& key,
-                        std::string* value) {
+bool ZNSMemTable::Get(const ReadOptions& options, const LookupKey& lkey,
+                      std::string* value, Status* s) {
   ReadOptions roptions;
   SequenceNumber max_covering_tombstone_seq = 0;
-  LookupKey lkey(key, kMaxSequenceNumber);
   MergeContext merge_context;
-  Status s;
-  bool res = this->mem_->GetMemTable()->Get(
-      lkey, value, /*timestamp=*/nullptr, &s, &merge_context,
-      &max_covering_tombstone_seq, roptions);
-  if (s.ok() && res) {
-    return s;
-  }
-  return Status::NotFound("Key not found in memtable");
+  return this->mem_->GetMemTable()->Get(lkey, value, /*timestamp=*/nullptr, s,
+                                        &merge_context,
+                                        &max_covering_tombstone_seq, roptions);
 }
 
 bool ZNSMemTable::ShouldScheduleFlush() {

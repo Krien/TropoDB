@@ -33,7 +33,8 @@ class ZnsSSTable {
              const uint64_t min_zone_head, uint64_t max_zone_head);
   virtual ~ZnsSSTable();
   virtual Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta) = 0;
-  virtual Status Get(const Slice& key, std::string* value, SSZoneMetaData* meta,
+  virtual Status Get(const InternalKeyComparator& icmp, const Slice& key,
+                     std::string* value, SSZoneMetaData* meta,
                      EntryStatus* entry) = 0;
   virtual bool EnoughSpaceAvailable(Slice slice) = 0;
   virtual Status InvalidateSSZone(SSZoneMetaData* meta) = 0;

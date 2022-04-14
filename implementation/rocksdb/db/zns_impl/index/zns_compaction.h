@@ -23,15 +23,19 @@ class ZnsCompaction {
   ZnsCompaction(ZnsVersionSet* vset);
   ~ZnsCompaction();
 
-  bool IsTrivialMove() const;
-  Iterator* MakeCompactionIterator();
-  Status Compact(ZnsVersionEdit* edit);
-  Status MoveUp(ZnsVersionEdit* edit, SSZoneMetaData* ss, int level);
   void SetupTargets(const std::vector<SSZoneMetaData*>& t1,
                     const std::vector<SSZoneMetaData*>& t2);
+  void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
+  bool IsTrivialMove() const;
+  Status DoTrivialMove(ZnsVersionEdit* edit);
+  Iterator* MakeCompactionIterator();
+  Status DoCompaction(ZnsVersionEdit* edit);
 
  private:
   static Iterator* GetLNIterator(void* arg, const Slice& file_value);
+  Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
+                      SSZoneMetaData* meta);
+  bool IsBaseLevelForKey(const Slice& user_key);
 
   int first_level_;
   // arbitrary???
@@ -40,6 +44,7 @@ class ZnsCompaction {
   ZnsVersion* version_;
   ZnsVersionEdit edit_;
   std::vector<SSZoneMetaData*> targets_[2];
+  size_t level_ptrs_[7];
 };
 }  // namespace ROCKSDB_NAMESPACE
 

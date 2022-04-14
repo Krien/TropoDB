@@ -1,8 +1,9 @@
 #include "db/zns_impl/table/ln_zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable.h"
+
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
+#include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/zns_utils.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -18,11 +19,11 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
 
   Status Apply(const Slice& key, const Slice& value) override {
     if (!started_) {
-      meta_->smallest = InternalKey(key, kMaxSequenceNumber, kTypeValue);
+      meta_->smallest.DecodeFrom(key);
       started_ = true;
     }
     table_->PutKVPair(&buffer_, key, value);
-    meta_->largest = InternalKey(key, kMaxSequenceNumber, kTypeValue);
+    meta_->largest.DecodeFrom(key);
     ++kv_pairs_;
     return Status::OK();
   }
@@ -37,9 +38,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
     return table_->WriteSSTable(Slice(buffer_), meta_);
   }
 
-  uint64_t GetSize() override {
-    return (uint64_t)buffer_.size();
-  }
+  uint64_t GetSize() override { return (uint64_t)buffer_.size(); }
 
  private:
   LNZnsSSTable* table_;
@@ -148,7 +147,7 @@ Status LNZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
       return Status::Corruption("No valid iterator in the memtable");
     }
     for (; iter->Valid(); iter->Next()) {
-      const Slice& key = iter->user_key();
+      const Slice& key = iter->key();
       const Slice& value = iter->value();
       s = builder->Apply(key, value);
     }
@@ -212,7 +211,8 @@ void LNZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
   *src += valuesize;
 }
 
-Status LNZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
+Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
+                         const Slice& key_ptr, std::string* value_ptr,
                          SSZoneMetaData* meta, EntryStatus* status) {
   Slice sstable;
   Status s;
@@ -226,9 +226,11 @@ Status LNZnsSSTable::Get(const Slice& key_ptr, std::string* value_ptr,
   uint32_t count, counter;
   counter = 0;
   walker = (char*)GetVarint32Ptr(walker, walker + 5, &count);
+  const Comparator* user_comparator = icmp.user_comparator();
+  Slice key_ptr_stripped = ExtractUserKey(key_ptr);
   while (counter < count) {
     ParseNext(&walker, &key, &value);
-    if (key_ptr.compare(key) == 0) {
+    if (user_comparator->Compare(ExtractUserKey(key), key_ptr_stripped) == 0) {
       *status = value.size() > 0 ? EntryStatus::found : EntryStatus::deleted;
       *value_ptr = std::string(value.data(), value.size());
       return Status::OK();

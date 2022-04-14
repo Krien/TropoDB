@@ -112,15 +112,15 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   mem->Ref();
   if (imm != nullptr) imm->Ref();
   current->Ref();
-
+  LookupKey lkey(key, versions_->LastSequence());
   {
     mutex_.Unlock();
-    if (mem->Get(options, key, value).ok()) {
-    } else if (imm != nullptr && imm->Get(options, key, value).ok()) {
+    if (mem->Get(options, lkey, value, &s)) {
+    } else if (imm != nullptr && imm->Get(options, lkey, value, &s)) {
       printf("read from immutable!\n");
       // Done
     } else {
-      s = current->Get(options, key, value);
+      s = current->Get(options, lkey, value);
     }
     mutex_.Lock();
   }
@@ -140,13 +140,16 @@ Status DBImplZNS::Get(const ReadOptions& options,
 }
 
 Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
-  return Status::OK();
+  WriteBatch batch;
+  batch.Delete(key);
+  return Write(opt, &batch);
 }
 
 Status DBImplZNS::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
+  printf("Deleting\n");
   return Write(options, &batch);
 }
 Status DBImplZNS::Delete(const WriteOptions& options,
@@ -168,7 +171,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
 
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
-    WriteBatchInternal::SetSequence(updates, last_sequence);
+    WriteBatchInternal::SetSequence(updates, last_sequence+1);
     last_sequence += WriteBatchInternal::Count(updates);
     {
       // write to log (needs to be locked because log can be deleted)
@@ -254,25 +257,28 @@ void DBImplZNS::BackgroundCompaction() {
     s = CompactMemtable();
     return;
   }
+  // Compaction itself does not require a lock. only once the changes become visible.
+  mutex_.Unlock();
+  ZnsVersionEdit edit;
   {
     printf("  Compact LN...\n");
-    ZnsVersionEdit edit;
     ZnsCompaction compaction(versions_);
     versions_->Compact(&compaction);
+    compaction.MarkStaleTargetsReusable(&edit);
     if (compaction.IsTrivialMove()) {
-      printf("Trivial \n");
-      // s = compaction.MoveUp(&edit, 0);
+      s = compaction.DoTrivialMove(&edit);
     } else {
-      s = compaction.Compact(&edit);
+      s = compaction.DoCompaction(&edit);
     }
-    if (!s.ok()) {
-      printf("ERROR during compaction!!!\n");
-      return;
-    }
-    s = versions_->LogAndApply(&edit);
-    s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
-    printf("Compacted!!\n");
   }
+  mutex_.Lock();
+  if (!s.ok()) {
+    printf("ERROR during compaction!!!\n");
+    return;
+  }
+  s = versions_->LogAndApply(&edit);
+  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+  printf("Compacted!!\n");
 }
 
 Status DBImplZNS::CompactMemtable() {

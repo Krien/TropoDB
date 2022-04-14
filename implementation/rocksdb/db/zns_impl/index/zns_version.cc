@@ -34,11 +34,13 @@ ZnsVersion::~ZnsVersion() {
 
 void ZnsVersion::Clear() {}
 
-Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
+Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
                        std::string* value) {
   Status s;
   const Comparator* ucmp = vset_->icmp_.user_comparator();
   ZNSSSTableManager* znssstable = vset_->znssstable_;
+  Slice key = lkey.user_key();
+  Slice internal_key = lkey.internal_key();
   znssstable->Ref();
 
   // L0 (no sorting of L0 yet, because it is an append-only log. Earlier zones
@@ -58,7 +60,8 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
       return a->number > b->number;
     });
     for (uint32_t i = 0; i < tmp.size(); i++) {
-      s = znssstable->Get(0, key, value, tmp[i], &status);
+      s = znssstable->Get(0, vset_->icmp_, internal_key, value, tmp[i],
+                          &status);
       if (s.ok()) {
         znssstable->Unref();
         if (status != EntryStatus::found) {
@@ -73,16 +76,16 @@ Status ZnsVersion::Get(const ReadOptions& options, const Slice& key,
   for (int level = 1; level < 7; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
-    // TODO: binary search
     for (size_t i = ss_[level].size(); i != 0; --i) {
-      uint32_t index = FindSS(vset_->icmp_, ss_[level], key);
+      uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);
       if (index >= num_ss) {
         continue;
       }
-      SSZoneMetaData* z = ss_[level][index];
-      if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
-          ucmp->Compare(key, z->largest.user_key()) <= 0) {
-        s = znssstable->Get(level, key, value, z, &status);
+      SSZoneMetaData* m = ss_[level][index];
+      if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
+          ucmp->Compare(key, m->largest.user_key()) <= 0) {
+        s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
+                            &status);
         if (s.ok()) {
           znssstable->Unref();
           if (status != EntryStatus::found) {
