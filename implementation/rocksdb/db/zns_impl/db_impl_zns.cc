@@ -49,7 +49,6 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       mem_(nullptr),
       imm_(nullptr),
       versions_(nullptr),
-      background_compaction_scheduled_(false),
       bg_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false) {}
 
@@ -90,7 +89,6 @@ Status DBImplZNS::Put(const WriteOptions& options,
 
 Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
                       std::string* value) {
-  assert(this->mem_ != nullptr);
   MutexLock l(&mutex_);
   Status s;
   /* GetImpl
@@ -149,7 +147,6 @@ Status DBImplZNS::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
-  printf("Deleting\n");
   return Write(options, &batch);
 }
 Status DBImplZNS::Delete(const WriteOptions& options,
@@ -171,12 +168,12 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
 
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
-    WriteBatchInternal::SetSequence(updates, last_sequence+1);
+    WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
     {
       // write to log (needs to be locked because log can be deleted)
       Slice log_entry = WriteBatchInternal::Contents(updates);
-      wal_[0].Append(log_entry);
+      wal_->Append(log_entry);
       // write to memtable
       mutex_.Unlock();
       assert(this->mem_ != nullptr);
@@ -209,6 +206,9 @@ Status DBImplZNS::MakeRoomForWrite() {
       printf("waiting for compaction\n");
       bg_work_finished_signal_.Wait();
     } else {
+      // create new WAL
+      s = wal_->Reset();
+      printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
@@ -222,13 +222,13 @@ Status DBImplZNS::MakeRoomForWrite() {
 void DBImplZNS::MaybeScheduleCompaction() {
   printf("Scheduling?\n");
   mutex_.AssertHeld();
-  if (background_compaction_scheduled_) {
+  if (bg_compaction_scheduled_) {
     return;
   }
   if (imm_ == nullptr && !versions_->NeedsCompaction()) {
     return;
   }
-  background_compaction_scheduled_ = true;
+  bg_compaction_scheduled_ = true;
   env_->Schedule(&DBImplZNS::BGWork, this, rocksdb::Env::HIGH);
 }
 
@@ -238,12 +238,12 @@ void DBImplZNS::BGWork(void* db) {
 
 void DBImplZNS::BackgroundCall() {
   MutexLock l(&mutex_);
-  assert(background_compaction_scheduled_);
+  assert(bg_compaction_scheduled_);
   {
     printf("starting background work\n");
     BackgroundCompaction();
   }
-  background_compaction_scheduled_ = false;
+  bg_compaction_scheduled_ = false;
   // cascading.
   MaybeScheduleCompaction();
   bg_work_finished_signal_.SignalAll();
@@ -257,7 +257,8 @@ void DBImplZNS::BackgroundCompaction() {
     s = CompactMemtable();
     return;
   }
-  // Compaction itself does not require a lock. only once the changes become visible.
+  // Compaction itself does not require a lock. only once the changes become
+  // visible.
   mutex_.Unlock();
   ZnsVersionEdit edit;
   {
@@ -276,7 +277,7 @@ void DBImplZNS::BackgroundCompaction() {
     printf("ERROR during compaction!!!\n");
     return;
   }
-  s = versions_->LogAndApply(&edit);
+  s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
   printf("Compacted!!\n");
 }
@@ -297,7 +298,8 @@ Status DBImplZNS::CompactMemtable() {
       edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count,
                            meta.numbers, meta.smallest, meta.largest);
       s = versions_->LogAndApply(&edit);
-      s = wal_->Reset();
+    } else {
+      printf("Fatal error \n");
     }
     imm_->Unref();
     imm_ = nullptr;
@@ -324,37 +326,37 @@ bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
   return false;
 }
 
-Status DBImplZNS::InitDB(const DBOptions& options) {
-  ZnsDevice::DeviceManager** device_manager = new ZnsDevice::DeviceManager*;
-  int rc = ZnsDevice::z_init(device_manager);
-  this->device_manager_ = device_manager;
+Status DBImplZNS::OpenDevice() {
+  device_manager_ = new ZnsDevice::DeviceManager*;
+  int rc = 0;
+  if (!ZnsDevice::device_set) {
+    rc = ZnsDevice::z_init(device_manager_, false);
+    ZnsDevice::device_set = true;
+  } else {
+    rc = ZnsDevice::z_init(device_manager_, true);
+  }
   if (rc != 0) {
     return Status::IOError("Error opening SPDK");
   }
-  rc = ZnsDevice::z_open(*device_manager, this->name_.c_str());
+  rc = ZnsDevice::z_open(*device_manager_, this->name_.c_str());
   if (rc != 0) {
     return Status::IOError("Error opening ZNS device");
   }
-  this->qpair_ = (ZnsDevice::QPair**)calloc(1, sizeof(ZnsDevice::QPair*));
-  rc = ZnsDevice::z_create_qpair(*device_manager, this->qpair_);
-  if (rc != 0) {
-    return Status::IOError("Error creating QPair");
-  }
-  rc = ZnsDevice::z_reset(*this->qpair_, 0, true);
-
   qpair_factory_ = new QPairFactory(*device_manager_);
   qpair_factory_->Ref();
+  return Status::OK();
+}
 
-  manifest_ = new ZnsManifest(qpair_factory_, (*device_manager)->info, 0,
-                              (*device_manager)->info.zone_size * 2);
+Status DBImplZNS::InitDB(const DBOptions& options) {
+  assert(device_manager_ != nullptr);
+  ZnsDevice::DeviceInfo device_info = (*device_manager_)->info;
+  manifest_ = new ZnsManifest(qpair_factory_, device_info, 0,
+                              device_info.zone_size * 2);
   manifest_->Ref();
-
-  wal_ = new ZNSWAL(qpair_factory_, (*device_manager)->info,
-                    (*device_manager)->info.zone_size * 2,
-                    (*device_manager)->info.zone_size * 5);
+  wal_ = new ZNSWAL(qpair_factory_, device_info, device_info.zone_size * 2,
+                    device_info.zone_size * 5);
   wal_->Ref();
-
-  uint64_t zsize = (*device_manager)->info.zone_size;
+  uint64_t zsize = device_info.zone_size;
   std::pair<uint64_t, uint64_t> ranges[7] = {
       std::make_pair(zsize * 5, zsize * 10),
       std::make_pair(zsize * 10, zsize * 15),
@@ -363,20 +365,31 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
       std::make_pair(zsize * 25, zsize * 30),
       std::make_pair(zsize * 30, zsize * 35),
       std::make_pair(zsize * 35, zsize * 40)};
-  ss_manager_ =
-      new ZNSSSTableManager(qpair_factory_, (*device_manager)->info, ranges);
+  ss_manager_ = new ZNSSSTableManager(qpair_factory_, device_info, ranges);
   ss_manager_->Ref();
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
-                                (*device_manager)->info.lba_size);
+                                device_info.lba_size);
+  return Status::OK();
+}
 
+Status DBImplZNS::ResetDevice() {
+  qpair_factory_->Ref();
+  ZnsDevice::QPair** qpair =
+      (ZnsDevice::QPair**)calloc(1, sizeof(ZnsDevice::QPair*));
+  qpair_factory_->register_qpair(qpair);
+  int rc = ZnsDevice::z_reset(*qpair, 0, true);
+  qpair_factory_->unregister_qpair(*qpair);
+  qpair_factory_->Unref();
+  delete qpair;
   return rc == 0 ? Status::OK() : Status::IOError("Error resetting device");
 }
 
 DBImplZNS::~DBImplZNS() {
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
+    printf("busy, wait before closing\n");
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
@@ -408,9 +421,12 @@ Status DBImplZNS::Open(
   handles->clear();
 
   DBImplZNS* impl = new DBImplZNS(db_options, name);
+  s = impl->OpenDevice();
+  if (!s.ok()) return s;
   s = impl->InitDB(db_options);
+  if (!s.ok()) return s;
   // setup WAL (WAL DIR)
-
+  impl->Recover();
   // recover?
   //  !readonly: set directories, lockfile and check if current manifest exists
   //  create_if_missing (NewDB). verify options and system compability readonly
@@ -420,6 +436,7 @@ Status DBImplZNS::Open(
   // recover from WAL
   // mutex
   // s = impl->Recover(column_families, false, false, false, &recovered_seq);
+
   if (s.ok()) {
     // do something
     // new wall with higher version? max_write_buffer_size
@@ -436,6 +453,20 @@ Status DBImplZNS::Open(
   // get live files metadata
 
   // reserve disk bufferspace
+  return s;
+}
+
+Status DBImplZNS::Recover() {
+  MutexLock l(&mutex_);
+  Status s;
+  // WAL stuff
+  s = wal_[0].Recover();
+  SequenceNumber seqa;
+  s = wal_[0].Replay(mem_, &seqa);
+  versions_->SetLastSequence(seqa);
+
+  // manifest stuff
+  s = versions_->Recover();
   return s;
 }
 
@@ -686,7 +717,17 @@ Status DBImplZNS::GetPropertiesOfTablesInRange(
 Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   // Destroy "all" files from the DB. Since we do not use multitenancy, we might
   // as well reset the device.
-  return Status::OK();
+  Status s;
+  DBImplZNS* impl = new DBImplZNS(options, dbname);
+  s = impl->OpenDevice();
+  if (!s.ok()) return s;
+  s = impl->InitDB(options);
+  if (!s.ok()) return s;
+  s = impl->ResetDevice();
+  if (!s.ok()) return s;
+  printf("Reset device\n");
+  delete impl;
+  return s;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

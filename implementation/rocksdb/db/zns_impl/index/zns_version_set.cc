@@ -78,27 +78,7 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   }
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
-  std::string snapshot = "";
-  if (!logged_) {
-    s = WriteSnapshot(&snapshot);
-    if (s.ok()) {
-      logged_ = true;
-    }
-  }
-
-  // MANIFEST STUFF...
-  uint64_t current_lba;
-  s = manifest_->GetCurrentWriteHead(&current_lba);
-  if (!s.ok()) {
-    return s;
-  }
-  edit->SetComparatorName(icmp_.user_comparator()->Name());
-  std::string record;
-  edit->EncodeTo(&record);
-  s = manifest_->NewManifest(snapshot + record);
-  if (s.ok()) {
-    s = manifest_->SetCurrent(current_lba);
-  }
+  s = CommitVersion(edit, znssstable_);
   // Installing?
   if (s.ok()) {
     AppendVersion(v);
@@ -106,9 +86,134 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   return s;
 }
 
+Status ZnsVersionSet::CommitVersion(ZnsVersionEdit* edit,
+                                    ZNSSSTableManager* man) {
+  Status s;
+  // Setup version (for now CoW)
+  std::string version_body;
+  s = WriteSnapshot(&version_body);
+  edit->EncodeTo(&version_body);
+  std::string version_data;
+  PutVarint32(&version_data, static_cast<uint32_t>(ZnsCommitTag::kEdit));
+  PutLengthPrefixedSlice(&version_data, version_body);
+  // Setup SSManager pointers
+  std::string manager_body;
+  man->EncodeTo(&manager_body);
+  std::string manager_data;
+  PutVarint32(&manager_data, static_cast<uint32_t>(ZnsCommitTag::kSSManager));
+  PutLengthPrefixedSlice(&manager_data, manager_body);
+  // Padding
+  std::string closer;
+  PutVarint32(&closer, static_cast<uint32_t>(ZnsCommitTag::kClosing));
+  // Write
+  Slice result = version_data.append(manager_data).append(closer);
+  uint64_t current_lba;
+  s = manifest_->GetCurrentWriteHead(&current_lba);
+  s = manifest_->NewManifest(result);
+  if (s.ok()) {
+    s = manifest_->SetCurrent(current_lba);
+  }
+  return Status::OK();
+}
+
 Status ZnsVersionSet::Compact(ZnsCompaction* c) {
   c->SetupTargets(current_->ss_[current_->compaction_level_],
                   current_->ss_[current_->compaction_level_ + 1]);
   return Status::OK();
 }
+
+Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
+  Status s = Status::OK();
+  std::vector<std::pair<int, rocksdb::SSZoneMetaData>>& base_ss =
+      edit->deleted_ss_seq_;
+  std::vector<std::pair<int, rocksdb::SSZoneMetaData>>::const_iterator
+      base_iter = base_ss.begin();
+  std::vector<std::pair<int, rocksdb::SSZoneMetaData>>::const_iterator
+      base_end = base_ss.end();
+  for (; base_iter != base_end; ++base_iter) {
+    const int level = (*base_iter).first;
+    SSZoneMetaData m = (*base_iter).second;
+    s = znssstable_->InvalidateSSZone(level, &m);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  return s;
+}
+
+Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit,
+                                 ZNSSSTableManager* man) {
+  Status s = Status::OK();
+  Slice input = Slice(src);
+  uint32_t tag;
+  Slice sub_input;
+  ZnsCommitTag committag;
+  bool force = false;
+  while (!force && s.ok() && GetVarint32(&input, &tag)) {
+    committag = static_cast<ZnsCommitTag>(tag);
+    switch (committag) {
+      case ZnsCommitTag::kEdit:
+        if (GetLengthPrefixedSlice(&input, &sub_input)) {
+          s = edit->DecodeFrom(sub_input);
+        } else {
+          s = Status::Corruption("VersionSet", "edit data");
+        }
+        break;
+      case ZnsCommitTag::kSSManager:
+        if (GetLengthPrefixedSlice(&input, &sub_input)) {
+          s = man->DecodeFrom(sub_input);
+        } else {
+          s = Status::Corruption("VersionSet", "SStable data");
+        }
+        break;
+      case ZnsCommitTag::kClosing:
+        force = true;
+        break;
+      default:
+        s = Status::Corruption("VersionSet", "unknown or unsupported tag");
+        break;
+    }
+  }
+  if (s.ok() && !input.empty() && !force) {
+    s = Status::Corruption("VersionSet", "invalid tag");
+  }
+  return s;
+}
+
+Status ZnsVersionSet::Recover() {
+  Status s;
+  uint64_t start_manifest, end_manifest;
+  s = manifest_->Recover();
+  std::string manifest_data;
+  s = manifest_->ReadManifest(&manifest_data);
+
+  ZnsVersionEdit edit;
+  s = DecodeFrom(manifest_data, &edit, znssstable_);
+  if (!s.ok()) {
+    return s;
+  }
+
+  // Install recovered edit
+  if (s.ok()) {
+    LogAndApply(&edit);
+  }
+  if (edit.has_last_sequence_) {
+    last_sequence_ = edit.last_sequence_;
+  }
+  if (edit.has_next_ss_number) {
+    ss_number_ = edit.ss_number;
+  }
+
+  // Setup numbers, temporary hack...
+  if (ss_number_ == 0) {
+    for (size_t i = 0; i < 7; i++) {
+      std::vector<SSZoneMetaData*>& m = current_->ss_[i];
+      for (size_t j = 0; j < m.size(); j++) {
+        ss_number_ = ss_number_ > m[j]->number ? ss_number_ : m[j]->number + 1;
+      }
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace ROCKSDB_NAMESPACE

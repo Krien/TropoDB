@@ -125,7 +125,6 @@ Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   if (ZnsDevice::z_append(*qpair_, write_head_, payload, zcalloc_size) != 0) {
     ZnsDevice::z_free(*qpair_, payload);
     mutex_.Unlock();
-    printf("append error %lu %lu %lu\n", zone_head_, write_head_, zcalloc_size);
     return Status::IOError("Error during appending\n");
   }
   ZnsDevice::z_free(*qpair_, payload);
@@ -293,4 +292,21 @@ Iterator* L0ZnsSSTable::NewIterator(SSZoneMetaData* meta) {
   data = (char*)GetVarint32Ptr(data, data + 5, &count);
   return new SSTableIterator(data, (size_t)count, &ParseNext);
 }
+
+void L0ZnsSSTable::EncodeTo(std::string* dst) {
+  PutVarint64(dst, zone_head_);
+  PutVarint64(dst, write_head_);
+  PutVarint64(dst, zone_tail_);
+  PutVarint64(dst, write_tail_);
+  PutVarint64(dst, pseudo_write_head_);
+}
+
+bool L0ZnsSSTable::EncodeFrom(Slice* data) {
+  bool res =
+      GetVarint64(data, &zone_head_) && GetVarint64(data, &write_head_) &&
+      GetVarint64(data, &zone_tail_) && GetVarint64(data, &write_tail_) &&
+      GetVarint64(data, &pseudo_write_head_);
+  return res;
+}
+
 }  // namespace ROCKSDB_NAMESPACE

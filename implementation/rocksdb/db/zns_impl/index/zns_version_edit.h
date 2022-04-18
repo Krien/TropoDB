@@ -32,7 +32,9 @@ class ZnsVersionEdit {
                        uint64_t lba_count, uint64_t numbers,
                        const InternalKey& smallest, const InternalKey& largest);
   void RemoveSSDefinition(int level, uint64_t number);
+  // Used for Manifest logic
   void EncodeTo(std::string* dst);
+  Status DecodeFrom(const Slice& src);
 
   // Setters
   void SetLastSequence(SequenceNumber seq) {
@@ -43,6 +45,10 @@ class ZnsVersionEdit {
     has_comparator_ = true;
     comparator_ = name.ToString();
   }
+  void SetSSNumber(uint64_t num) {
+    has_next_ss_number = true;
+    ss_number = num;
+  }
 
  private:
   friend class ZnsVersionSet;
@@ -51,10 +57,12 @@ class ZnsVersionEdit {
   std::vector<std::pair<int, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
   std::vector<std::pair<int, SSZoneMetaData>> deleted_ss_seq_;
-  int last_sequence_;
+  SequenceNumber last_sequence_;
   bool has_last_sequence_;
   std::string comparator_;
   bool has_comparator_;
+  uint64_t ss_number;
+  bool has_next_ss_number;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

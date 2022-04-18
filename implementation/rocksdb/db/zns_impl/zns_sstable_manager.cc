@@ -99,4 +99,19 @@ SSTableBuilder* ZNSSSTableManager::NewBuilder(size_t level,
   return sstable_wal_level_[level]->NewBuilder(meta);
 }
 
+void ZNSSSTableManager::EncodeTo(std::string* dst) {
+  for (int i = 0; i < 7; i++) {
+    sstable_wal_level_[i]->EncodeTo(dst);
+  }
+}
+Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
+  Slice input = Slice(data);
+  for (int i = 0; i < 7; i++) {
+    if (!sstable_wal_level_[i]->EncodeFrom(&input)) {
+      return Status::Corruption("Corrupt level");
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace ROCKSDB_NAMESPACE

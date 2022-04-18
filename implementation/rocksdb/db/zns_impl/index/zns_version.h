@@ -23,15 +23,21 @@ class ZnsVersion;
 class ZnsVersionSet;
 class ZnsCompaction;
 
-enum class VersionTag : uint32_t {
+enum class ZnsCommitTag : uint32_t {
+  kEdit = 1,
+  kSSManager = 2,
+  kClosing = 3
+};
+
+enum class ZnsVersionTag : uint32_t {
   kComparator = 1,
   kLogNumber = 2,
-  kNextFileNumber = 3,
+  kNextSSTableNumber = 3,
   kLastSequence = 4,
   kCompactPointer = 5,
-  kDeletedFile = 6,
-  kNewFile = 7,
-  // 8 was used for large value refs
+  kDeletedSSTable = 6,
+  kNewSSTable = 7,
+  
   kPrevLogNumber = 9
 };
 

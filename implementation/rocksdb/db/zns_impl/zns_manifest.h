@@ -17,17 +17,27 @@ class ZnsManifest : public RefCounter {
   ~ZnsManifest();
   Status Scan();
   Status NewManifest(const Slice& record);
+  Status ReadManifest(std::string* manifest);
   Status GetCurrentWriteHead(uint64_t* current);
   Status SetCurrent(uint64_t current_lba);
+  Status Recover();
   Status RemoveObsoleteZones();
   Status Reset();
 
  private:
+  Status RecoverLog();
+  Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest);
+  Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest);
+
   // ephemeral
   uint64_t current_lba_;
+  char* current_text_;
+  uint64_t manifest_start_;
+  uint64_t manifest_end_;
   // logic
   uint64_t zone_head_;
   uint64_t write_head_;
+  uint64_t zone_tail_;
   uint64_t min_zone_head_;
   uint64_t max_zone_head_;
   uint64_t zone_size_;

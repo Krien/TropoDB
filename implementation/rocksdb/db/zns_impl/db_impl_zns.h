@@ -106,6 +106,11 @@ class DBImplZNS : public DB {
   using DB::Write;
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
 
+  Status OpenDevice();
+  Status ResetDevice();
+  Status InitDB(const DBOptions& options);
+  Status Recover();
+
   Status MakeRoomForWrite();
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
@@ -285,8 +290,6 @@ class DBImplZNS : public DB {
   const Snapshot* GetSnapshot() override;
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
-  Status InitDB(const DBOptions& options);
-
  private:
   Status NewDB();
 
@@ -294,7 +297,6 @@ class DBImplZNS : public DB {
   const DBOptions options_;
   ZnsDevice::DeviceManager** device_manager_;
   QPairFactory* qpair_factory_;
-  ZnsDevice::QPair** qpair_;
   ZNSWAL* wal_;
   ZnsManifest* manifest_;
   ZNSSSTableManager* ss_manager_;
@@ -304,10 +306,12 @@ class DBImplZNS : public DB {
   ZNSMemTable* mem_;
   ZNSMemTable* imm_;
   ZnsVersionSet* versions_;
-  bool background_compaction_scheduled_;
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;
 };
 }  // namespace ROCKSDB_NAMESPACE
+namespace ZnsDevice {
+static bool device_set = false;
+}
 #endif

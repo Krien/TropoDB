@@ -3,18 +3,20 @@
 
 namespace ZnsDevice {
 extern "C" {
-int z_init(DeviceManager **manager) {
+int z_init(DeviceManager **manager, bool reset) {
   *manager = (DeviceManager *)calloc(1, sizeof(DeviceManager));
   RETURN_CODE_ON_NULL(*manager, 1);
   // Setup options
   struct spdk_env_opts opts;
-  opts.name = "znsdevice";
-  spdk_env_opts_init(&opts);
+  if (!reset) {
+    opts.name = "znsdevice";
+    spdk_env_opts_init(&opts);
+  }
   // Setup SPDK
   (*manager)->g_trid = {};
   spdk_nvme_trid_populate_transport(&(*manager)->g_trid,
                                     SPDK_NVME_TRANSPORT_PCIE);
-  if (spdk_env_init(&opts) < 0) {
+  if (spdk_env_init(reset ? NULL : &opts) < 0) {
     free(*manager);
     return 2;
   }

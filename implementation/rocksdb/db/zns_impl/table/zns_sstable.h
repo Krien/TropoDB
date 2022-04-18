@@ -41,6 +41,8 @@ class ZnsSSTable {
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(Slice content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(SSZoneMetaData* meta) = 0;
+  virtual void EncodeTo(std::string* dst) = 0;
+  virtual bool EncodeFrom(Slice* data) = 0;
 
  protected:
   friend class SSTableBuilder;

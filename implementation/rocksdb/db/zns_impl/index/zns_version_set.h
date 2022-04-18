@@ -34,6 +34,7 @@ class ZnsVersionSet {
 
   Status WriteSnapshot(std::string* snapshot_dst);
   Status LogAndApply(ZnsVersionEdit* edit);
+  Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
   inline ZnsVersion* current() { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
@@ -61,26 +62,8 @@ class ZnsVersionSet {
   }
 
   Status Compact(ZnsCompaction* c);
-
-  Status RemoveObsoleteZones(ZnsVersionEdit* edit) {
-    Status s = Status::OK();
-    std::vector<std::pair<int, rocksdb::SSZoneMetaData>>& base_ss =
-        edit->deleted_ss_seq_;
-    std::vector<std::pair<int, rocksdb::SSZoneMetaData>>::const_iterator
-        base_iter = base_ss.begin();
-    std::vector<std::pair<int, rocksdb::SSZoneMetaData>>::const_iterator
-        base_end = base_ss.end();
-    for (; base_iter != base_end; ++base_iter) {
-      const int level = (*base_iter).first;
-      SSZoneMetaData m = (*base_iter).second;
-      printf("cleaning... %u %lu %lu\n", level, m.lba, m.lba_count);
-      s = znssstable_->InvalidateSSZone(level, &m);
-      if (!s.ok()) {
-        return s;
-      }
-    }
-    return s;
-  }
+  // ONLY call on startup or recovery, this is not thread safe and drops current data.
+  Status Recover();
 
  private:
   class Builder;
@@ -89,6 +72,8 @@ class ZnsVersionSet {
   friend class ZnsCompaction;
 
   void AppendVersion(ZnsVersion* v);
+  Status CommitVersion(ZnsVersionEdit* edit, ZNSSSTableManager *man);
+  Status DecodeFrom(const Slice& input, ZnsVersionEdit* edit, ZNSSSTableManager *man);
 
   ZnsVersion* current_;
   const InternalKeyComparator icmp_;

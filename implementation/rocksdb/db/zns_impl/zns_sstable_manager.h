@@ -34,6 +34,9 @@ class ZNSSSTableManager : public RefCounter {
   L0ZnsSSTable* GetL0SSTableLog();
   Iterator* NewIterator(size_t level, SSZoneMetaData* meta);
   SSTableBuilder* NewBuilder(size_t level, SSZoneMetaData* meta);
+  // Used for persistency
+  void EncodeTo(std::string* dst);
+  Status DecodeFrom(const Slice& data);
 
  private:
   // wals

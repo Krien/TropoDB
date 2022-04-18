@@ -293,4 +293,21 @@ Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta) {
   data = (char*)GetVarint32Ptr(data, data + 5, &count);
   return new SSTableIterator(data, (size_t)count, &ParseNext);
 }
+
+void LNZnsSSTable::EncodeTo(std::string* dst) {
+  PutVarint64(dst, zone_head_);
+  PutVarint64(dst, write_head_);
+  PutVarint64(dst, zone_tail_);
+  PutVarint64(dst, write_tail_);
+  PutVarint64(dst, pseudo_write_head_);
+}
+
+bool LNZnsSSTable::EncodeFrom(Slice* data) {
+  bool res =
+      GetVarint64(data, &zone_head_) && GetVarint64(data, &write_head_) &&
+      GetVarint64(data, &zone_tail_) && GetVarint64(data, &write_tail_) &&
+      GetVarint64(data, &pseudo_write_head_);
+  return res;
+}
+
 }  // namespace ROCKSDB_NAMESPACE

@@ -71,7 +71,7 @@ typedef struct {
    *  - 1 if manager is null
    *  - 2 if spdk fails
    */
-int z_init(DeviceManager **man);
+int z_init(DeviceManager **man, bool reset);
 
 int z_reinit(DeviceManager **man);
 

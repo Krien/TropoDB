@@ -23,6 +23,9 @@ SOFTWARE.
 #include <getopt.h>
 #include <unistd.h>
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdio>
 #include <iostream>
@@ -161,6 +164,7 @@ static int delete_rocksdb(struct MyRocksContext *context,
   cout << "Opening database at " << context->uri << " with uri " << uri_ext
        << " and the db_path as " << db_path << std::endl;
   if (uri_ext.compare("zns") == 0) {
+    context->options.use_zns_impl = true;
     s = rocksdb::DestroyDB(db_path, context->options);
     return s.ok() ? 0 : -1;
   }

@@ -27,6 +27,8 @@ class LNZnsSSTable : public ZnsSSTable {
   Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta) override;
   Status InvalidateSSZone(SSZoneMetaData* meta);
   Status WriteSSTable(Slice content, SSZoneMetaData* meta) override;
+  void EncodeTo(std::string* dst) override;
+  bool EncodeFrom(Slice* data) override;
 
  private:
   class Builder;

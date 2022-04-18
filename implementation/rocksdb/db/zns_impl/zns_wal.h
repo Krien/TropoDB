@@ -6,8 +6,11 @@
 #include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/qpair_factory.h"
 #include "db/zns_impl/ref_counter.h"
+#include "db/zns_impl/zns_memtable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
+#include "rocksdb/types.h"
+
 
 namespace ROCKSDB_NAMESPACE {
 /**
@@ -24,6 +27,8 @@ class ZNSWAL : public RefCounter {
   ~ZNSWAL();
   void Append(Slice data);
   Status Reset();
+  Status Recover();
+  Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
 
  private:
   // data
