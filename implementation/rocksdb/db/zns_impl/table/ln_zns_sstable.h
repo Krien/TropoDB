@@ -3,10 +3,10 @@
 #ifndef LN_ZNS_SSTABLE_H
 #define LN_ZNS_SSTABLE_H
 
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/zns_memtable.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"

@@ -1,6 +1,6 @@
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/qpair_factory.h"
 
-#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/io/device_wrapper.h"
 
 namespace ROCKSDB_NAMESPACE {
 QPairFactory::QPairFactory(ZnsDevice::DeviceManager* device_manager)

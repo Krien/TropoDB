@@ -1,4 +1,4 @@
-#include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
 #include "test_util/testharness.h"
 
 namespace ROCKSDB_NAMESPACE {

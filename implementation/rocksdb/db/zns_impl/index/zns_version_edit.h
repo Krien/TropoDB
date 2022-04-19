@@ -7,12 +7,12 @@
 #define ZNS_VERSION_EDIT_H
 
 #include "db/dbformat.h"
-#include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/index/zns_version.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"
-#include "db/zns_impl/zns_manifest.h"
-#include "db/zns_impl/zns_sstable_manager.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 

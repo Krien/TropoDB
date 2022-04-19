@@ -3,7 +3,7 @@
 #ifndef QPAIR_FACTORY_H
 #define QPAIR_FACTORY_H
 
-#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/io/device_wrapper.h"
 #include "db/zns_impl/ref_counter.h"
 #include "rocksdb/rocksdb_namespace.h"
 

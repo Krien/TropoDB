@@ -3,14 +3,14 @@
 #ifndef ZNS_SSTABLE_MANAGER_H
 #define ZNS_SSTABLE_MANAGER_H
 
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/zns_memtable.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 

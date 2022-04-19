@@ -16,12 +16,12 @@
 #include "db/column_family.h"
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
-#include "db/zns_impl/device_wrapper.h"
 #include "db/zns_impl/index/zns_compaction.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
-#include "db/zns_impl/zns_manifest.h"
-#include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/persistence/zns_manifest.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -278,7 +278,7 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
-  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+  // s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
   printf("Compacted!!\n");
 }
 
@@ -393,6 +393,7 @@ DBImplZNS::~DBImplZNS() {
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
+  std::cout << versions_->DebugString();
 
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
@@ -467,6 +468,8 @@ Status DBImplZNS::Recover() {
 
   // manifest stuff
   s = versions_->Recover();
+  std::cout << versions_->DebugString();
+  MaybeScheduleCompaction();
   return s;
 }
 

@@ -76,28 +76,25 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   for (int level = 1; level < 7; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
-    for (size_t i = ss_[level].size(); i != 0; --i) {
-      uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);
-      if (index >= num_ss) {
-        continue;
-      }
-      SSZoneMetaData* m = ss_[level][index];
-      if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
-          ucmp->Compare(key, m->largest.user_key()) <= 0) {
-        s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
-                            &status);
-        if (s.ok()) {
-          znssstable->Unref();
-          if (status != EntryStatus::found) {
-            return Status::NotFound();
-          }
-          return s;
+    uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);
+    if (index >= num_ss) {
+      continue;
+    }
+    SSZoneMetaData* m = ss_[level][index];
+    if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
+        ucmp->Compare(key, m->largest.user_key()) <= 0) {
+      s = znssstable->Get(level, vset_->icmp_, internal_key, value, m, &status);
+      if (s.ok()) {
+        if (status != EntryStatus::found) {
+          continue;
         }
+        znssstable->Unref();
+        return s;
       }
     }
   }
 
   znssstable->Unref();
-  return Status::NotFound();
+  return Status::NotFound("No matching table");
 }
 }  // namespace ROCKSDB_NAMESPACE

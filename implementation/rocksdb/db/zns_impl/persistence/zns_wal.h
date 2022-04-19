@@ -3,14 +3,14 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/memtable/zns_memtable.h"
+#include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/ref_counter.h"
-#include "db/zns_impl/zns_memtable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
-
 
 namespace ROCKSDB_NAMESPACE {
 /**
@@ -41,6 +41,7 @@ class ZNSWAL : public RefCounter {
   // references
   QPairFactory* qpair_factory_;
   ZnsDevice::QPair** qpair_;
+  ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

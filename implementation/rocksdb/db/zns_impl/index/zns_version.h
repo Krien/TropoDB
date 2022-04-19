@@ -8,11 +8,11 @@
 
 #include "db/dbformat.h"
 #include "db/lookup_key.h"
-#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"
-#include "db/zns_impl/zns_manifest.h"
-#include "db/zns_impl/zns_sstable_manager.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -23,11 +23,7 @@ class ZnsVersion;
 class ZnsVersionSet;
 class ZnsCompaction;
 
-enum class ZnsCommitTag : uint32_t {
-  kEdit = 1,
-  kSSManager = 2,
-  kClosing = 3
-};
+enum class ZnsCommitTag : uint32_t { kEdit = 1, kSSManager = 2, kClosing = 3 };
 
 enum class ZnsVersionTag : uint32_t {
   kComparator = 1,
@@ -37,7 +33,7 @@ enum class ZnsVersionTag : uint32_t {
   kCompactPointer = 5,
   kDeletedSSTable = 6,
   kNewSSTable = 7,
-  
+
   kPrevLogNumber = 9
 };
 

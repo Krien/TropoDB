@@ -38,18 +38,20 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   v->Ref();
 }
 
-Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst) {
+Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
+                                    ZnsVersion* version) {
   ZnsVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stuff
   for (int level = 0; level < 7; level++) {
-    const std::vector<SSZoneMetaData*>& ss = current_->ss_[level];
+    const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData* m = ss[i];
       edit.AddSSDefinition(level, m->number, m->lba, m->lba_count, m->numbers,
                            m->smallest, m->largest);
     }
   }
+  edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);
   return Status::OK();
 }
@@ -78,7 +80,7 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   }
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
-  s = CommitVersion(edit, znssstable_);
+  s = CommitVersion(v, znssstable_);
   // Installing?
   if (s.ok()) {
     AppendVersion(v);
@@ -86,13 +88,11 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   return s;
 }
 
-Status ZnsVersionSet::CommitVersion(ZnsVersionEdit* edit,
-                                    ZNSSSTableManager* man) {
+Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   Status s;
   // Setup version (for now CoW)
   std::string version_body;
-  s = WriteSnapshot(&version_body);
-  edit->EncodeTo(&version_body);
+  s = WriteSnapshot(&version_body, v);
   std::string version_data;
   PutVarint32(&version_data, static_cast<uint32_t>(ZnsCommitTag::kEdit));
   PutLengthPrefixedSlice(&version_data, version_body);
@@ -214,6 +214,16 @@ Status ZnsVersionSet::Recover() {
     }
   }
   return Status::OK();
+}
+
+std::string ZnsVersionSet::DebugString() {
+  std::string result;
+  for (size_t i = 0; i < 7; i++) {
+    std::vector<SSZoneMetaData*>& m = current_->ss_[i];
+    result.append("\t" + std::to_string(i) + ": " + std::to_string(m.size()) +
+                  "\n");
+  }
+  return result;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

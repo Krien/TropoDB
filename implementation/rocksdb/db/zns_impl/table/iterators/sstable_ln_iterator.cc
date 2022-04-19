@@ -2,8 +2,8 @@
 
 #include "db/dbformat.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/zns_sstable_manager.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {

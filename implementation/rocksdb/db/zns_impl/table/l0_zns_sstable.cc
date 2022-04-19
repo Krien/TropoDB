@@ -1,10 +1,10 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
 
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/zns_utils.h"
 
 namespace ROCKSDB_NAMESPACE {
 

@@ -1,14 +1,12 @@
-#include "db/zns_impl/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_sstable_manager.h"
 
-#include <iostream>
-
-#include "db/zns_impl/device_wrapper.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/zns_utils.h"
+#include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/zns_memtable.h"
-#include "db/zns_impl/zns_utils.h"
-#include "db/zns_impl/zns_zonemetadata.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
@@ -113,5 +111,4 @@ Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
   }
   return Status::OK();
 }
-
 }  // namespace ROCKSDB_NAMESPACE

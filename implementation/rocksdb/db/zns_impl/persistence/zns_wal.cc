@@ -1,14 +1,16 @@
-#include "db/zns_impl/zns_wal.h"
+#include "db/zns_impl/persistence/zns_wal.h"
 
 #include "db/write_batch_internal.h"
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/zns_memtable.h"
-#include "db/zns_impl/zns_utils.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/zns_utils.h"
+#include "db/zns_impl/memtable/zns_memtable.h"
+#include "db/zns_impl/persistence/zns_committer.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 #include "rocksdb/write_batch.h"
 #include "util/coding.h"
+#include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
@@ -23,13 +25,15 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
-  qpair_ = new ZnsDevice::QPair*[1];
+  qpair_ = new ZnsDevice::QPair*;
   qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
+  committer_ = new ZnsCommitter(*qpair_, info);
 }
 
 ZNSWAL::~ZNSWAL() {
   printf("Deleting WAL.\n");
+  delete committer_;
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
     delete qpair_;
@@ -39,23 +43,12 @@ ZNSWAL::~ZNSWAL() {
 }
 
 void ZNSWAL::Append(Slice data) {
-  uint64_t zcalloc_size = 0;
-  std::string data_transformed;
-  PutLengthPrefixedSlice(&data_transformed, data);
-  char* payload = ZnsUtils::slice_to_spdkformat(
-      &zcalloc_size, Slice(data_transformed.data(), data.size() + 8), *qpair_,
-      lba_size_);
-  if (payload == nullptr) {
-    return;
+  Status s = committer_->SafeCommit(data, &write_head_, min_zone_head_,
+                                    max_zone_head_);
+  zone_head_ = (write_head_ / zone_size_) * zone_size_;
+  if (!s.ok()) {
+    printf("Error in commit on WAL %s\n", s.getState());
   }
-  if (write_head_ + zcalloc_size / lba_size_ > max_zone_head_) {
-    printf("WARNING WAL is filled to the border, data is lost!\n");
-    return;
-  }
-  int rc = ZnsDevice::z_append(*qpair_, zone_head_, payload, zcalloc_size);
-  ZnsUtils::update_zns_heads(&write_head_, &zone_head_, zcalloc_size, lba_size_,
-                             zone_size_);
-  ZnsDevice::z_free(*qpair_, payload);
 }
 
 Status ZNSWAL::Reset() {
@@ -101,29 +94,29 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   if (write_head_ == min_zone_head_) {
     return Status::OK();
   }
-  char* input = (char*)ZnsDevice::z_calloc(*qpair_, 1, lba_size_);
-  Slice res;
-  Slice input_res;
+  Status s = Status::OK();
   WriteOptions wo;
-  for (uint64_t batch = min_zone_head_; batch < write_head_; batch++) {
-    ZnsDevice::z_read(*qpair_, batch, input, lba_size_);
-    input_res = Slice(input, lba_size_);
-    if (!GetLengthPrefixedSlice(&input_res, &res)) {
-      return Status::Corruption();
-    }
-    WriteBatch batcha;
-    WriteBatchInternal::SetContents(&batcha, res);
-    Status s = mem->Write(wo, &batcha);
+  Slice record;
+
+  committer_->GetCommitReader(min_zone_head_, write_head_);
+  while (committer_->SeekCommitReader(&record)) {
+    WriteBatch batch;
+    s = WriteBatchInternal::SetContents(&batch, record);
     if (!s.ok()) {
-      return s;
+      break;
     }
-    const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batcha) +
-                                    WriteBatchInternal::Count(&batcha) - 1;
+    s = mem->Write(wo, &batch);
+    if (!s.ok()) {
+      break;
+    }
+    const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
+                                    WriteBatchInternal::Count(&batch) - 1;
     if (last_seq > *seq) {
       *seq = last_seq;
     }
   }
-  return Status::OK();
+  committer_->CloseCommit();
+  return s;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

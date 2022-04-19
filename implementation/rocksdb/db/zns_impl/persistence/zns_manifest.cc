@@ -1,7 +1,7 @@
-#include "db/zns_impl/zns_manifest.h"
+#include "db/zns_impl/persistence/zns_manifest.h"
 
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/zns_utils.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/zns_utils.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "util/coding.h"
@@ -11,7 +11,6 @@ ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
                          const ZnsDevice::DeviceInfo& info,
                          const uint64_t min_zone_head, uint64_t max_zone_head)
     : current_lba_(min_zone_head_),
-      current_text_(nullptr),
       manifest_start_(max_zone_head_),  // enforce corruption
       manifest_end_(min_zone_head_),    // enforce corruption
       zone_head_(min_zone_head),
@@ -26,17 +25,15 @@ ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
   assert(min_zone_head_ < max_zone_head_);
-  qpair_ = new ZnsDevice::QPair*[1];
+  qpair_ = new ZnsDevice::QPair*;
   qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
+  committer_ = new ZnsCommitter(*qpair_, info);
 }
 
 ZnsManifest::~ZnsManifest() {
   printf("Deleting manifest\n");
-  if (current_text_ != nullptr) {
-    ZnsDevice::z_free(*qpair_, current_text_);
-    current_text_ = nullptr;
-  }
+  delete committer_;
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
     delete qpair_;
@@ -47,76 +44,57 @@ ZnsManifest::~ZnsManifest() {
 Status ZnsManifest::Scan() { return Status::NotSupported(); }
 
 Status ZnsManifest::NewManifest(const Slice& record) {
-  uint64_t zcalloc_size = 0;
-  char* payload =
-      ZnsUtils::slice_to_spdkformat(&zcalloc_size, record, *qpair_, lba_size_);
-  if (payload == nullptr) {
-    return Status::IOError("Error in SPDK malloc for Manifest");
-  }
-  // TODO REQUEST SPACE!!!
-  int rc = ZnsDevice::z_append(*qpair_, zone_head_, payload, zcalloc_size);
-  ZnsDevice::z_free(*qpair_, payload);
-  if (rc != 0) {
-    return Status::IOError("Error in writing Manifest");
-  }
-  ZnsUtils::update_zns_heads(&write_head_, &zone_head_, zcalloc_size, lba_size_,
-                             zone_size_);
-  return Status::OK();
+  // TODO: wraparound
+  Status s = committer_->SafeCommit(record, &write_head_, min_zone_head_,
+                                    max_zone_head_);
+  zone_head_ = (write_head_ / zone_size_) * zone_size_;
+  return s;
 }
 
-Status ZnsManifest::ReadManifest(std::string* manifest) {
+Status ZnsManifest::ValidateManifestPointers() {
   if (manifest_start_ >= manifest_end_) {
-    return Status::Corruption("Corrupted manifest pointers");
+    return Status::Corruption("manifest pointers");
   }
   if (write_head_ > zone_tail_) {
     if (manifest_start_ > write_head_ || manifest_end_ > write_head_ ||
         manifest_start_ < zone_tail_ || manifest_end_ < zone_tail_) {
-      return Status::Corruption("Corrupted manifest pointers");
+      return Status::Corruption("manifest pointers");
     }
   } else {
     if ((manifest_start_ > write_head_ && manifest_start_ < zone_tail_) ||
         (manifest_end_ > write_head_ && manifest_end_ < zone_tail_)) {
-      return Status::Corruption("Corrupted manifest pointers");
+      return Status::Corruption("manifest pointers");
     }
-  }
-  uint64_t lbas =
-      manifest_end_ > manifest_start_
-          ? manifest_end_ - manifest_start_
-          : max_zone_head_ - manifest_start_ + manifest_end_ - min_zone_head_;
-  char* manifest_buffer_ =
-      (char*)ZnsDevice::z_calloc(*qpair_, 1, lbas * lba_size_);
-  if (manifest_buffer_ == nullptr) {
-    return Status::MemoryLimit("Problems allocating DMA");
-  }
-  int rc;
-  if (manifest_end_ > manifest_start_) {
-    rc = ZnsDevice::z_read(*qpair_, manifest_start_, manifest_buffer_,
-                           lbas * lba_size_);
-    if (rc != 0) {
-      ZnsDevice::z_free(*qpair_, manifest_buffer_);
-      return Status::IOError("Error reading manifest");
-    }
-    manifest->append(manifest_buffer_, lbas * lba_size_);
-    ZnsDevice::z_free(*qpair_, manifest_buffer_);
-  } else {
-    rc = ZnsDevice::z_read(*qpair_, manifest_start_, manifest_buffer_,
-                           (max_zone_head_ - manifest_start_) * lba_size_);
-    if (rc != 0) {
-      ZnsDevice::z_free(*qpair_, manifest_buffer_);
-      return Status::IOError("Error reading manifest");
-    }
-    rc = ZnsDevice::z_read(
-        *qpair_, min_zone_head_,
-        manifest_buffer_ + (max_zone_head_ - manifest_start_) * lba_size_,
-        (manifest_end_ - min_zone_head_) * lba_size_);
-    if (rc != 0) {
-      ZnsDevice::z_free(*qpair_, manifest_buffer_);
-      return Status::IOError("Error reading manifest");
-    }
-    manifest->append(manifest_buffer_, lbas * lba_size_);
-    ZnsDevice::z_free(*qpair_, manifest_buffer_);
   }
   return Status::OK();
+}
+
+Status ZnsManifest::ReadManifest(std::string* manifest) {
+  Status s = ValidateManifestPointers();
+  if (!s.ok()) {
+    return s;
+  }
+  Slice record;
+  // Read data from commits. If necessary wraparound from end to start.
+  if (manifest_end_ > manifest_start_) {
+    committer_->GetCommitReader(manifest_start_, manifest_end_);
+    while (committer_->SeekCommitReader(&record)) {
+      manifest->append(record.ToString());
+    }
+    committer_->CloseCommit();
+  } else {
+    committer_->GetCommitReader(manifest_start_, max_zone_head_);
+    while (committer_->SeekCommitReader(&record)) {
+      manifest->append(record.ToString());
+    }
+    committer_->CloseCommit();
+    committer_->GetCommitReader(min_zone_head_, manifest_end_);
+    while (committer_->SeekCommitReader(&record)) {
+      manifest->append(record.ToString());
+    }
+    committer_->CloseCommit();
+  }
+  return s;
 }
 
 Status ZnsManifest::GetCurrentWriteHead(uint64_t* current) {
@@ -126,29 +104,23 @@ Status ZnsManifest::GetCurrentWriteHead(uint64_t* current) {
 
 Status ZnsManifest::SetCurrent(uint64_t current) {
   assert(current > min_zone_head_ && current < max_zone_head_);
-  current_lba_ = current;
+  Status s;
+  int64_t tmp_manifest_start = current;
+  uint64_t tmp_manifest_end = write_head_;
+  // then install on storage
   std::string current_name = "CURRENT:";
   PutFixed64(&current_name, current);
-  uint64_t zcalloc_size = 0;
-  char* payload = ZnsUtils::slice_to_spdkformat(
-      &zcalloc_size, Slice(current_name), *qpair_, lba_size_);
-  if (payload == nullptr) {
-    return Status::IOError("Error in SPDK malloc for CURRENT");
-  }
-  // TODO REQUEST SPACE!!!
   printf("Setting current to %lu: %s", write_head_, current_name.data());
-  int rc = ZnsDevice::z_append(*qpair_, zone_head_, payload, zcalloc_size);
-  if (rc != 0) {
-    return Status::IOError("Error in writing CURRENT");
+  s = committer_->SafeCommit(Slice(current_name), &write_head_, min_zone_head_,
+                             max_zone_head_);
+  zone_head_ = (write_head_ / zone_size_) * zone_size_;
+  if (!s.ok()) {
+    return s;
   }
-  // install locally as well
-  manifest_start_ = current;
-  manifest_end_ = write_head_;
-  // make progress
-  ZnsUtils::update_zns_heads(&write_head_, &zone_head_, zcalloc_size, lba_size_,
-                             zone_size_);
-  ZnsDevice::z_free(*qpair_, payload);
-  return Status::OK();
+  // Only install locally if succesful
+  manifest_start_ = current_lba_ = tmp_manifest_start;
+  manifest_end_ = tmp_manifest_end;
+  return s;
 }
 
 Status ZnsManifest::RecoverLog() {
@@ -208,27 +180,25 @@ Status ZnsManifest::RecoverLog() {
 }
 
 Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest) {
-  int rc = 0;
-  if (current_text_ == nullptr) {
-    current_text_ = (char*)ZnsDevice::z_calloc(*qpair_, 1, lba_size_);
+  Slice potential;
+  committer_->GetCommitReader(slba, slba + 1);
+  if (!committer_->SeekCommitReader(&potential)) {
+    return Status::Corruption("CURRENT", "Invalid block");
   }
-  if (current_text_ == nullptr) {
-    return Status::MemoryLimit("Problems allocating DMA");
+  // prevent memory errors on half reads
+  if (potential.size() < sizeof("CURRENT:") - 1) {
+    return Status::Corruption("CURRENT", "Header too small");
   }
-  rc = ZnsDevice::z_read(*qpair_, slba, current_text_, lba_size_);
-  if (rc != 0) {
-    return Status::IOError("Error reading potential CURRENT address");
+  if (memcmp(potential.data(), "CURRENT:", sizeof("CURRENT:") - 1) != 0) {
+    return Status::Corruption("CURRENT", "Broken header");
   }
-  if (memcmp(current_text_, "CURRENT:", sizeof("CURRENT:") - 1) != 0) {
-    return Status::Corruption("Corrupt CURRENT block");
-  }
-  char* current_text_header = current_text_ + sizeof("CURRENT:") - 1;
+  const char* current_text_header = potential.data() + sizeof("CURRENT:") - 1;
   Slice current_text_header_slice(current_text_header, 8);
   if (!GetFixed64(&current_text_header_slice, start_manifest)) {
-    return Status::Corruption("Corrupt CURRENT header");
+    return Status::Corruption("CURRENT", "Corrupt pointers");
   }
   if (*start_manifest < min_zone_head_ || *start_manifest > max_zone_head_) {
-    return Status::Corruption("Corrupt CURRENT header");
+    return Status::Corruption("CURRENT", "Invalid pointers");
   }
   return Status::OK();
 }
@@ -240,7 +210,7 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
     return Status::NotFound("No current when empty");
   }
   // It is possible that a previous manifest was written, but not yet installed.
-  // Therefore move back till found.
+  // Therefore move back from head till tail until it is found.
   bool found = false;
   uint64_t slba = write_head_ == 0 ? max_zone_head_ - 1 : write_head_ - 1;
   for (; slba != zone_tail_;
@@ -252,10 +222,7 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
       break;
     }
   }
-  if (current_text_ != nullptr) {
-    ZnsDevice::z_free(*qpair_, current_text_);
-    current_text_ = nullptr;
-  }
+  committer_->CloseCommit();
   if (!found) {
     return Status::NotFound("Did not find a valid CURRENT");
   }

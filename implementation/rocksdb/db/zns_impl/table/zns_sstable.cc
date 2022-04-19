@@ -1,7 +1,7 @@
 #include "db/zns_impl/table/zns_sstable.h"
 
-#include "db/zns_impl/device_wrapper.h"
-#include "db/zns_impl/qpair_factory.h"
+#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/qpair_factory.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory,
