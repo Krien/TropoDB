@@ -27,6 +27,7 @@
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/persistence/zns_wal.h"
+#include "db/zns_impl/persistence/zns_wal_manager.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "options/cf_options.h"
@@ -298,6 +299,7 @@ class DBImplZNS : public DB {
   ZnsDevice::DeviceManager** device_manager_;
   QPairFactory* qpair_factory_;
   ZNSWAL* wal_;
+  ZnsWALManager* wal_man_;
   ZnsManifest* manifest_;
   ZNSSSTableManager* ss_manager_;
   const std::string name_;

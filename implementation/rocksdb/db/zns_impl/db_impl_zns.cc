@@ -21,6 +21,8 @@
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/io/device_wrapper.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
+#include "db/zns_impl/persistence/zns_wal.h"
+#include "db/zns_impl/persistence/zns_wal_manager.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
@@ -171,14 +173,15 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
     {
-      // write to log (needs to be locked because log can be deleted)
+      wal_->Ref();
+      mutex_.Unlock();
       Slice log_entry = WriteBatchInternal::Contents(updates);
       wal_->Append(log_entry);
       // write to memtable
-      mutex_.Unlock();
       assert(this->mem_ != nullptr);
       this->mem_->Write(options, updates);
       mutex_.Lock();
+      wal_->Unref();
     }
     versions_->SetLastSequence(last_sequence);
   }
@@ -205,9 +208,13 @@ Status DBImplZNS::MakeRoomForWrite() {
     } else if (versions_->NumLevelZones(0) > 3) {
       printf("waiting for compaction\n");
       bg_work_finished_signal_.Wait();
-    } else {
+    } else if (!wal_man_->WALAvailable()) {
+      printf("waiting for WAL clearing\n");
+      bg_work_finished_signal_.Wait();
+    } 
+    else {
       // create new WAL
-      s = wal_->Reset();
+      s = wal_man_->NewWAL(&mutex_, &wal_);
       printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
@@ -303,6 +310,7 @@ Status DBImplZNS::CompactMemtable() {
     }
     imm_->Unref();
     imm_ = nullptr;
+    s = wal_man_->ResetOldWALs(&mutex_);
     printf("Flushed!!\n");
   }
   return s;
@@ -353,18 +361,21 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   manifest_ = new ZnsManifest(qpair_factory_, device_info, 0,
                               device_info.zone_size * 2);
   manifest_->Ref();
-  wal_ = new ZNSWAL(qpair_factory_, device_info, device_info.zone_size * 2,
-                    device_info.zone_size * 5);
-  wal_->Ref();
+
+  wal_man_ = new ZnsWALManager(qpair_factory_, device_info, device_info.zone_size * 5,
+                    device_info.zone_size * 15, 5 
+  );
+  wal_man_->Ref();
+
   uint64_t zsize = device_info.zone_size;
   std::pair<uint64_t, uint64_t> ranges[7] = {
-      std::make_pair(zsize * 5, zsize * 10),
-      std::make_pair(zsize * 10, zsize * 15),
       std::make_pair(zsize * 15, zsize * 20),
       std::make_pair(zsize * 20, zsize * 25),
       std::make_pair(zsize * 25, zsize * 30),
       std::make_pair(zsize * 30, zsize * 35),
-      std::make_pair(zsize * 35, zsize * 40)};
+      std::make_pair(zsize * 35, zsize * 40),
+      std::make_pair(zsize * 40, zsize * 45),
+      std::make_pair(zsize * 45, zsize * 50)};
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, device_info, ranges);
   ss_manager_->Ref();
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
@@ -398,7 +409,7 @@ DBImplZNS::~DBImplZNS() {
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
-  if (wal_ != nullptr) wal_->Unref();
+  if (wal_man_ != nullptr) wal_man_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
   if (qpair_factory_ != nullptr) qpair_factory_->Unref();
@@ -461,15 +472,18 @@ Status DBImplZNS::Recover() {
   MutexLock l(&mutex_);
   Status s;
   // WAL stuff
-  s = wal_[0].Recover();
+
   SequenceNumber seqa;
-  s = wal_[0].Replay(mem_, &seqa);
+  s = wal_man_->Recover(mem_, &seqa);
   versions_->SetLastSequence(seqa);
+  wal_man_->ResetOldWALs(&mutex_); 
+  s = wal_man_->NewWAL(&mutex_, &wal_);
 
   // manifest stuff
   s = versions_->Recover();
   std::cout << versions_->DebugString();
   MaybeScheduleCompaction();
+
   return s;
 }
 

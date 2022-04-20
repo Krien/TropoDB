@@ -119,4 +119,6 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   return s;
 }
 
+bool ZNSWAL::Empty() { return write_head_ == min_zone_head_; }
+
 }  // namespace ROCKSDB_NAMESPACE

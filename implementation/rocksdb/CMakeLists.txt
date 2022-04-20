@@ -1043,6 +1043,7 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/memtable/zns_memtable.cc
   db/zns_impl/persistence/zns_committer.cc
   db/zns_impl/persistence/zns_wal.cc
+  db/zns_impl/persistence/zns_wal_manager.cc
   db/zns_impl/persistence/zns_manifest.cc
   db/zns_impl/table/zns_sstable.cc
   db/zns_impl/table/l0_zns_sstable.cc

@@ -29,6 +29,7 @@ class ZNSWAL : public RefCounter {
   Status Reset();
   Status Recover();
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
+  bool Empty();
 
  private:
   // data
