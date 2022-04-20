@@ -82,7 +82,7 @@ Status ZnsWALManager::ResetOldWALs(port::Mutex* mutex_) {
   if (wal_tail_ == wal_count_) {
     wal_tail_ = 0;
   }
-  // +2 because wal_head_ -1 can be filled. 
+  // +2 because wal_head_ -1 can be filled.
   while (wal_head_ > wal_tail_ + 2) {
     if (wals[wal_tail_]->Getref() > 1) {
       return Status::OK();
@@ -105,7 +105,6 @@ Status ZnsWALManager::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
   bool first_empty_after_non_empty = false;
   for (size_t i = 0; i < wals.size(); i++) {
     if (!wals[i]->Empty() && !first_non_empty) {
-      printf("A %ld\n", i);
       first_non_empty = true;
       wal_head_ = i + 1;
       if (i > 0) {

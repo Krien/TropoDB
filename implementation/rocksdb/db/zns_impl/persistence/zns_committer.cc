@@ -133,7 +133,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const size_t to_read = (commit_end_ - commit_ptr_) * lba_size_ > zasl_
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
-    ZnsDevice::z_read(qpair_, commit_ptr_, buffer_, to_read);
+    // first read header (prevents reading too much)
+    ZnsDevice::z_read(qpair_, commit_ptr_, buffer_, lba_size_);
     // parse header
     const char* header = buffer_;
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
@@ -143,6 +144,11 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                              ? ZnsRecordType::kInvalid
                              : static_cast<ZnsRecordType>(header[6]);
     const uint32_t length = a | (b << 8);
+    // read potential body
+    if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
+      ZnsDevice::z_read(qpair_, commit_ptr_ + 1, buffer_ + lba_size_,
+                        to_read - lba_size_);
+    }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
     if (kZnsHeaderSize + length > to_read) {
