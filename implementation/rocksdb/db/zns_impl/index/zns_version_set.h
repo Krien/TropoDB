@@ -7,6 +7,7 @@
 #define ZNS_VERSION_SET_H
 
 #include "db/dbformat.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_edit.h"
 #include "db/zns_impl/io/device_wrapper.h"
@@ -47,7 +48,7 @@ class ZnsVersionSet {
   }
   inline uint64_t NewSSNumber() { return ss_number_++; }
   inline int NumLevelZones(int level) const {
-    assert(level >= 0 && level < 7);
+    assert(level >= 0 && level < ZnsConfig::level_count);
     return current_->ss_[level].size();
   }
   inline int NumLevelBytes(int level) const {
@@ -60,8 +61,14 @@ class ZnsVersionSet {
   }
 
   bool NeedsCompaction() const {
-    //printf("Score %f \n", current_->compaction_score_);
+    // printf("Score %f \n", current_->compaction_score_);
     return current_->compaction_score_ >= 1;
+  }
+
+  bool NeedsFlushing() const {
+    return znssstable_->GetFractionFilled(0) /
+               ZnsConfig::ss_compact_treshold[0] >=
+           1;
   }
 
   Status Compact(ZnsCompaction* c);
@@ -124,7 +131,7 @@ class ZnsVersionSet::Builder {
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;
-  LevelState levels_[7];
+  LevelState levels_[ZnsConfig::level_count];
 };
 }  // namespace ROCKSDB_NAMESPACE
 

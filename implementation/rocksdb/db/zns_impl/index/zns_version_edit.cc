@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/zns_impl/index/zns_version_edit.h"
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "util/coding.h"
@@ -92,7 +93,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
 
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
-  if (GetVarint32(input, &v) && v < 7) {
+  if (GetVarint32(input, &v) && v < (uint32_t)ZnsConfig::level_count) {
     *level = v;
     return true;
   } else {

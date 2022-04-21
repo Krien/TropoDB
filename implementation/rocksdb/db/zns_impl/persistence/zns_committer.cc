@@ -158,7 +158,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 6, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc\n");
+        printf("Corrupt crc %u %u %u\n", length, a, b);
         type = ZnsRecordType::kInvalid;
       }
     }
@@ -191,6 +191,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
       default:
         in_fragmented_record = false;
         scratch_->clear();
+        return false;
         break;
     }
   }

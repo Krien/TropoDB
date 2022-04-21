@@ -1,5 +1,6 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/device_wrapper.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -13,16 +14,16 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
-                                     const ZnsDevice::DeviceInfo& info,
-                                     std::pair<uint64_t, uint64_t> ranges[7])
+ZNSSSTableManager::ZNSSSTableManager(
+    QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+    std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count])
     : qpair_factory_(qpair_factory) {
   assert(qpair_factory_ != nullptr);
   qpair_factory_->Ref();
   sstable_wal_level_[0] =
       new L0ZnsSSTable(qpair_factory_, info, ranges[0].first, ranges[0].second);
   ranges_[0] = ranges[0];
-  for (int level = 1; level < 7; level++) {
+  for (size_t level = 1; level < ZnsConfig::level_count; level++) {
     sstable_wal_level_[level] = new LNZnsSSTable(
         qpair_factory_, info, ranges[level].first, ranges[level].second);
     ranges_[level] = ranges[level];
@@ -30,8 +31,8 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
 }
 
 ZNSSSTableManager::~ZNSSSTableManager() {
-  //printf("Deleting SSTable manager.\n");
-  for (int i = 0; i < 7; i++) {
+  // printf("Deleting SSTable manager.\n");
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     if (sstable_wal_level_[i] != nullptr) delete sstable_wal_level_[i];
   }
   qpair_factory_->Unref();
@@ -45,7 +46,7 @@ Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
 
 Status ZNSSSTableManager::WriteSSTable(size_t level, Slice content,
                                        SSZoneMetaData* meta) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->WriteSSTable(content, meta);
 }
 
@@ -62,19 +63,19 @@ Status ZNSSSTableManager::CopySSTable(size_t l1, size_t l2,
 }
 
 bool ZNSSSTableManager::EnoughSpaceAvailable(size_t level, Slice slice) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->EnoughSpaceAvailable(slice);
 }
 
 Status ZNSSSTableManager::InvalidateSSZone(size_t level, SSZoneMetaData* meta) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
 Status ZNSSSTableManager::InvalidateUpTo(size_t level, uint64_t tail) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
-  //printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
+  // printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
   if (tail < ranges_[level].first || tail > ranges_[level].second) {
     return Status::OK();
   }
@@ -98,13 +99,13 @@ Status ZNSSSTableManager::InvalidateUpTo(size_t level, uint64_t tail) {
 Status ZNSSSTableManager::Get(size_t level, const InternalKeyComparator& icmp,
                               const Slice& key_ptr, std::string* value_ptr,
                               SSZoneMetaData* meta, EntryStatus* status) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
 }
 
 Status ZNSSSTableManager::ReadSSTable(size_t level, Slice* sstable,
                                       SSZoneMetaData* meta) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->ReadSSTable(sstable, meta);
 }
 
@@ -113,29 +114,41 @@ L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() {
 }
 
 Iterator* ZNSSSTableManager::NewIterator(size_t level, SSZoneMetaData* meta) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->NewIterator(meta);
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(size_t level,
                                               SSZoneMetaData* meta) {
-  assert(level < 7);
+  assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->NewBuilder(meta);
 }
 
 void ZNSSSTableManager::EncodeTo(std::string* dst) {
-  for (int i = 0; i < 7; i++) {
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     sstable_wal_level_[i]->EncodeTo(dst);
   }
 }
+
 Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
   Slice input = Slice(data);
-  for (int i = 0; i < 7; i++) {
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     if (!sstable_wal_level_[i]->EncodeFrom(&input)) {
       return Status::Corruption("Corrupt level");
     }
   }
   return Status::OK();
+}
+
+double ZNSSSTableManager::GetFractionFilled(size_t level) {
+  assert(level < ZnsConfig::level_count);
+  uint64_t head = sstable_wal_level_[level]->GetHead();
+  uint64_t tail = sstable_wal_level_[level]->GetTail();
+  uint64_t sum =
+      head >= tail
+          ? (head - tail)
+          : (ranges_[level].second - tail + head - ranges_[level].first);
+  return sum / (ranges_[level].second - ranges_[level].first);
 }
 
 void ZNSSSTableManager::GetRange(int level,

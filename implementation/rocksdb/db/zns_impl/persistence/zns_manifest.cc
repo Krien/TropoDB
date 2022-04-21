@@ -32,7 +32,7 @@ ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
 }
 
 ZnsManifest::~ZnsManifest() {
-  //printf("Deleting manifest\n");
+  // printf("Deleting manifest\n");
   delete committer_;
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
@@ -70,6 +70,7 @@ Status ZnsManifest::ValidateManifestPointers() {
 }
 
 Status ZnsManifest::ReadManifest(std::string* manifest) {
+  printf("read manifest\n");
   Status s = ValidateManifestPointers();
   if (!s.ok()) {
     return s;
@@ -110,7 +111,7 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   // then install on storage
   std::string current_name = "CURRENT:";
   PutFixed64(&current_name, current);
-  //printf("Setting current to %lu: %s", write_head_, current_name.data());
+  // printf("Setting current to %lu: %s", write_head_, current_name.data());
   s = committer_->SafeCommit(Slice(current_name), &write_head_, min_zone_head_,
                              max_zone_head_);
   zone_head_ = (write_head_ / zone_size_) * zone_size_;

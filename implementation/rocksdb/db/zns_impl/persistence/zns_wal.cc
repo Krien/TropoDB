@@ -32,7 +32,7 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
 }
 
 ZNSWAL::~ZNSWAL() {
-  //printf("Deleting WAL.\n");
+  // printf("Deleting WAL.\n");
   delete committer_;
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
@@ -54,7 +54,7 @@ void ZNSWAL::Append(Slice data) {
 Status ZNSWAL::Reset() {
   Status s;
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
-       slba += lba_size_) {
+       slba += zone_size_) {
     s = ZnsDevice::z_reset(*qpair_, slba, false) == 0
             ? Status::OK()
             : Status::IOError("Reset WAL zone error");
@@ -120,5 +120,12 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
 }
 
 bool ZNSWAL::Empty() { return write_head_ == min_zone_head_; }
+
+bool ZNSWAL::SpaceLeft(const Slice& data) {
+  (void)data;
+  // TODO: this is not safe...
+  bool space_left = write_head_ + 26 < max_zone_head_;
+  return space_left;
+}
 
 }  // namespace ROCKSDB_NAMESPACE

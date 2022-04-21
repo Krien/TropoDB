@@ -3,6 +3,7 @@
 #ifndef ZNS_SSTABLE_MANAGER_H
 #define ZNS_SSTABLE_MANAGER_H
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/device_wrapper.h"
 #include "db/zns_impl/io/qpair_factory.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -18,9 +19,9 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {
  public:
-  ZNSSSTableManager(QPairFactory* qpair_factory,
-                    const ZnsDevice::DeviceInfo& info,
-                    std::pair<uint64_t, uint64_t> ranges[7]);
+  ZNSSSTableManager(
+      QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+      std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count]);
   ~ZNSSSTableManager();
 
   bool EnoughSpaceAvailable(size_t level, Slice slice);
@@ -38,16 +39,18 @@ class ZNSSSTableManager : public RefCounter {
   // Used for persistency
   void EncodeTo(std::string* dst);
   Status DecodeFrom(const Slice& data);
+  // Used for compaction
+  double GetFractionFilled(size_t level);
   // Used for cleaning
   void GetRange(int level, const std::vector<SSZoneMetaData*>& metas,
                 std::pair<uint64_t, uint64_t>* range);
 
  private:
   // wals
-  ZnsSSTable* sstable_wal_level_[7];
+  ZnsSSTable* sstable_wal_level_[ZnsConfig::level_count];
   // references
   QPairFactory* qpair_factory_;
-  std::pair<uint64_t, uint64_t> ranges_[7];
+  std::pair<uint64_t, uint64_t> ranges_[ZnsConfig::level_count];
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

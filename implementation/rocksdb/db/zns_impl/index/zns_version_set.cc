@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/zns_impl/index/zns_version_set.h"
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_compaction.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_edit.h"
@@ -72,7 +73,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   ZnsVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stuff
-  for (int level = 0; level < 7; level++) {
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData* m = ss[i];
@@ -100,8 +101,9 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   int best_level = -1;
   double best_score = -1;
   double score;
-  for (int i = 0; i < 7 - 1; i++) {
-    score = v->ss_[i].size() / (3 + i * 3);
+  for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
+    score =
+        znssstable_->GetFractionFilled(i) / ZnsConfig::ss_compact_treshold[i];
     if (score > best_score) {
       best_score = score;
       best_level = i;
@@ -235,7 +237,7 @@ Status ZnsVersionSet::Recover() {
 
   // Setup numbers, temporary hack...
   if (ss_number_ == 0) {
-    for (size_t i = 0; i < 7; i++) {
+    for (size_t i = 0; i < ZnsConfig::level_count; i++) {
       std::vector<SSZoneMetaData*>& m = current_->ss_[i];
       for (size_t j = 0; j < m.size(); j++) {
         ss_number_ = ss_number_ > m[j]->number ? ss_number_ : m[j]->number + 1;
@@ -247,7 +249,7 @@ Status ZnsVersionSet::Recover() {
 
 std::string ZnsVersionSet::DebugString() {
   std::string result;
-  for (size_t i = 0; i < 7; i++) {
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     std::vector<SSZoneMetaData*>& m = current_->ss_[i];
     result.append("\t" + std::to_string(i) + ": " + std::to_string(m.size()) +
                   "\n");

@@ -16,7 +16,7 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
       new MemTable(ikc, ioptions, MutableCFOptions(options), this->wb_,
                    kMaxSequenceNumber, 0 /* column_family_id */));
   mem_->GetMemTable()->Ref();
-  write_buffer_size_ = 4096 * 8;  // options.write_buffer_size;
+  write_buffer_size_ = options.write_buffer_size;  // options.write_buffer_size;
 }
 
 ZNSMemTable::~ZNSMemTable() {

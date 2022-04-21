@@ -1,3 +1,4 @@
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
@@ -9,13 +10,13 @@ ZnsVersionSet::Builder::Builder(ZnsVersionSet* vset, ZnsVersion* base)
   base_->Ref();
   BySmallestKey cmp;
   cmp.internal_comparator = &vset_->icmp_;
-  for (int level = 0; level < 7; level++) {
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     levels_[level].added_ss = new ZoneSet(cmp);
   }
 }
 
 ZnsVersionSet::Builder::~Builder() {
-  for (int level = 0; level < 7; level++) {
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     const ZoneSet* added = levels_[level].added_ss;
     std::vector<SSZoneMetaData*> to_unref;
     to_unref.reserve(added->size());
@@ -59,7 +60,7 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
 void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
   BySmallestKey cmp;
   cmp.internal_comparator = &vset_->icmp_;
-  for (int level = 0; level < 7; level++) {
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     // Merge the set of added files with the set of pre-existing files.
     // Drop any deleted files.  Store the result in *v.
     const std::vector<SSZoneMetaData*>& base_ss = base_->ss_[level];

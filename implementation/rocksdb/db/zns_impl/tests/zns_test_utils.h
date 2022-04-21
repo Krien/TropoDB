@@ -1,5 +1,6 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "test_util/testharness.h"
+#include "db/zns_impl/config.h"
 
 namespace ROCKSDB_NAMESPACE {
 struct Device {
@@ -26,7 +27,7 @@ static void SetupDev(Device* device, int first_zone, int last_zone,
   device->qpair_factory->Ref();
   ASSERT_EQ(device->qpair_factory->Getref(), 1);
   uint64_t zsize = (*device->device_manager)->info.zone_size;
-  std::pair<uint64_t, uint64_t> ranges[7] = {
+  std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count] = {
       std::make_pair(zsize * first_zone, zsize * last_zone),
       std::make_pair(zsize * last_zone, zsize * (last_zone + 5)),
       std::make_pair(zsize * (last_zone + 5), zsize * (last_zone + 10)),

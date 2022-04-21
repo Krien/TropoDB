@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/zns_impl/index/zns_version.h"
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
@@ -22,13 +23,13 @@ ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
       compaction_level_(-1) {}
 
 ZnsVersion::~ZnsVersion() {
-  //printf("Deleting version structure.\n");
+  // printf("Deleting version structure.\n");
   assert(refs_ == 0);
   // Remove from linked list
   prev_->next_ = next_;
   next_->prev_ = prev_;
   // Drop refs
-  for (int level = 0; level < 7; level++) {
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     for (size_t i = 0; i < ss_[level].size(); i++) {
       SSZoneMetaData* m = ss_[level][i];
       assert(m->refs > 0);
@@ -81,7 +82,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   }
 
   // Other levels
-  for (int level = 1; level < 7; ++level) {
+  for (size_t level = 1; level < ZnsConfig::level_count; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
     uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);

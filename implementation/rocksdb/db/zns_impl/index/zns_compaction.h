@@ -7,6 +7,7 @@
 #define ZNS_COMPACTION_H
 
 #include "db/dbformat.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_edit.h"
 #include "db/zns_impl/index/zns_version_set.h"
@@ -44,7 +45,7 @@ class ZnsCompaction {
   ZnsVersion* version_;
   ZnsVersionEdit edit_;
   std::vector<SSZoneMetaData*> targets_[2];
-  size_t level_ptrs_[7];
+  size_t level_ptrs_[ZnsConfig::level_count];
 };
 }  // namespace ROCKSDB_NAMESPACE
 

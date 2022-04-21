@@ -8,6 +8,7 @@
 
 #include "db/dbformat.h"
 #include "db/lookup_key.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/device_wrapper.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"
@@ -54,7 +55,7 @@ class ZnsVersion : public RefCounter {
   explicit ZnsVersion(ZnsVersionSet* vset);
   ~ZnsVersion();
 
-  std::vector<SSZoneMetaData*> ss_[7];
+  std::vector<SSZoneMetaData*> ss_[ZnsConfig::level_count];
   ZnsVersionSet* vset_;
   ZnsVersion* next_;
   ZnsVersion* prev_;

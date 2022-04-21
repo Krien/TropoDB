@@ -30,6 +30,7 @@ class ZNSWAL : public RefCounter {
   Status Recover();
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
   bool Empty();
+  bool SpaceLeft(const Slice& data);
 
  private:
   // data

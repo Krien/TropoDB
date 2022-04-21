@@ -16,6 +16,7 @@
 #include "db/column_family.h"
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_compaction.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
@@ -192,20 +193,21 @@ Status DBImplZNS::MakeRoomForWrite() {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
+  Slice stub;
   while (true) {
-    if (allow_delay && versions_->NumLevelZones(0) > 3) {
+    if (allow_delay && versions_->NeedsFlushing()) {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    } else if (!mem_->ShouldScheduleFlush()) {
+    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(stub)) {
       // space left in memory table
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
       // printf("is it done????\n");
       bg_work_finished_signal_.Wait();
-    } else if (versions_->NumLevelZones(0) > 3) {
+    } else if (versions_->NeedsFlushing()) {
       // printf("waiting for compaction\n");
       bg_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
@@ -341,7 +343,7 @@ Status DBImplZNS::RemoveObsoleteZones() {
   Status s = Status::OK();
   // // table files
   std::vector<std::pair<uint64_t, uint64_t>> ranges;
-  for (int i = 0; i < 7; i++) {
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     versions_->GetLiveZoneRanges(i, &ranges);
     s = ss_manager_->InvalidateUpTo(i, ranges.back().first);
     if (!s.ok()) return s;
@@ -383,24 +385,51 @@ Status DBImplZNS::OpenDevice() {
 Status DBImplZNS::InitDB(const DBOptions& options) {
   assert(device_manager_ != nullptr);
   ZnsDevice::DeviceInfo device_info = (*device_manager_)->info;
-  manifest_ = new ZnsManifest(qpair_factory_, device_info, 0,
-                              device_info.zone_size * 2);
+  manifest_ =
+      new ZnsManifest(qpair_factory_, device_info, 0,
+                      device_info.zone_size * ZnsConfig::manifest_zones);
   manifest_->Ref();
 
   wal_man_ =
-      new ZnsWALManager(qpair_factory_, device_info, device_info.zone_size * 5,
-                        device_info.zone_size * 15, 5);
+      new ZnsWALManager(qpair_factory_, device_info,
+                        device_info.zone_size * ZnsConfig::manifest_zones,
+                        device_info.zone_size * ZnsConfig::manifest_zones +
+                            device_info.zone_size * ZnsConfig::wal_count *
+                                ZnsConfig::zones_foreach_wal,
+                        ZnsConfig::wal_count);
   wal_man_->Ref();
 
-  uint64_t zsize = device_info.zone_size;
-  std::pair<uint64_t, uint64_t> ranges[7] = {
-      std::make_pair(zsize * 15, zsize * 20),
-      std::make_pair(zsize * 20, zsize * 25),
-      std::make_pair(zsize * 25, zsize * 30),
-      std::make_pair(zsize * 30, zsize * 35),
-      std::make_pair(zsize * 35, zsize * 40),
-      std::make_pair(zsize * 40, zsize * 45),
-      std::make_pair(zsize * 45, zsize * 50)};
+  std::pair<uint64_t, uint64_t>* ranges =
+      new std::pair<uint64_t, uint64_t>[ZnsConfig::level_count];
+  {
+    uint64_t nzones = device_info.lba_cap / device_info.zone_size;
+    uint64_t distr = 0;
+    for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+      distr += ZnsConfig::ss_distribution[i];
+    }
+    uint64_t distr_walker =
+        (ZnsConfig::manifest_zones +
+         ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal) *
+        device_info.zone_size;
+    uint64_t step = 0;
+    for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
+      step = (nzones / distr) * ZnsConfig::ss_distribution[i] *
+             device_info.zone_size;
+      step = (step / device_info.zone_size) < ZnsConfig::min_ss_zone_count
+                 ? ZnsConfig::min_ss_zone_count * device_info.zone_size
+                 : step;
+      ranges[i] = std::make_pair(distr_walker, distr_walker + step);
+      distr_walker += step;
+      printf("SS range  %lu %lu \n", ranges[i].first / device_info.zone_size,
+             ranges[i].second / device_info.zone_size);
+    }
+    step = (nzones * device_info.zone_size) - distr_walker;
+    ranges[ZnsConfig::level_count - 1] =
+        std::make_pair(distr_walker, distr_walker + step);
+    printf("SS range  %lu %lu \n",
+           ranges[ZnsConfig::level_count - 1].first / device_info.zone_size,
+           ranges[ZnsConfig::level_count - 1].second / device_info.zone_size);
+  }
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, device_info, ranges);
   ss_manager_->Ref();
 
@@ -517,6 +546,11 @@ Status DBImplZNS::Recover() {
   if (!s.ok()) {
     return options_.create_if_missing ? ResetDevice() : s;
   }
+  // TODO: currently this still writes a new version... if not an identical one.
+  if (options_.error_if_exists) {
+    return Status::InvalidArgument("DB already exists");
+  }
+
   // Recover WAL and head
   SequenceNumber old_seq;
   s = wal_man_->Recover(mem_, &old_seq);
