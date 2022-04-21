@@ -173,7 +173,6 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
     {
-      wal_->Ref();
       mutex_.Unlock();
       Slice log_entry = WriteBatchInternal::Contents(updates);
       wal_->Append(log_entry);
@@ -181,7 +180,6 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       assert(this->mem_ != nullptr);
       this->mem_->Write(options, updates);
       mutex_.Lock();
-      wal_->Unref();
     }
     versions_->SetLastSequence(last_sequence);
   }
@@ -214,7 +212,9 @@ Status DBImplZNS::MakeRoomForWrite() {
     } 
     else {
       // create new WAL
+      wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
+      wal_->Ref();
       printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
@@ -410,6 +410,7 @@ DBImplZNS::~DBImplZNS() {
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
   if (wal_man_ != nullptr) wal_man_->Unref();
+  if (wal_ != nullptr) wal_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
   if (qpair_factory_ != nullptr) qpair_factory_->Unref();
@@ -471,17 +472,27 @@ Status DBImplZNS::Open(
 Status DBImplZNS::Recover() {
   MutexLock l(&mutex_);
   Status s;
-  // WAL stuff
-
-  SequenceNumber seqa;
-  s = wal_man_->Recover(mem_, &seqa);
-  versions_->SetLastSequence(seqa);
-  wal_man_->ResetOldWALs(&mutex_); 
-  s = wal_man_->NewWAL(&mutex_, &wal_);
-
   // manifest stuff
   s = versions_->Recover();
   std::cout << versions_->DebugString();
+
+  // WAL stuff
+  SequenceNumber seqa;
+  s = wal_man_->Recover(mem_, &seqa);
+  versions_->SetLastSequence(seqa);
+  // Out of WAL space
+  if (!wal_man_->WALAvailable()) {
+    imm_ = mem_;
+    mem_ = new ZNSMemTable(options_, internal_comparator_);
+    mem_->Ref();
+    MaybeScheduleCompaction();
+    while (!wal_man_->WALAvailable()) {
+      bg_work_finished_signal_.Wait();
+    }
+  }
+  s = wal_man_->NewWAL(&mutex_, &wal_);
+  wal_->Ref();
+
   MaybeScheduleCompaction();
 
   return s;
