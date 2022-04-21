@@ -37,6 +37,9 @@
 #include <thread>
 #include <unordered_map>
 
+#ifdef ZNS_PLUGIN_ENABLED
+#include "db/zns_impl/db_impl_zns.h"
+#endif
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
 #include "db/version_set.h"
@@ -319,6 +322,10 @@ DEFINE_int64(max_scan_distance, 0,
 DEFINE_bool(use_uint64_comparator, false, "use Uint64 user comparator");
 
 DEFINE_int64(batch_size, 1, "Batch size");
+
+#ifdef ZNS_PLUGIN_ENABLED
+DEFINE_bool(use_zns, false, "use zns device implementation");
+#endif
 
 static bool ValidateKeySize(const char* /*flagname*/, int32_t /*value*/) {
   return true;
@@ -2481,7 +2488,9 @@ class Benchmark {
   bool report_file_operations_;
   bool use_blob_db_;  // Stacked BlobDB
   std::vector<std::string> keys_;
-
+#ifdef ZNS_PLUGIN_ENABLED
+  bool use_zns_;
+#endif
   class ErrorHandlerListener : public EventListener {
    public:
 #ifndef ROCKSDB_LITE
@@ -2869,10 +2878,14 @@ class Benchmark {
         merge_keys_(FLAGS_merge_keys < 0 ? FLAGS_num : FLAGS_merge_keys),
         report_file_operations_(FLAGS_report_file_operations),
 #ifndef ROCKSDB_LITE
-        use_blob_db_(FLAGS_use_blob_db)  // Stacked BlobDB
+        use_blob_db_(FLAGS_use_blob_db),  // Stacked BlobDB
 #else
-        use_blob_db_(false)  // Stacked BlobDB
+        use_blob_db_(false),  // Stacked BlobDB
 #endif  // !ROCKSDB_LITE
+#ifdef ZNS_PLUGIN_ENABLED
+        use_zns_(FLAGS_use_zns)
+#endif
+
   {
     // use simcache instead of cache
     if (FLAGS_simcache_size >= 0) {
@@ -4251,6 +4264,10 @@ class Benchmark {
       exit(1);
     }
 #endif  // ROCKSDB_LITE
+
+#ifdef ZNS_PLUGIN_ENABLED
+  options.use_zns_impl = FLAGS_use_zns;
+#endif
 
   }
 

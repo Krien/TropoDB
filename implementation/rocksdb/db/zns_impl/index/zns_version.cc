@@ -22,7 +22,7 @@ ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
       compaction_level_(-1) {}
 
 ZnsVersion::~ZnsVersion() {
-  printf("Deleting version structure.\n");
+  //printf("Deleting version structure.\n");
   assert(refs_ == 0);
   // Remove from linked list
   prev_->next_ = next_;

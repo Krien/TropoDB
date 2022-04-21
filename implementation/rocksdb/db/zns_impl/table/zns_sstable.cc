@@ -25,7 +25,7 @@ ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory,
 }
 
 ZnsSSTable::~ZnsSSTable() {
-  printf("Deleting SSTable WAL.\n");
+  //printf("Deleting SSTable WAL.\n");
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);
     delete qpair_;

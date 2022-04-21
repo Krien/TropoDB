@@ -203,20 +203,20 @@ Status DBImplZNS::MakeRoomForWrite() {
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
-      printf("is it done????\n");
+      //printf("is it done????\n");
       bg_work_finished_signal_.Wait();
     } else if (versions_->NumLevelZones(0) > 3) {
-      printf("waiting for compaction\n");
+      //printf("waiting for compaction\n");
       bg_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
-      printf("waiting for WAL clearing\n");
+      //printf("waiting for WAL clearing\n");
       bg_work_finished_signal_.Wait();
     } else {
       // create new WAL
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
       wal_->Ref();
-      printf("Reset WAL\n");
+      //printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
@@ -228,7 +228,7 @@ Status DBImplZNS::MakeRoomForWrite() {
 }
 
 void DBImplZNS::MaybeScheduleCompaction(bool force) {
-  printf("Scheduling?\n");
+  //printf("Scheduling?\n");
   mutex_.AssertHeld();
   if (bg_compaction_scheduled_) {
     return;
@@ -250,7 +250,7 @@ void DBImplZNS::BackgroundCall() {
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   {
-    printf("starting background work\n");
+    //printf("starting background work\n");
     BackgroundCompaction();
   }
   bg_compaction_scheduled_ = false;
@@ -264,12 +264,12 @@ void DBImplZNS::BackgroundCompaction() {
   mutex_.AssertHeld();
   Status s;
   if (imm_ != nullptr) {
-    printf("  Compact memtable...\n");
+    //printf("  Compact memtable...\n");
     s = CompactMemtable();
     return;
   }
   if (!wal_man_->WALAvailable()) {
-    printf(" Trying to free WALS...\n");
+    //printf(" Trying to free WALS...\n");
     s = wal_man_->ResetOldWALs(&mutex_);
     return;
   }
@@ -278,7 +278,7 @@ void DBImplZNS::BackgroundCompaction() {
   mutex_.Unlock();
   ZnsVersionEdit edit;
   {
-    printf("  Compact LN...\n");
+    //printf("  Compact LN...\n");
     ZnsCompaction compaction(versions_);
     versions_->Compact(&compaction);
     compaction.MarkStaleTargetsReusable(&edit);
@@ -295,7 +295,7 @@ void DBImplZNS::BackgroundCompaction() {
   }
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? RemoveObsoleteZones() : s;
-  printf("Compacted!!\n");
+  //printf("Compacted!!\n");
 }
 
 Status DBImplZNS::CompactMemtable() {
@@ -323,7 +323,7 @@ Status DBImplZNS::CompactMemtable() {
     s = wal_man_->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
     s = RemoveObsoleteZones();
-    printf("Flushed!!\n");
+    //printf("Flushed!!\n");
   }
   return s;
 }
@@ -425,17 +425,16 @@ Status DBImplZNS::ResetDevice() {
 DBImplZNS::~DBImplZNS() {
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
-    printf("busy, wait before closing\n");
+    //printf("busy, wait before closing\n");
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
-  std::cout << versions_->DebugString();
+  //std::cout << versions_->DebugString();
 
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
   if (wal_man_ != nullptr) wal_man_->Unref();
-  if (wal_ != nullptr) wal_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
   if (qpair_factory_ != nullptr) qpair_factory_->Unref();
@@ -443,6 +442,7 @@ DBImplZNS::~DBImplZNS() {
     ZnsDevice::z_shutdown(*device_manager_);
     free(device_manager_);
   }
+  //printf("exiting \n");
 }
 
 Status DBImplZNS::Open(
@@ -499,7 +499,7 @@ Status DBImplZNS::Recover() {
   Status s;
   // manifest stuff
   s = versions_->Recover();
-  std::cout << versions_->DebugString();
+  //std::cout << versions_->DebugString();
 
   // WAL stuff
   SequenceNumber old_seq;
@@ -507,9 +507,11 @@ Status DBImplZNS::Recover() {
   versions_->SetLastSequence(old_seq);
   // Out of WAL space
   if (!wal_man_->WALAvailable() || !wal_man_->SafeToDiscard()) {
-    imm_ = mem_;
-    mem_ = new ZNSMemTable(options_, internal_comparator_);
-    mem_->Ref();
+    if (mem_->GetInternalSize() > 0) {
+      imm_ = mem_;
+      mem_ = new ZNSMemTable(options_, internal_comparator_);
+      mem_->Ref();
+    }
     MaybeScheduleCompaction(false);
     while (!wal_man_->WALAvailable()) {
       bg_work_finished_signal_.Wait();
@@ -779,7 +781,7 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   if (!s.ok()) return s;
   s = impl->ResetDevice();
   if (!s.ok()) return s;
-  printf("Reset device\n");
+  //printf("Reset device\n");
   delete impl;
   return s;
 }

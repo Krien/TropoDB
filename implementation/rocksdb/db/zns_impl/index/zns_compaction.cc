@@ -15,7 +15,7 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
-  printf("Compacting from <%d>\n", first_level_);
+  //printf("Compacting from <%d>\n", first_level_);
   for (int i = 0; i < 7; i++) {
     level_ptrs_[i] = 0;
   }
@@ -83,7 +83,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
     iterators[iterator_index++] = new LNIterator(
         new LNZoneIterator(vset_->icmp_, &targets_[i], first_level_ + i),
         &GetLNIterator, vset_->znssstable_);
-    printf("Iterators... %d %lu\n", i, iterators_needed);
+    //printf("Iterators... %d %lu\n", i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }
@@ -107,8 +107,8 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   SSTableBuilder* current_builder = *builder;
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  printf("adding... %u %lu %lu\n", first_level_ + 1, meta->lba,
-         meta->lba_count);
+  //printf("adding... %u %lu %lu\n", first_level_ + 1, meta->lba,
+  //       meta->lba_count);
   edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
                         meta->lba_count, meta->numbers, meta->smallest,
                         meta->largest);
@@ -140,7 +140,7 @@ bool ZnsCompaction::IsBaseLevelForKey(const Slice& user_key) {
 }
 
 Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
-  printf("Starting compaction..\n");
+  //printf("Starting compaction..\n");
   Status s = Status::OK();
   {
     SSZoneMetaData meta;

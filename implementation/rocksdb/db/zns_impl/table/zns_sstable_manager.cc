@@ -30,7 +30,7 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
 }
 
 ZNSSSTableManager::~ZNSSSTableManager() {
-  printf("Deleting SSTable manager.\n");
+  //printf("Deleting SSTable manager.\n");
   for (int i = 0; i < 7; i++) {
     if (sstable_wal_level_[i] != nullptr) delete sstable_wal_level_[i];
   }
@@ -74,7 +74,7 @@ Status ZNSSSTableManager::InvalidateSSZone(size_t level, SSZoneMetaData* meta) {
 Status ZNSSSTableManager::InvalidateUpTo(size_t level, uint64_t tail) {
   assert(level < 7);
   SSZoneMetaData meta;
-  printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
+  //printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
   if (tail < ranges_[level].first || tail > ranges_[level].second) {
     return Status::OK();
   }

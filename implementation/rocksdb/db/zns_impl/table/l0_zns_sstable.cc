@@ -252,7 +252,7 @@ Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   write_tail_ = end_lba;
   uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
   for (uint64_t i = zone_tail_; i < cur_zone; i += lba_size_) {
-    printf("resetting zone %lu \n", i);
+    //printf("resetting zone %lu \n", i);
     int rc = ZnsDevice::z_reset(*qpair_, i, false);
     if (rc != 0) {
       return Status::IOError("Error resetting SSTable tail");

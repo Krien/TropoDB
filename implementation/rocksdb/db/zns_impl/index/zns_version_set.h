@@ -60,7 +60,7 @@ class ZnsVersionSet {
   }
 
   bool NeedsCompaction() const {
-    printf("Score %f \n", current_->compaction_score_);
+    //printf("Score %f \n", current_->compaction_score_);
     return current_->compaction_score_ >= 1;
   }
 

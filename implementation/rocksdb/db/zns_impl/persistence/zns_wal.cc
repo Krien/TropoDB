@@ -32,7 +32,7 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
 }
 
 ZNSWAL::~ZNSWAL() {
-  printf("Deleting WAL.\n");
+  //printf("Deleting WAL.\n");
   delete committer_;
   if (qpair_ != nullptr) {
     qpair_factory_->unregister_qpair(*qpair_);

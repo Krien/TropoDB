@@ -35,14 +35,14 @@ ZnsWALManager::ZnsWALManager(QPairFactory* qpair_factory,
 }
 
 ZnsWALManager::~ZnsWALManager() {
-  printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
+  //printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
   for (auto i = wals.begin(); i != wals.end(); ++i) {
-    (*i)->Unref();
+    if ((*i)!=nullptr) (*i)->Unref();
   }
 }
 
 bool ZnsWALManager::WALAvailable() {
-  printf("Checking for WAL space %lu %lu\n", wal_head_, wal_tail_);
+  //printf("Checking for WAL space %lu %lu\n", wal_head_, wal_tail_);
   // not allowed to happen
   if (wal_head_ == wal_tail_) {
     assert(false);
@@ -132,7 +132,7 @@ Status ZnsWALManager::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
   if (wal_head_ >= wal_count_) {
     wal_head_ = 0;
   }
-  printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
+  //printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
 
   // Replay from head to tail, to be sure replay all for now...
   size_t i = wal_head_ == 0 ? wal_count_ - 1 : wal_head_ - 1;
