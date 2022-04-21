@@ -203,20 +203,20 @@ Status DBImplZNS::MakeRoomForWrite() {
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
-      //printf("is it done????\n");
+      // printf("is it done????\n");
       bg_work_finished_signal_.Wait();
     } else if (versions_->NumLevelZones(0) > 3) {
-      //printf("waiting for compaction\n");
+      // printf("waiting for compaction\n");
       bg_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
-      //printf("waiting for WAL clearing\n");
+      // printf("waiting for WAL clearing\n");
       bg_work_finished_signal_.Wait();
     } else {
       // create new WAL
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
       wal_->Ref();
-      //printf("Reset WAL\n");
+      // printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
@@ -228,7 +228,7 @@ Status DBImplZNS::MakeRoomForWrite() {
 }
 
 void DBImplZNS::MaybeScheduleCompaction(bool force) {
-  //printf("Scheduling?\n");
+  // printf("Scheduling?\n");
   mutex_.AssertHeld();
   if (bg_compaction_scheduled_) {
     return;
@@ -250,7 +250,7 @@ void DBImplZNS::BackgroundCall() {
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   {
-    //printf("starting background work\n");
+    // printf("starting background work\n");
     BackgroundCompaction();
   }
   bg_compaction_scheduled_ = false;
@@ -264,12 +264,12 @@ void DBImplZNS::BackgroundCompaction() {
   mutex_.AssertHeld();
   Status s;
   if (imm_ != nullptr) {
-    //printf("  Compact memtable...\n");
+    // printf("  Compact memtable...\n");
     s = CompactMemtable();
     return;
   }
   if (!wal_man_->WALAvailable()) {
-    //printf(" Trying to free WALS...\n");
+    // printf(" Trying to free WALS...\n");
     s = wal_man_->ResetOldWALs(&mutex_);
     return;
   }
@@ -278,7 +278,7 @@ void DBImplZNS::BackgroundCompaction() {
   mutex_.Unlock();
   ZnsVersionEdit edit;
   {
-    //printf("  Compact LN...\n");
+    // printf("  Compact LN...\n");
     ZnsCompaction compaction(versions_);
     versions_->Compact(&compaction);
     compaction.MarkStaleTargetsReusable(&edit);
@@ -295,7 +295,7 @@ void DBImplZNS::BackgroundCompaction() {
   }
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? RemoveObsoleteZones() : s;
-  //printf("Compacted!!\n");
+  // printf("Compacted!!\n");
 }
 
 Status DBImplZNS::CompactMemtable() {
@@ -323,7 +323,7 @@ Status DBImplZNS::CompactMemtable() {
     s = wal_man_->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
     s = RemoveObsoleteZones();
-    //printf("Flushed!!\n");
+    // printf("Flushed!!\n");
   }
   return s;
 }
@@ -353,7 +353,7 @@ Status DBImplZNS::Merge(const WriteOptions& options,
                         ColumnFamilyHandle* column_family, const Slice& key,
                         const Slice& value) {
   return Status::OK();
-};
+}
 
 bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
   return false;
@@ -403,8 +403,10 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
       std::make_pair(zsize * 45, zsize * 50)};
   ss_manager_ = new ZNSSSTableManager(qpair_factory_, device_info, ranges);
   ss_manager_->Ref();
+
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();
+
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
                                 device_info.lba_size);
   return Status::OK();
@@ -425,11 +427,11 @@ Status DBImplZNS::ResetDevice() {
 DBImplZNS::~DBImplZNS() {
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
-    //printf("busy, wait before closing\n");
+    // printf("busy, wait before closing\n");
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
-  //std::cout << versions_->DebugString();
+  // std::cout << versions_->DebugString();
 
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
@@ -442,7 +444,7 @@ DBImplZNS::~DBImplZNS() {
     ZnsDevice::z_shutdown(*device_manager_);
     free(device_manager_);
   }
-  //printf("exiting \n");
+  // printf("exiting \n");
 }
 
 Status DBImplZNS::Open(
@@ -464,7 +466,22 @@ Status DBImplZNS::Open(
   s = impl->InitDB(db_options);
   if (!s.ok()) return s;
   // setup WAL (WAL DIR)
-  impl->Recover();
+  impl->mutex_.Lock();
+  s = impl->Recover();
+  if (s.ok()) {
+    s = impl->InitWAL();
+  }
+  if (s.ok()) {
+    impl->RemoveObsoleteZones();
+    impl->MaybeScheduleCompaction(false);
+  }
+  impl->mutex_.Unlock();
+  if (s.ok()) {
+    *dbptr = reinterpret_cast<DB*>(impl);
+  } else {
+    delete impl;
+  }
+  return s;
   // recover?
   //  !readonly: set directories, lockfile and check if current manifest exists
   //  create_if_missing (NewDB). verify options and system compability readonly
@@ -475,54 +492,56 @@ Status DBImplZNS::Open(
   // mutex
   // s = impl->Recover(column_families, false, false, false, &recovered_seq);
 
-  if (s.ok()) {
-    // do something
-    // new wall with higher version? max_write_buffer_size
-    // increment superversion
-  }
+  // if (s.ok()) {
+  // do something
+  // new wall with higher version? max_write_buffer_size
+  // increment superversion
+  //}
   // write options file
-  if (s.ok()) {
-    // persist_options_status = impl->WriteOptionsFile(
-    //     false /*need_mutex_lock*/, false /*need_enter_write_thread*/);
-    // // delete obsolete files, maybe schedule or flush
-    *dbptr = (DB*)impl;
-  }
+  // if (s.ok()) {
+  // persist_options_status = impl->WriteOptionsFile(
+  //     false /*need_mutex_lock*/, false /*need_enter_write_thread*/);
+  // // delete obsolete files, maybe schedule or flush
+  //}
 
   // get live files metadata
 
   // reserve disk bufferspace
-  return s;
 }
 
 Status DBImplZNS::Recover() {
-  MutexLock l(&mutex_);
   Status s;
-  // manifest stuff
+  // Recover index structure
   s = versions_->Recover();
-  //std::cout << versions_->DebugString();
-
-  // WAL stuff
+  // If there is no version to be recovered, we assume there is no valid DB.
+  if (!s.ok()) {
+    return options_.create_if_missing ? ResetDevice() : s;
+  }
+  // Recover WAL and head
   SequenceNumber old_seq;
   s = wal_man_->Recover(mem_, &old_seq);
+  if (!s.ok()) return s;
   versions_->SetLastSequence(old_seq);
-  // Out of WAL space
+  return s;
+}
+
+Status DBImplZNS::InitWAL() {
+  mutex_.AssertHeld();
+  Status s;
+  // We must force flush all WALs if there is not enough space.
   if (!wal_man_->WALAvailable() || !wal_man_->SafeToDiscard()) {
     if (mem_->GetInternalSize() > 0) {
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
       mem_->Ref();
     }
-    MaybeScheduleCompaction(false);
+    MaybeScheduleCompaction(true);
     while (!wal_man_->WALAvailable()) {
       bg_work_finished_signal_.Wait();
     }
   }
   s = wal_man_->NewWAL(&mutex_, &wal_);
   wal_->Ref();
-
-  RemoveObsoleteZones();
-  MaybeScheduleCompaction(false);
-
   return s;
 }
 
@@ -781,7 +800,7 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   if (!s.ok()) return s;
   s = impl->ResetDevice();
   if (!s.ok()) return s;
-  //printf("Reset device\n");
+  // printf("Reset device\n");
   delete impl;
   return s;
 }

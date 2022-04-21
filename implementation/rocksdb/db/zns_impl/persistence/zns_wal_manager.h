@@ -34,7 +34,7 @@ class ZnsWALManager : public RefCounter {
     if (wal_head_ >= wal_tail_) {
       return (wal_head_ - wal_tail_) == 1;
     } else {
-      return (wal_head_ == wal_count_ - 1 && wal_tail_ == 0);
+      return (wal_head_ == 0 && wal_tail_ == wal_count_ - 1);
     }
   }
 

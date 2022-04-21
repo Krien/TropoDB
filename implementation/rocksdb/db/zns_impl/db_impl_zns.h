@@ -111,6 +111,7 @@ class DBImplZNS : public DB {
   Status ResetDevice();
   Status InitDB(const DBOptions& options);
   Status Recover();
+  Status InitWAL();
 
   Status MakeRoomForWrite();
   void MaybeScheduleCompaction(bool force);
