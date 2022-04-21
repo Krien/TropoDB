@@ -43,6 +43,8 @@ class ZnsSSTable {
   virtual Iterator* NewIterator(SSZoneMetaData* meta) = 0;
   virtual void EncodeTo(std::string* dst) = 0;
   virtual bool EncodeFrom(Slice* data) = 0;
+  inline uint64_t GetTail() { return write_tail_; }
+  inline uint64_t GetHead() { return write_head_; }
 
  protected:
   friend class SSTableBuilder;

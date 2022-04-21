@@ -30,6 +30,13 @@ class ZnsWALManager : public RefCounter {
   Status MarkWALBacked(port::Mutex* mutex_);
   Status ResetOldWALs(port::Mutex* mutex_);
   Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
+  bool SafeToDiscard() {
+    if (wal_head_ >= wal_tail_) {
+      return (wal_head_ - wal_tail_) == 1;
+    } else {
+      return (wal_head_ == wal_count_ - 1 && wal_tail_ == 0);
+    }
+  }
 
  private:
   std::vector<ZNSWAL*> wals;

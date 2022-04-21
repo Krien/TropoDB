@@ -21,9 +21,11 @@ ZNSSSTableManager::ZNSSSTableManager(QPairFactory* qpair_factory,
   qpair_factory_->Ref();
   sstable_wal_level_[0] =
       new L0ZnsSSTable(qpair_factory_, info, ranges[0].first, ranges[0].second);
+  ranges_[0] = ranges[0];
   for (int level = 1; level < 7; level++) {
     sstable_wal_level_[level] = new LNZnsSSTable(
         qpair_factory_, info, ranges[level].first, ranges[level].second);
+    ranges_[level] = ranges[level];
   }
 }
 
@@ -69,6 +71,30 @@ Status ZNSSSTableManager::InvalidateSSZone(size_t level, SSZoneMetaData* meta) {
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
+Status ZNSSSTableManager::InvalidateUpTo(size_t level, uint64_t tail) {
+  assert(level < 7);
+  SSZoneMetaData meta;
+  printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
+  if (tail < ranges_[level].first || tail > ranges_[level].second) {
+    return Status::OK();
+  }
+  if (tail > sstable_wal_level_[level]->GetTail()) {
+    meta.lba = sstable_wal_level_[level]->GetTail();
+    meta.lba_count = tail - sstable_wal_level_[level]->GetTail();
+    return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+  } else if (tail < sstable_wal_level_[level]->GetTail()) {
+    meta.lba = sstable_wal_level_[level]->GetTail();
+    meta.lba_count =
+        ranges_[level].second - sstable_wal_level_[level]->GetTail();
+    Status s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    if (!s.ok()) return s;
+    meta.lba = ranges_[level].first;
+    meta.lba_count = tail - ranges_[level].first;
+    return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+  }
+  return Status::OK();
+}
+
 Status ZNSSSTableManager::Get(size_t level, const InternalKeyComparator& icmp,
                               const Slice& key_ptr, std::string* value_ptr,
                               SSZoneMetaData* meta, EntryStatus* status) {
@@ -110,5 +136,39 @@ Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
     }
   }
   return Status::OK();
+}
+
+void ZNSSSTableManager::GetRange(int level,
+                                 const std::vector<SSZoneMetaData*>& metas,
+                                 std::pair<uint64_t, uint64_t>* range) {
+  // if (metas.size() > 1) {
+  //   *range = std::make_pair(metas[metas.size()-1]->lba,
+  //   metas[0]->lba+metas[0]->lba_count);
+  // }
+  uint64_t lowest = 0, lowest_res = 0;
+  uint64_t highest = 0, highest_res = 0;
+  bool first = false;
+
+  for (auto n = metas.begin(); n != metas.end(); n++) {
+    if (!first) {
+      lowest = (*n)->number;
+      lowest_res = (*n)->lba;
+      highest = (*n)->number;
+      highest_res = (*n)->lba;
+      first = true;
+    }
+    if (lowest > (*n)->number) {
+      lowest = (*n)->number;
+      lowest_res = (*n)->lba;
+    }
+    if (highest < (*n)->number) {
+      highest = (*n)->number;
+      highest_res = (*n)->lba;
+    }
+  }
+  if (first) {
+    *range = std::make_pair(lowest_res, highest_res);
+  }
+  // TODO: higher levels will need more info.
 }
 }  // namespace ROCKSDB_NAMESPACE

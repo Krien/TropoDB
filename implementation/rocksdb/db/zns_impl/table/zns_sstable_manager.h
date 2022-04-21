@@ -31,18 +31,23 @@ class ZNSSSTableManager : public RefCounter {
   Status Get(size_t level, const InternalKeyComparator& icmp, const Slice& key,
              std::string* value, SSZoneMetaData* meta, EntryStatus* entry);
   Status InvalidateSSZone(size_t level, SSZoneMetaData* meta);
+  Status InvalidateUpTo(size_t level, uint64_t tail);
   L0ZnsSSTable* GetL0SSTableLog();
   Iterator* NewIterator(size_t level, SSZoneMetaData* meta);
   SSTableBuilder* NewBuilder(size_t level, SSZoneMetaData* meta);
   // Used for persistency
   void EncodeTo(std::string* dst);
   Status DecodeFrom(const Slice& data);
+  // Used for cleaning
+  void GetRange(int level, const std::vector<SSZoneMetaData*>& metas,
+                std::pair<uint64_t, uint64_t>* range);
 
  private:
   // wals
   ZnsSSTable* sstable_wal_level_[7];
   // references
   QPairFactory* qpair_factory_;
+  std::pair<uint64_t, uint64_t> ranges_[7];
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

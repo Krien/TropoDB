@@ -176,6 +176,8 @@ bool L0ZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
 
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   if (!ValidateReadAddress(meta)) {
+    printf("corrupt\n");
+    printf("MEta %lu %lu %lu\n", meta->lba, meta->lba_count, write_tail_);
     return Status::Corruption("Invalid metadata");
   }
   // Lba by lba...
@@ -247,11 +249,11 @@ Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   if (end_lba > max_zone_head_) {
     return Status::InvalidArgument("end lba is malformed");
   }
-
   write_tail_ = end_lba;
   uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
   for (uint64_t i = zone_tail_; i < cur_zone; i += lba_size_) {
-    int rc = ZnsDevice::z_reset(*qpair_, zone_tail_, false);
+    printf("resetting zone %lu \n", i);
+    int rc = ZnsDevice::z_reset(*qpair_, i, false);
     if (rc != 0) {
       return Status::IOError("Error resetting SSTable tail");
     }

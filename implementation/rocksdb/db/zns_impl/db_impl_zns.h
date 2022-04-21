@@ -113,12 +113,13 @@ class DBImplZNS : public DB {
   Status Recover();
 
   Status MakeRoomForWrite();
-  void MaybeScheduleCompaction();
+  void MaybeScheduleCompaction(bool force);
   static void BGWork(void* db);
   void BackgroundCall();
   void BackgroundCompaction();
   Status CompactMemtable();
   Status FlushL0SSTables(SSZoneMetaData* meta);
+  Status RemoveObsoleteZones();
 
   using DB::Get;
   Status Get(const ReadOptions& options, const Slice& key,
@@ -311,6 +312,7 @@ class DBImplZNS : public DB {
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;
+  bool forced_schedule_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 namespace ZnsDevice {

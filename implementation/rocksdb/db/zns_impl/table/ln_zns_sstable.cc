@@ -113,6 +113,7 @@ Status LNZnsSSTable::SetWriteAddress(Slice slice) {
 Status LNZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!SetWriteAddress(content).ok()) {
+    printf("OUT OF SPACE...\n");
     return Status::IOError("Not enough space available for L0");
   }
   uint64_t zcalloc_size;
@@ -252,7 +253,8 @@ Status LNZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   write_tail_ = end_lba;
   uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
   for (uint64_t i = zone_tail_; i < cur_zone; i += lba_size_) {
-    int rc = ZnsDevice::z_reset(*qpair_, zone_tail_, false);
+    printf("resetting zone %lu \n", i);
+    int rc = ZnsDevice::z_reset(*qpair_, i, false);
     if (rc != 0) {
       return Status::IOError("Error resetting SSTable tail");
     }

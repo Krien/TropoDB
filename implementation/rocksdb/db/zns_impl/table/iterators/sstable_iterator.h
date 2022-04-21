@@ -21,7 +21,7 @@ class SSTableIterator : public Iterator {
  public:
   SSTableIterator(char* data, size_t count, NextPair nextf);
   ~SSTableIterator();
-  bool Valid() const override { return index_ <= count_; }
+  bool Valid() const override { return index_ <= count_ && count_ > 0; }
   Slice key() const override {
     assert(Valid());
     return current_key_;

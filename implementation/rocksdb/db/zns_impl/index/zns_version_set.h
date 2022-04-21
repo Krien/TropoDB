@@ -36,6 +36,9 @@ class ZnsVersionSet {
   Status LogAndApply(ZnsVersionEdit* edit);
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
+  void GetLiveZoneRanges(size_t level,
+                         std::vector<std::pair<uint64_t, uint64_t>>* ranges);
+
   inline ZnsVersion* current() { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
   inline void SetLastSequence(uint64_t s) {
@@ -78,6 +81,7 @@ class ZnsVersionSet {
   Status DecodeFrom(const Slice& input, ZnsVersionEdit* edit,
                     ZNSSSTableManager* man);
 
+  ZnsVersion dummy_versions_;
   ZnsVersion* current_;
   const InternalKeyComparator icmp_;
   ZNSSSTableManager* znssstable_;

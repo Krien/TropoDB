@@ -42,6 +42,7 @@ ZnsWALManager::~ZnsWALManager() {
 }
 
 bool ZnsWALManager::WALAvailable() {
+  printf("Checking for WAL space %lu %lu\n", wal_head_, wal_tail_);
   // not allowed to happen
   if (wal_head_ == wal_tail_) {
     assert(false);
@@ -60,6 +61,10 @@ Status ZnsWALManager::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
     return Status::Busy();
   }
   *wal = wals[wal_head_];
+  if (!(*wal)->Empty()) {
+    assert(false);
+    printf("Fatal error, old WAL found\n");
+  }
   wal_head_++;
   if (wal_head_ == wal_count_) {
     wal_head_ = 0;

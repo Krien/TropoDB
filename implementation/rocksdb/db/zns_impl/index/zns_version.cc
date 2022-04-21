@@ -15,11 +15,19 @@ namespace ROCKSDB_NAMESPACE {
 ZnsVersion::ZnsVersion() { Clear(); }
 
 ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
-    : vset_(vset), compaction_score_(-1), compaction_level_(-1) {}
+    : vset_(vset),
+      next_(this),
+      prev_(this),
+      compaction_score_(-1),
+      compaction_level_(-1) {}
 
 ZnsVersion::~ZnsVersion() {
   printf("Deleting version structure.\n");
   assert(refs_ == 0);
+  // Remove from linked list
+  prev_->next_ = next_;
+  next_->prev_ = prev_;
+  // Drop refs
   for (int level = 0; level < 7; level++) {
     for (size_t i = 0; i < ss_[level].size(); i++) {
       SSZoneMetaData* m = ss_[level][i];

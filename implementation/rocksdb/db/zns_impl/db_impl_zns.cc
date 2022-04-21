@@ -211,8 +211,7 @@ Status DBImplZNS::MakeRoomForWrite() {
     } else if (!wal_man_->WALAvailable()) {
       printf("waiting for WAL clearing\n");
       bg_work_finished_signal_.Wait();
-    } 
-    else {
+    } else {
       // create new WAL
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
@@ -222,21 +221,23 @@ Status DBImplZNS::MakeRoomForWrite() {
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
       mem_->Ref();
-      MaybeScheduleCompaction();
+      MaybeScheduleCompaction(false);
     }
   }
   return Status::OK();
 }
 
-void DBImplZNS::MaybeScheduleCompaction() {
+void DBImplZNS::MaybeScheduleCompaction(bool force) {
   printf("Scheduling?\n");
   mutex_.AssertHeld();
   if (bg_compaction_scheduled_) {
     return;
   }
-  if (imm_ == nullptr && !versions_->NeedsCompaction() && wal_man_->WALAvailable()) {
+  if (!force && imm_ == nullptr && !versions_->NeedsCompaction() &&
+      wal_man_->WALAvailable()) {
     return;
   }
+  forced_schedule_ = force;
   bg_compaction_scheduled_ = true;
   env_->Schedule(&DBImplZNS::BGWork, this, rocksdb::Env::HIGH);
 }
@@ -253,8 +254,9 @@ void DBImplZNS::BackgroundCall() {
     BackgroundCompaction();
   }
   bg_compaction_scheduled_ = false;
+  forced_schedule_ = false;
   // cascading.
-  MaybeScheduleCompaction();
+  MaybeScheduleCompaction(false);
   bg_work_finished_signal_.SignalAll();
 }
 
@@ -269,6 +271,7 @@ void DBImplZNS::BackgroundCompaction() {
   if (!wal_man_->WALAvailable()) {
     printf(" Trying to free WALS...\n");
     s = wal_man_->ResetOldWALs(&mutex_);
+    return;
   }
   // Compaction itself does not require a lock. only once the changes become
   // visible.
@@ -291,7 +294,7 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
-  // s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+  s = s.ok() ? RemoveObsoleteZones() : s;
   printf("Compacted!!\n");
 }
 
@@ -316,7 +319,10 @@ Status DBImplZNS::CompactMemtable() {
     }
     imm_->Unref();
     imm_ = nullptr;
+    // wal
     s = wal_man_->ResetOldWALs(&mutex_);
+    if (!s.ok()) return s;
+    s = RemoveObsoleteZones();
     printf("Flushed!!\n");
   }
   return s;
@@ -327,6 +333,19 @@ Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
   ss_manager_->Ref();
   s = ss_manager_->FlushMemTable(imm_, meta);
   ss_manager_->Unref();
+  return s;
+}
+
+Status DBImplZNS::RemoveObsoleteZones() {
+  mutex_.AssertHeld();
+  Status s = Status::OK();
+  // // table files
+  std::vector<std::pair<uint64_t, uint64_t>> ranges;
+  for (int i = 0; i < 7; i++) {
+    versions_->GetLiveZoneRanges(i, &ranges);
+    s = ss_manager_->InvalidateUpTo(i, ranges.back().first);
+    if (!s.ok()) return s;
+  }
   return s;
 }
 
@@ -368,9 +387,9 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
                               device_info.zone_size * 2);
   manifest_->Ref();
 
-  wal_man_ = new ZnsWALManager(qpair_factory_, device_info, device_info.zone_size * 5,
-                    device_info.zone_size * 15, 5 
-  );
+  wal_man_ =
+      new ZnsWALManager(qpair_factory_, device_info, device_info.zone_size * 5,
+                        device_info.zone_size * 15, 5);
   wal_man_->Ref();
 
   uint64_t zsize = device_info.zone_size;
@@ -483,15 +502,15 @@ Status DBImplZNS::Recover() {
   std::cout << versions_->DebugString();
 
   // WAL stuff
-  SequenceNumber seqa;
-  s = wal_man_->Recover(mem_, &seqa);
-  versions_->SetLastSequence(seqa);
+  SequenceNumber old_seq;
+  s = wal_man_->Recover(mem_, &old_seq);
+  versions_->SetLastSequence(old_seq);
   // Out of WAL space
-  if (!wal_man_->WALAvailable()) {
+  if (!wal_man_->WALAvailable() || !wal_man_->SafeToDiscard()) {
     imm_ = mem_;
     mem_ = new ZNSMemTable(options_, internal_comparator_);
     mem_->Ref();
-    MaybeScheduleCompaction();
+    MaybeScheduleCompaction(false);
     while (!wal_man_->WALAvailable()) {
       bg_work_finished_signal_.Wait();
     }
@@ -499,7 +518,8 @@ Status DBImplZNS::Recover() {
   s = wal_man_->NewWAL(&mutex_, &wal_);
   wal_->Ref();
 
-  MaybeScheduleCompaction();
+  RemoveObsoleteZones();
+  MaybeScheduleCompaction(false);
 
   return s;
 }

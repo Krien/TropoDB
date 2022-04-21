@@ -16,7 +16,8 @@ namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
                              ZNSSSTableManager* znssstable,
                              ZnsManifest* manifest, uint64_t lba_size)
-    : current_(nullptr),
+    : dummy_versions_(this),
+      current_(nullptr),
       icmp_(icmp),
       znssstable_(znssstable),
       manifest_(manifest),
@@ -26,7 +27,10 @@ ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
   AppendVersion(new ZnsVersion(this));
 };
 
-ZnsVersionSet::~ZnsVersionSet() { current_->Unref(); }
+ZnsVersionSet::~ZnsVersionSet() {
+  current_->Unref();
+  assert(dummy_versions_.next_ == &dummy_versions_);
+}
 
 void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   assert(v->refs_ == 0);
@@ -36,6 +40,31 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   }
   current_ = v;
   v->Ref();
+
+  // Append to linked list
+  v->prev_ = dummy_versions_.prev_;
+  v->next_ = &dummy_versions_;
+  v->prev_->next_ = v;
+  v->next_->prev_ = v;
+}
+
+void ZnsVersionSet::GetLiveZoneRanges(
+    size_t level, std::vector<std::pair<uint64_t, uint64_t>>* ranges) {
+  std::pair ran = std::make_pair<uint64_t, uint64_t>(0, 0);
+  bool ran_set = false;
+  for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
+       v = v->next_) {
+    const std::vector<SSZoneMetaData*>& metas = v->ss_[level];
+    std::pair temp_ran = std::make_pair<uint64_t, uint64_t>(0, 0);
+    znssstable_->GetRange(level, metas, &temp_ran);
+    if (!ran_set) {
+      ran = temp_ran;
+      ran_set = true;
+    } else if (temp_ran.first != temp_ran.second) {
+      ran.first = temp_ran.first;
+    }
+  }
+  ranges->push_back(ran);
 }
 
 Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,

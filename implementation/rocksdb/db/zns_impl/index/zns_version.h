@@ -56,6 +56,8 @@ class ZnsVersion : public RefCounter {
 
   std::vector<SSZoneMetaData*> ss_[7];
   ZnsVersionSet* vset_;
+  ZnsVersion* next_;
+  ZnsVersion* prev_;
   double compaction_score_;
   int compaction_level_;
 };
