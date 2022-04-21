@@ -173,6 +173,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
     {
+      wal_->Ref();
       mutex_.Unlock();
       Slice log_entry = WriteBatchInternal::Contents(updates);
       wal_->Append(log_entry);
@@ -180,6 +181,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       assert(this->mem_ != nullptr);
       this->mem_->Write(options, updates);
       mutex_.Lock();
+      wal_->Unref();
     }
     versions_->SetLastSequence(last_sequence);
   }
@@ -232,7 +234,7 @@ void DBImplZNS::MaybeScheduleCompaction() {
   if (bg_compaction_scheduled_) {
     return;
   }
-  if (imm_ == nullptr && !versions_->NeedsCompaction()) {
+  if (imm_ == nullptr && !versions_->NeedsCompaction() && wal_man_->WALAvailable()) {
     return;
   }
   bg_compaction_scheduled_ = true;
@@ -263,6 +265,10 @@ void DBImplZNS::BackgroundCompaction() {
     printf("  Compact memtable...\n");
     s = CompactMemtable();
     return;
+  }
+  if (!wal_man_->WALAvailable()) {
+    printf(" Trying to free WALS...\n");
+    s = wal_man_->ResetOldWALs(&mutex_);
   }
   // Compaction itself does not require a lock. only once the changes become
   // visible.
