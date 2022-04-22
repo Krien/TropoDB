@@ -1,3 +1,6 @@
+# DO NOT USE THIS SOURCE!!!
+The project is moved to another repository, [SimpleZNSDevice](https://github.com/Krien/SimpleZNSDevice). It is kept here for legacy purposes only.
+
 # Device
 Device is an interface that we will use to interface with the ZNS device. It comes with an interface that allows to write to zones without worrying about SPDK internals. There are functions for reading lbas, writing lbas, erasing zones, getting write heads of zones and getting general device information.
 It comes with a:

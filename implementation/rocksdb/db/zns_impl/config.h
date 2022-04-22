@@ -8,6 +8,7 @@
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
+// Changing any line here requires rebuilding all ZNS source files.
 namespace ZnsConfig {
 const static size_t level_count = 7;
 static_assert(level_count > 1);

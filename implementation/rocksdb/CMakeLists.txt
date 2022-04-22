@@ -936,8 +936,9 @@ set(SOURCES
    utilities/transactions/lock/range/range_tree/lib/util/memarena.cc)
 
 if ( ZNS_PLUGIN )
-  add_subdirectory("zns_device")
-  link_directories("${SPDK_LIB_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/zns_device/lib")
+  set(ZNS_DEVICE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/simpleznsdevice")
+  add_subdirectory("${ZNS_DEVICE_DIRECTORY}")
+  link_directories("${SPDK_LIB_DIRS};${ZNS_DEVICE_DIRECTORY}/lib")
 endif()
 
 set(ROCKSDB_PLUGINS "zenfs")
@@ -1152,7 +1153,7 @@ if(NOT WIN32 OR ROCKSDB_INSTALL_ON_WINDOWS)
   )
 
   if (ZNS_PLUGIN)
-    install(DIRECTORY zns_device/include COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(DIRECTORY "${ZNS_DEVICE_DIRECTORY}/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(
       TARGETS znsdevice_lib
       EXPORT RocksDBTargets
