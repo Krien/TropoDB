@@ -85,10 +85,10 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
     const size_t safe_len =
         ((fragment_length + lba_size_ - 1) / lba_size_) * lba_size_;
-    int rc = SZD::z_append(qpair_, write_head, fragment, safe_len);
+    int rc = SZD::z_append(qpair_, &write_head, fragment, safe_len);
+    zone_head = (write_head / zone_size_) * zone_size_;
     s = rc == 0 ? Status::OK() : Status::IOError("Error appending");
-    ZnsUtils::update_zns_heads(&write_head, &zone_head, safe_len, lba_size_,
-                               zone_size_);
+
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;

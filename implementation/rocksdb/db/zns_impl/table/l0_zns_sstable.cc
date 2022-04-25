@@ -121,17 +121,16 @@ Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   if (payload == nullptr) {
     return Status::MemoryLimit();
   }
+  meta->lba = write_head_;
   mutex_.Lock();
-  if (SZD::z_append(*qpair_, write_head_, payload, zcalloc_size) != 0) {
+  if (SZD::z_append(*qpair_, &write_head_, payload, zcalloc_size) != 0) {
     SZD::z_free(*qpair_, payload);
     mutex_.Unlock();
     return Status::IOError("Error during appending\n");
   }
   SZD::z_free(*qpair_, payload);
   mutex_.Unlock();
-  meta->lba = write_head_;
-  ZnsUtils::update_zns_heads(&write_head_, &zone_head_, zcalloc_size, lba_size_,
-                             zone_size_);
+  zone_head_ = (write_head_ / zone_size_) * zone_size_;
   meta->lba_count = zcalloc_size / lba_size_;
   return Status::OK();
 }

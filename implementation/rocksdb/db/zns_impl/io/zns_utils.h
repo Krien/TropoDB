@@ -30,15 +30,6 @@ inline char* slice_to_spdkformat(uint64_t* alligned_size, Slice slice,
   *alligned_size = zcalloc_size;
   return payload;
 }
-
-inline void update_zns_heads(uint64_t* write_head, uint64_t* zone_head,
-                             uint64_t step_size, uint64_t lba_size,
-                             uint64_t zone_size) {
-  *write_head += step_size / lba_size;
-  if (*write_head % zone_size == 0) {
-    *zone_head = *write_head;
-  }
-}
 }  // namespace ZnsUtils
 }  // namespace ROCKSDB_NAMESPACE
 
