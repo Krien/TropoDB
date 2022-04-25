@@ -17,7 +17,7 @@
 namespace ROCKSDB_NAMESPACE {
 class ZnsWALManager : public RefCounter {
  public:
-  ZnsWALManager(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  ZnsWALManager(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
                 const uint64_t min_zone_head, uint64_t max_zone_head,
                 size_t wal_count);
   // No copying or implicits

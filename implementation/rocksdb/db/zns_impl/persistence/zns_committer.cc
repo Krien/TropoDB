@@ -18,8 +18,7 @@ static void InitTypeCrc(uint32_t* type_crc) {
   }
 }
 
-ZnsCommitter::ZnsCommitter(ZnsDevice::QPair* qpair,
-                           const ZnsDevice::DeviceInfo& info)
+ZnsCommitter::ZnsCommitter(SZD::QPair* qpair, const SZD::DeviceInfo& info)
     : qpair_(qpair),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
@@ -30,7 +29,7 @@ ZnsCommitter::ZnsCommitter(ZnsDevice::QPair* qpair,
 }
 ZnsCommitter::~ZnsCommitter() {
   if (buffer_ != nullptr) {
-    ZnsDevice::z_free(qpair_, buffer_);
+    SZD::z_free(qpair_, buffer_);
     buffer_ = nullptr;
   }
   if (scratch_ != nullptr) {
@@ -49,7 +48,7 @@ bool ZnsCommitter::SpaceEnough(const Slice& data, uint64_t min, uint64_t max) {
 Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
   const char* ptr = data.data();
   size_t left = data.size();
-  char* fragment = (char*)ZnsDevice::z_calloc(qpair_, 1, zasl_);
+  char* fragment = (char*)SZD::z_calloc(qpair_, 1, zasl_);
 
   uint64_t write_head = *addr;
   uint64_t zone_head = (*addr / zone_size_) * zone_size_;
@@ -86,7 +85,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
     const size_t safe_len =
         ((fragment_length + lba_size_ - 1) / lba_size_) * lba_size_;
-    int rc = ZnsDevice::z_append(qpair_, write_head, fragment, safe_len);
+    int rc = SZD::z_append(qpair_, write_head, fragment, safe_len);
     s = rc == 0 ? Status::OK() : Status::IOError("Error appending");
     ZnsUtils::update_zns_heads(&write_head, &zone_head, safe_len, lba_size_,
                                zone_size_);
@@ -94,7 +93,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-  ZnsDevice::z_free(qpair_, fragment);
+  SZD::z_free(qpair_, fragment);
   *addr = write_head;
   return s;
 }
@@ -110,7 +109,7 @@ bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
     scratch_ = new std::string;
   }
   if (buffer_ == nullptr) {
-    buffer_ = (char*)ZnsDevice::z_calloc(qpair_, 1, zasl_);
+    buffer_ = (char*)SZD::z_calloc(qpair_, 1, zasl_);
   }
   if (buffer_ == nullptr) {
     return false;
@@ -134,7 +133,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    ZnsDevice::z_read(qpair_, commit_ptr_, buffer_, lba_size_);
+    SZD::z_read(qpair_, commit_ptr_, buffer_, lba_size_);
     // parse header
     const char* header = buffer_;
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
@@ -146,8 +145,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      ZnsDevice::z_read(qpair_, commit_ptr_ + 1, buffer_ + lba_size_,
-                        to_read - lba_size_);
+      SZD::z_read(qpair_, commit_ptr_ + 1, buffer_ + lba_size_,
+                  to_read - lba_size_);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -203,7 +202,7 @@ bool ZnsCommitter::CloseCommit() {
   }
   has_commit_ = false;
   if (buffer_ != nullptr) {
-    ZnsDevice::z_free(qpair_, buffer_);
+    SZD::z_free(qpair_, buffer_);
     buffer_ = nullptr;
   }
   if (scratch_ != nullptr) {

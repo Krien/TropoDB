@@ -49,7 +49,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
 };
 
 LNZnsSSTable::LNZnsSSTable(QPairFactory* qpair_factory,
-                           const ZnsDevice::DeviceInfo& info,
+                           const SZD::DeviceInfo& info,
                            const uint64_t min_zone_head, uint64_t max_zone_head)
     : ZnsSSTable(qpair_factory, info, min_zone_head, max_zone_head),
       pseudo_write_head_(max_zone_head) {}
@@ -123,13 +123,13 @@ Status LNZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
     return Status::MemoryLimit();
   }
   mutex_.Lock();
-  if (ZnsDevice::z_append(*qpair_, write_head_, payload, zcalloc_size) != 0) {
-    ZnsDevice::z_free(*qpair_, payload);
+  if (SZD::z_append(*qpair_, write_head_, payload, zcalloc_size) != 0) {
+    SZD::z_free(*qpair_, payload);
     mutex_.Unlock();
     printf("append error %lu %lu %lu\n", zone_head_, write_head_, zcalloc_size);
     return Status::IOError("Error during appending\n");
   }
-  ZnsDevice::z_free(*qpair_, payload);
+  SZD::z_free(*qpair_, payload);
   mutex_.Unlock();
   meta->lba = write_head_;
   ZnsUtils::update_zns_heads(&write_head_, &zone_head_, zcalloc_size, lba_size_,
@@ -181,23 +181,23 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
     return Status::Corruption("Invalid metadata");
   }
   // Lba by lba...
-  void* payload = ZnsDevice::z_calloc(*qpair_, lba_size_, sizeof(char));
+  void* payload = SZD::z_calloc(*qpair_, lba_size_, sizeof(char));
   if (payload == nullptr) {
     return Status::IOError("Error allocating DMA\n");
   }
   char* payloadc = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
   for (uint64_t i = 0; i < meta->lba_count; i++) {
     mutex_.Lock();
-    int rc = ZnsDevice::z_read(*qpair_, meta->lba + i, payload, lba_size_);
+    int rc = SZD::z_read(*qpair_, meta->lba + i, payload, lba_size_);
     mutex_.Unlock();
     if (rc != 0) {
-      ZnsDevice::z_free(*qpair_, payload);
+      SZD::z_free(*qpair_, payload);
       free(payloadc);
       return Status::IOError("Error reading SSTable");
     }
     memcpy(payloadc + i * lba_size_, payload, lba_size_);
   }
-  ZnsDevice::z_free(*qpair_, payload);
+  SZD::z_free(*qpair_, payload);
   *sstable = Slice((char*)payloadc, meta->lba_count * lba_size_);
   return Status::OK();
 }
@@ -254,7 +254,7 @@ Status LNZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
   for (uint64_t i = zone_tail_; i < cur_zone; i += zone_size_) {
     // printf("resetting zone %lu \n", i);
-    int rc = ZnsDevice::z_reset(*qpair_, i, false);
+    int rc = SZD::z_reset(*qpair_, i, false);
     if (rc != 0) {
       return Status::IOError("Error resetting SSTable tail");
     }

@@ -362,18 +362,19 @@ bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
 }
 
 Status DBImplZNS::OpenDevice() {
-  device_manager_ = new ZnsDevice::DeviceManager*;
+  device_manager_ = new SZD::DeviceManager*;
   int rc = 0;
-  if (!ZnsDevice::device_set) {
-    rc = ZnsDevice::z_init(device_manager_, false);
-    ZnsDevice::device_set = true;
+  SZD::DeviceOptions device_options = {.name = "ZNSLSM", !SZD::device_set};
+  if (!SZD::device_set) {
+    rc = SZD::z_init(device_manager_, &device_options);
+    SZD::device_set = true;
   } else {
-    rc = ZnsDevice::z_init(device_manager_, true);
+    rc = SZD::z_init(device_manager_, &device_options);
   }
   if (rc != 0) {
     return Status::IOError("Error opening SPDK");
   }
-  rc = ZnsDevice::z_open(*device_manager_, this->name_.c_str());
+  rc = SZD::z_open(*device_manager_, this->name_.c_str());
   if (rc != 0) {
     return Status::IOError("Error opening ZNS device");
   }
@@ -384,7 +385,7 @@ Status DBImplZNS::OpenDevice() {
 
 Status DBImplZNS::InitDB(const DBOptions& options) {
   assert(device_manager_ != nullptr);
-  ZnsDevice::DeviceInfo device_info = (*device_manager_)->info;
+  SZD::DeviceInfo device_info = (*device_manager_)->info;
   manifest_ =
       new ZnsManifest(qpair_factory_, device_info, 0,
                       device_info.zone_size * ZnsConfig::manifest_zones);
@@ -443,10 +444,9 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
 
 Status DBImplZNS::ResetDevice() {
   qpair_factory_->Ref();
-  ZnsDevice::QPair** qpair =
-      (ZnsDevice::QPair**)calloc(1, sizeof(ZnsDevice::QPair*));
+  SZD::QPair** qpair = (SZD::QPair**)calloc(1, sizeof(SZD::QPair*));
   qpair_factory_->register_qpair(qpair);
-  int rc = ZnsDevice::z_reset(*qpair, 0, true);
+  int rc = SZD::z_reset(*qpair, 0, true);
   qpair_factory_->unregister_qpair(*qpair);
   qpair_factory_->Unref();
   delete qpair;
@@ -460,7 +460,7 @@ DBImplZNS::~DBImplZNS() {
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
-  // std::cout << versions_->DebugString();
+  std::cout << versions_->DebugString();
 
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
@@ -470,7 +470,7 @@ DBImplZNS::~DBImplZNS() {
   if (manifest_ != nullptr) manifest_->Unref();
   if (qpair_factory_ != nullptr) qpair_factory_->Unref();
   if (device_manager_ != nullptr) {
-    ZnsDevice::z_shutdown(*device_manager_);
+    SZD::z_destroy(*device_manager_);
     free(device_manager_);
   }
   // printf("exiting \n");

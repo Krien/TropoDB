@@ -16,7 +16,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 ZnsWALManager::ZnsWALManager(QPairFactory* qpair_factory,
-                             const ZnsDevice::DeviceInfo& info,
+                             const SZD::DeviceInfo& info,
                              const uint64_t min_zone_head,
                              uint64_t max_zone_head, size_t wal_count)
     : wal_head_(0), wal_tail_(wal_count - 1), wal_count_(wal_count) {

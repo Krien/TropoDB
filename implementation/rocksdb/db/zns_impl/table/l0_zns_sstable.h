@@ -15,7 +15,7 @@ namespace ROCKSDB_NAMESPACE {
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
  public:
-  L0ZnsSSTable(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  L0ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
                const uint64_t min_zone_head, uint64_t max_zone_head);
   ~L0ZnsSSTable();
   bool EnoughSpaceAvailable(Slice slice) override;

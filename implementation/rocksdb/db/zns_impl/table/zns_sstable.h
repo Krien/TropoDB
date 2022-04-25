@@ -29,7 +29,7 @@ class SSTableBuilder {
 
 class ZnsSSTable {
  public:
-  ZnsSSTable(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
              const uint64_t min_zone_head, uint64_t max_zone_head);
   virtual ~ZnsSSTable();
   virtual Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta) = 0;
@@ -62,7 +62,7 @@ class ZnsSSTable {
   uint64_t lba_size_;
   // references
   QPairFactory* qpair_factory_;
-  ZnsDevice::QPair** qpair_;
+  SZD::QPair** qpair_;
 };
 
 int FindSS(const InternalKeyComparator& icmp,

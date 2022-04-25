@@ -13,7 +13,7 @@
 #include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
                const uint64_t min_zone_head, uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
@@ -25,7 +25,7 @@ ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
-  qpair_ = new ZnsDevice::QPair*;
+  qpair_ = new SZD::QPair*;
   qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
   committer_ = new ZnsCommitter(*qpair_, info);
@@ -55,7 +55,7 @@ Status ZNSWAL::Reset() {
   Status s;
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
        slba += zone_size_) {
-    s = ZnsDevice::z_reset(*qpair_, slba, false) == 0
+    s = SZD::z_reset(*qpair_, slba, false) == 0
             ? Status::OK()
             : Status::IOError("Reset WAL zone error");
     if (!s.ok()) {
@@ -73,7 +73,7 @@ Status ZNSWAL::Recover() {
   uint64_t zone_head = min_zone_head_, old_zone_head = min_zone_head_;
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
        slba += zone_size_) {
-    if (ZnsDevice::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
       return Status::IOError("Error getting zonehead for WAL");
     }
     // head is at last zone that is not empty

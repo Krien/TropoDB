@@ -20,7 +20,7 @@ class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {
  public:
   ZNSSSTableManager(
-      QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+      QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
       std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count]);
   ~ZNSSSTableManager();
 

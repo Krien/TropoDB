@@ -8,7 +8,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
-                         const ZnsDevice::DeviceInfo& info,
+                         const SZD::DeviceInfo& info,
                          const uint64_t min_zone_head, uint64_t max_zone_head)
     : current_lba_(min_zone_head_),
       manifest_start_(max_zone_head_),  // enforce corruption
@@ -25,7 +25,7 @@ ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
   assert(min_zone_head_ < max_zone_head_);
-  qpair_ = new ZnsDevice::QPair*;
+  qpair_ = new SZD::QPair*;
   qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
   committer_ = new ZnsCommitter(*qpair_, info);
@@ -130,7 +130,7 @@ Status ZnsManifest::RecoverLog() {
   uint64_t slba;
   uint64_t zone_head = min_zone_head_, old_zone_head = min_zone_head_;
   for (slba = min_zone_head_; slba < max_zone_head_; slba += zone_size_) {
-    if (ZnsDevice::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
       return Status::IOError("Error getting zonehead for CURRENT");
     }
     // tail is at first zone that is not empty
@@ -142,7 +142,7 @@ Status ZnsManifest::RecoverLog() {
   }
   // Scan for head
   for (; slba < max_zone_head_; slba += zone_size_) {
-    if (ZnsDevice::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
       return Status::IOError("Error getting zonehead for CURRENT");
     }
     // The first zone with a head more than 0 and less than max_zone, holds the
@@ -165,7 +165,7 @@ Status ZnsManifest::RecoverLog() {
   // start AFTER head.
   if (log_head > 0 && log_tail == 0) {
     for (slba += zone_size_; slba < max_zone_head_; slba += zone_size_) {
-      if (ZnsDevice::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+      if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
         return Status::IOError("Error getting zonehead for CURRENT");
       }
       if (zone_head > slba) {
@@ -244,7 +244,7 @@ Status ZnsManifest::RemoveObsoleteZones() { return Status::NotSupported(); }
 Status ZnsManifest::Reset() {
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
        slba += zone_size_) {
-    int rc = ZnsDevice::z_reset(*qpair_, slba, false);
+    int rc = SZD::z_reset(*qpair_, slba, false);
     if (rc != 0) {
       return Status::IOError("Error during zone reset of Manifest");
     }

@@ -14,7 +14,7 @@
 namespace ROCKSDB_NAMESPACE {
 class LNZnsSSTable : public ZnsSSTable {
  public:
-  LNZnsSSTable(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  LNZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
                const uint64_t min_zone_head, uint64_t max_zone_head);
   ~LNZnsSSTable();
   bool EnoughSpaceAvailable(Slice slice) override;

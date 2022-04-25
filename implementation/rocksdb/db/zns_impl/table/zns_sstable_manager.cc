@@ -15,7 +15,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 ZNSSSTableManager::ZNSSSTableManager(
-    QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+    QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
     std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count])
     : qpair_factory_(qpair_factory) {
   assert(qpair_factory_ != nullptr);

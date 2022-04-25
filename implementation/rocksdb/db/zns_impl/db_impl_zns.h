@@ -298,7 +298,7 @@ class DBImplZNS : public DB {
 
   // Constant after construction
   const DBOptions options_;
-  ZnsDevice::DeviceManager** device_manager_;
+  SZD::DeviceManager** device_manager_;
   QPairFactory* qpair_factory_;
   ZNSWAL* wal_;
   ZnsWALManager* wal_man_;
@@ -316,7 +316,7 @@ class DBImplZNS : public DB {
   bool forced_schedule_;
 };
 }  // namespace ROCKSDB_NAMESPACE
-namespace ZnsDevice {
+namespace SZD {
 static bool device_set = false;
 }
 #endif

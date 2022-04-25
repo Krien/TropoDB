@@ -11,17 +11,17 @@ namespace ROCKSDB_NAMESPACE {
 // TODO make thread safe (mutexes?)
 class QPairFactory : public RefCounter {
  public:
-  QPairFactory(ZnsDevice::DeviceManager* device_manager);
+  QPairFactory(SZD::DeviceManager* device_manager);
   ~QPairFactory();
   // No copying or implicits
   QPairFactory(const QPairFactory&) = delete;
   QPairFactory& operator=(const QPairFactory&) = delete;
-  int register_qpair(ZnsDevice::QPair** qpair);
-  int unregister_qpair(ZnsDevice::QPair* qpair);
+  int register_qpair(SZD::QPair** qpair);
+  int unregister_qpair(SZD::QPair* qpair);
 
  private:
   uint8_t qpair_count_;
-  ZnsDevice::DeviceManager* device_manager_;
+  SZD::DeviceManager* device_manager_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

@@ -33,7 +33,7 @@ static_assert(kZnsRecordTypeLast == 5);
  */
 class ZnsCommitter {
  public:
-  ZnsCommitter(ZnsDevice::QPair* qpair, const ZnsDevice::DeviceInfo& info);
+  ZnsCommitter(SZD::QPair* qpair, const SZD::DeviceInfo& info);
   // No copying or implicits
   ZnsCommitter(const ZnsCommitter&) = delete;
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
@@ -59,7 +59,7 @@ class ZnsCommitter {
   bool CloseCommit();
 
  private:
-  ZnsDevice::QPair* qpair_;
+  SZD::QPair* qpair_;
   uint64_t zone_size_;
   uint64_t lba_size_;
   uint64_t zasl_;

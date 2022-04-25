@@ -19,7 +19,7 @@ namespace ROCKSDB_NAMESPACE {
  */
 class ZNSWAL : public RefCounter {
  public:
-  ZNSWAL(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  ZNSWAL(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_head, uint64_t max_zone_head);
   // No copying or implicits
   ZNSWAL(const ZNSWAL&) = delete;
@@ -42,7 +42,7 @@ class ZNSWAL : public RefCounter {
   uint64_t lba_size_;
   // references
   QPairFactory* qpair_factory_;
-  ZnsDevice::QPair** qpair_;
+  SZD::QPair** qpair_;
   ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE

@@ -16,13 +16,13 @@ inline void allign_size(uint64_t* alligned_size, Slice slice,
 }
 
 inline char* slice_to_spdkformat(uint64_t* alligned_size, Slice slice,
-                                 ZnsDevice::QPair* qpair, uint64_t lba_size) {
+                                 SZD::QPair* qpair, uint64_t lba_size) {
   uint64_t slice_size = (uint64_t)slice.size();
   // allign
   uint64_t zcalloc_size = (slice_size / lba_size) * lba_size;
   zcalloc_size += slice_size % lba_size != 0 ? lba_size : 0;
   // copy to dma memory
-  char* payload = (char*)ZnsDevice::z_calloc(qpair, zcalloc_size, sizeof(char));
+  char* payload = (char*)SZD::z_calloc(qpair, zcalloc_size, sizeof(char));
   if (payload == nullptr) {
     return nullptr;
   }

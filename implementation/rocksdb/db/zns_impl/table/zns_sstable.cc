@@ -4,8 +4,7 @@
 #include "db/zns_impl/io/qpair_factory.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory,
-                       const ZnsDevice::DeviceInfo& info,
+ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
                        const uint64_t min_zone_head, uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
@@ -19,7 +18,7 @@ ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory,
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
   assert(qpair_factory_ != nullptr);
-  qpair_ = new ZnsDevice::QPair*[1];
+  qpair_ = new SZD::QPair*;
   qpair_factory_->Ref();
   qpair_factory_->register_qpair(qpair_);
 }

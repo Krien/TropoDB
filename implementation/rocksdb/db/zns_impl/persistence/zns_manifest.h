@@ -13,7 +13,7 @@
 namespace ROCKSDB_NAMESPACE {
 class ZnsManifest : public RefCounter {
  public:
-  ZnsManifest(QPairFactory* qpair_factory, const ZnsDevice::DeviceInfo& info,
+  ZnsManifest(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
               const uint64_t min_zone_head, uint64_t max_zone_head);
   ~ZnsManifest();
   Status Scan();
@@ -46,7 +46,7 @@ class ZnsManifest : public RefCounter {
   uint64_t zone_byte_range;
   // references
   QPairFactory* qpair_factory_;
-  ZnsDevice::QPair** qpair_;
+  SZD::QPair** qpair_;
   ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE
