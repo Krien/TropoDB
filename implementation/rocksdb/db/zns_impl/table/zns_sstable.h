@@ -60,6 +60,7 @@ class ZnsSSTable {
   uint64_t max_zone_head_;
   uint64_t zone_size_;
   uint64_t lba_size_;
+  uint64_t mdts_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel* channel_;

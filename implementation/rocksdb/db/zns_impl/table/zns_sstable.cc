@@ -16,6 +16,7 @@ ZnsSSTable::ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
       max_zone_head_(max_zone_head),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
+      mdts_(info.mdts),
       channel_factory_(channel_factory) {
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);

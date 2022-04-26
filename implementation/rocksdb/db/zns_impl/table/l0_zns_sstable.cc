@@ -174,23 +174,32 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   char* buffer = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
   // by lba....
-  if (!(s = FromStatus(channel_->ReserveBuffer(lba_size_))).ok()) {
+  if (!(s = FromStatus(channel_->ReserveBuffer(mdts_))).ok()) {
     return s;
   }
   char* z_buffer;
   if (!(s = FromStatus(channel_->GetBuffer((void**)&z_buffer))).ok()) {
     return s;
   }
+  // mdts is always a factor of lba_size, so safe.
+  uint64_t stepsize = mdts_ / lba_size_;
+  uint64_t steps = (meta->lba_count + stepsize - 1) / stepsize;
+  uint64_t current_step_size_bytes = mdts_;
+  uint64_t last_step_size =
+      mdts_ - (steps * stepsize - meta->lba_count) * lba_size_;
   mutex_.Lock();
-  for (uint64_t i = 0; i < meta->lba_count; i++) {
-    if (!FromStatus(channel_->ReadIntoBuffer(meta->lba + i, 0, lba_size_))
+  for (uint64_t step = 0; step < steps; ++step) {
+    current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
+    if (!FromStatus(channel_->ReadIntoBuffer(meta->lba + step * stepsize, 0,
+                                             current_step_size_bytes))
              .ok()) {
       mutex_.Unlock();
       delete buffer;
       channel_->FreeBuffer();
       return Status::IOError("Error reading SSTable");
     }
-    memcpy(buffer + i * lba_size_, z_buffer, lba_size_);
+    memcpy(buffer + step * stepsize * lba_size_, z_buffer,
+           current_step_size_bytes);
   }
   s = FromStatus(channel_->FreeBuffer());
   mutex_.Unlock();
