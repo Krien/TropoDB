@@ -10,7 +10,7 @@ namespace ROCKSDB_NAMESPACE {
 class LNZnsSSTable::Builder : public SSTableBuilder {
  public:
   Builder(LNZnsSSTable* table, SSZoneMetaData* meta)
-      : table_(table), meta_(meta), buffer_(""), kv_pairs_(0), started_(false) {
+      : table_(table), meta_(meta), buffer_(""), started_(false) {
     meta_->lba_count = 0;
     buffer_.clear();
   }
@@ -23,13 +23,13 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
     }
     table_->PutKVPair(&buffer_, key, value);
     meta_->largest.DecodeFrom(key);
-    ++kv_pairs_;
+    kv_pair_offsets_.push_back(buffer_.size());
     return Status::OK();
   }
 
   Status Finalise() override {
-    meta_->numbers = kv_pairs_;
-    table_->GeneratePreamble(&buffer_, meta_->numbers);
+    meta_->numbers = kv_pair_offsets_.size();
+    table_->GeneratePreamble(&buffer_, kv_pair_offsets_);
     return Status::OK();
   }
 
@@ -43,7 +43,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
   LNZnsSSTable* table_;
   SSZoneMetaData* meta_;
   std::string buffer_;
-  uint32_t kv_pairs_;
+  std::vector<uint32_t> kv_pair_offsets_;
   bool started_;
 };
 
@@ -232,7 +232,8 @@ Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
   Slice key, value;
   uint32_t count, counter;
   counter = 0;
-  walker = (char*)GetVarint32Ptr(walker, walker + 5, &count);
+  count = DecodeFixed32(walker);
+  walker += sizeof(uint32_t) + count * sizeof(uint32_t);
   const Comparator* user_comparator = icmp.user_comparator();
   Slice key_ptr_stripped = ExtractUserKey(key_ptr);
   while (counter < count) {
@@ -297,7 +298,8 @@ Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta,
   memcpy(data, sstable.data(), sstable.size());
   uint32_t count;
   data = (char*)GetVarint32Ptr(data, data + 5, &count);
-  return new SSTableIterator(data, (size_t)count, &ParseNext, icmp);
+  return new SSTableIterator(data, sstable.size(), (size_t)count, &ParseNext,
+                             icmp);
 }
 
 void LNZnsSSTable::EncodeTo(std::string* dst) {

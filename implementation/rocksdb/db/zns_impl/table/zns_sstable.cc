@@ -40,9 +40,14 @@ void ZnsSSTable::PutKVPair(std::string* dst, const Slice& key,
   dst->append(value.data(), value.size());
 }
 
-void ZnsSSTable::GeneratePreamble(std::string* dst, uint32_t count) {
+void ZnsSSTable::GeneratePreamble(std::string* dst,
+                                  std::vector<uint32_t> kv_pair_offsets_) {
   std::string preamble;
-  PutVarint32(&preamble, count);
+  PutFixed32(&preamble, kv_pair_offsets_.size());
+  for (auto entry = begin(kv_pair_offsets_); entry != end(kv_pair_offsets_);
+       entry++) {
+    PutFixed32(&preamble, (*entry));
+  }
   *dst = preamble.append(*dst);
 }
 

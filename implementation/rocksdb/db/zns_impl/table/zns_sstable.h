@@ -50,7 +50,8 @@ class ZnsSSTable {
  protected:
   friend class SSTableBuilder;
   void PutKVPair(std::string* dst, const Slice& key, const Slice& value);
-  void GeneratePreamble(std::string* dst, uint32_t count);
+  void GeneratePreamble(std::string* dst,
+                        std::vector<uint32_t> kv_pair_offsets_);
 
   // data
   uint64_t zone_head_;

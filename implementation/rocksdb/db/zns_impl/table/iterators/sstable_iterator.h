@@ -20,7 +20,7 @@ typedef void (*NextPair)(char** src, Slice* key, Slice* value);
  */
 class SSTableIterator : public Iterator {
  public:
-  SSTableIterator(char* data, size_t count, NextPair nextf,
+  SSTableIterator(char* data, size_t data_size, size_t count, NextPair nextf,
                   const InternalKeyComparator& icmp);
   ~SSTableIterator();
   bool Valid() const override { return index_ <= count_ && count_ > 0; }
@@ -41,14 +41,24 @@ class SSTableIterator : public Iterator {
   void Prev() override;
 
  private:
-  char* data_;
-  char* walker_;
-  NextPair nextf_;
-  size_t index_;
-  size_t count_;
-  Slice current_val_;
-  Slice current_key_;
+  bool ParseNextKey();
+  void SeekToRestartPoint(uint32_t index);
+  uint32_t GetRestartPoint(uint32_t index);
+  inline uint32_t NextEntryOffset() const {
+    return (current_val_.data() + current_val_.size()) - data_;
+  }
+
+  char* data_;  // all data of sstable
+  size_t data_size_;
+  uint32_t kv_pairs_offset_;  // offset in data where kv_pairs start
+  size_t index_;              // index of current kv_pair
+  char* walker_;              // pointer to current data element
+  NextPair nextf_;            // Decoding function to retrieve kvpairs
+  size_t count_;              // Number of kv_pairs
+  Slice current_val_;         // value present at data pointer
+  Slice current_key_;         // key present at data pointer
   const InternalKeyComparator icmp_;
+  uint32_t restart_index_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

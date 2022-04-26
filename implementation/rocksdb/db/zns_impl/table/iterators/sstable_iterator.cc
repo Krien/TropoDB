@@ -3,30 +3,73 @@
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-SSTableIterator::SSTableIterator(char* data, size_t count, NextPair nextf,
+SSTableIterator::SSTableIterator(char* data, size_t data_size, size_t count,
+                                 NextPair nextf,
                                  const InternalKeyComparator& icmp)
     : data_(data),
-      walker_(data),
+      data_size_(data_size),
+      kv_pairs_offset_(sizeof(uint32_t) * (count + 1)),
+      index_(count),
+      walker_(data_ + kv_pairs_offset_),
       nextf_(nextf),
-      index_(0),
       count_(count),
       current_val_("deadbeef"),
       current_key_("deadbeef"),
-      icmp_(icmp) {}
+      icmp_(icmp),
+      restart_index_(0) {}
 
 SSTableIterator::~SSTableIterator() = default;
 
 void SSTableIterator::Seek(const Slice& target) {
-  walker_ = data_;
-  index_ = 0;
   Slice target_ptr_stripped = ExtractUserKey(target);
-  while (Valid()) {
-    index_++;
-    nextf_(&walker_, &current_key_, &current_val_);
-    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
-      break;
+
+  // // binary search as seen in LevelDB.
+  uint32_t left = 0;
+  uint32_t right = count_ - 1;
+  int current_key_compare = 0;
+
+  if (Valid()) {
+    current_key_compare =
+        icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped);
+    if (current_key_compare < 0) {
+      left = restart_index_;  // index_ > 2 ? index_ - 2 : 0;
+    } else if (current_key_compare > 0) {
+      right = index_;
+    } else {
+      return;
     }
   }
+
+  uint32_t mid = 0;
+  uint32_t region_offset = 0;
+  while (left < right) {
+    mid = (left + right + 1) / 2;
+    SeekToRestartPoint(mid);
+    ParseNextKey();
+    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) < 0) {
+      left = mid;
+    } else {
+      right = mid - 1;
+    }
+  }
+  SeekToRestartPoint(left);
+  ParseNextKey();
+  while (Valid()) {
+    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
+      restart_index_ = left;
+      break;
+    }
+    ParseNextKey();
+  }
+  // OLD lineair
+  // SeekToRestartPoint(0);
+  // while (Valid()) {
+  //   ParseNextKey();
+  //   if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) ==
+  //   0) {
+  //     break;
+  //   }
+  // }
 }
 
 void SSTableIterator::SeekForPrev(const Slice& target) {
@@ -35,34 +78,47 @@ void SSTableIterator::SeekForPrev(const Slice& target) {
 }
 
 void SSTableIterator::SeekToFirst() {
-  walker_ = data_;
-  index_ = 0;
-  Next();
+  SeekToRestartPoint(0);
+  ParseNextKey();
 }
 
 void SSTableIterator::SeekToLast() {
-  while (index_ < count_) {
-    Next();
-  }
+  SeekToRestartPoint(count_ - 1);
+  ParseNextKey();
 }
 
 void SSTableIterator::Next() {
   assert(Valid());
-  nextf_(&walker_, &current_key_, &current_val_);
-  index_++;
+  ParseNextKey();
 }
 
 // Avoid using prev!
 void SSTableIterator::Prev() {
-  // We can not read backwards, so we have to start from the beginning.
-  size_t target = index_ - 1;
-  SeekToFirst();
-  while (index_ < target) {
-    Next();
-  }
-  // set to invalid next iteration.
-  if (index_ == 1) {
-    index_ = count_ + 1;
-  }
+  assert(Valid());
+  SeekToRestartPoint(index_ - 1);
+  ParseNextKey();
 }
+
+bool SSTableIterator::ParseNextKey() {
+  if ((size_t)(walker_ - data_) >= data_size_) {
+    return false;
+  }
+  nextf_(&walker_, &current_key_, &current_val_);
+  index_++;
+  return true;
+}
+
+void SSTableIterator::SeekToRestartPoint(uint32_t index) {
+  current_key_.clear();
+  index_ = index;
+  walker_ = data_ + GetRestartPoint(index_);
+  current_val_ = Slice(walker_, 0);
+}
+
+uint32_t SSTableIterator::GetRestartPoint(uint32_t index) {
+  return index == 0 ? kv_pairs_offset_
+                    : DecodeFixed32(data_ + index * sizeof(uint32_t)) +
+                          kv_pairs_offset_;
+}
+
 }  // namespace ROCKSDB_NAMESPACE
