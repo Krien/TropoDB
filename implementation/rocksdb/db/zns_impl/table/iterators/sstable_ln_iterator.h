@@ -56,11 +56,12 @@ class LNZoneIterator : public Iterator {
   mutable char value_buf_[18];
 };
 
-typedef Iterator* (*NewZoneIteratorFunction)(void*, const Slice&);
+typedef Iterator* (*NewZoneIteratorFunction)(void*, const Slice&,
+                                             const InternalKeyComparator&);
 class LNIterator : public Iterator {
  public:
   LNIterator(Iterator* ln_iterator, NewZoneIteratorFunction zone_function,
-             void* arg);
+             void* arg, const InternalKeyComparator& icmp);
   ~LNIterator() override;
   bool Valid() const override { return data_iter_.Valid(); }
   Slice key() const override {
@@ -90,6 +91,7 @@ class LNIterator : public Iterator {
   IteratorWrapper index_iter_;
   IteratorWrapper data_iter_;
   std::string data_zone_handle_;
+  const InternalKeyComparator icmp_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

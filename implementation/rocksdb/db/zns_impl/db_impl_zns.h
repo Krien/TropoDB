@@ -59,6 +59,7 @@ struct ExternalSstFileInfo;
 struct MemTableInfo;
 class ColumnFamilyMemTables;
 class WriteBufferManager;
+class ZnsTableCache;
 
 class DBImplZNS : public DB {
  public:
@@ -313,6 +314,7 @@ class DBImplZNS : public DB {
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;
   bool forced_schedule_;
+  ZnsTableCache* table_cache_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 namespace SZD {

@@ -33,7 +33,8 @@ class ZnsCompaction {
   Status DoCompaction(ZnsVersionEdit* edit);
 
  private:
-  static Iterator* GetLNIterator(void* arg, const Slice& file_value);
+  static Iterator* GetLNIterator(void* arg, const Slice& file_value,
+                                 const InternalKeyComparator& icmp);
   Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
                       SSZoneMetaData* meta);
   bool IsBaseLevelForKey(const Slice& user_key);

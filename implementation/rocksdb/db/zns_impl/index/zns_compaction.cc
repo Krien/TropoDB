@@ -30,7 +30,8 @@ void ZnsCompaction::SetupTargets(const std::vector<SSZoneMetaData*>& t1,
   targets_[1] = t2;
 }
 
-Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value) {
+Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
+                                       const InternalKeyComparator& icmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
   SSZoneMetaData* meta = new SSZoneMetaData();
   uint64_t lba_start = DecodeFixed64(file_value.data());
@@ -38,7 +39,7 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value) {
   size_t level = (size_t)DecodeFixed16(file_value.data() + 16);
   meta->lba = lba_start;
   meta->lba_count = lba_count;
-  Iterator* iterator = zns->NewIterator(level, meta);
+  Iterator* iterator = zns->NewIterator(level, meta, icmp);
   return iterator;
 }
 
@@ -75,7 +76,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
     std::vector<SSZoneMetaData*>::const_iterator base_end = l0ss.end();
     for (; base_iter != base_end; ++base_iter) {
       iterators[iterator_index++] =
-          vset_->znssstable_->NewIterator(0, *base_iter);
+          vset_->znssstable_->NewIterator(0, *base_iter, vset_->icmp_);
     }
   }
   // LN
@@ -83,7 +84,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
   for (; i <= 1; i++) {
     iterators[iterator_index++] = new LNIterator(
         new LNZoneIterator(vset_->icmp_, &targets_[i], first_level_ + i),
-        &GetLNIterator, vset_->znssstable_);
+        &GetLNIterator, vset_->znssstable_, vset_->icmp_);
     // printf("Iterators... %d %lu\n", i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);

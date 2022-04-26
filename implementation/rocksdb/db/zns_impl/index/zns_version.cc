@@ -69,8 +69,10 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
       return a->number > b->number;
     });
     for (uint32_t i = 0; i < tmp.size(); i++) {
-      s = znssstable->Get(0, vset_->icmp_, internal_key, value, tmp[i],
-                          &status);
+      s = vset_->table_cache_->Get(options, tmp[i], 0, internal_key, value,
+                                   &status);
+      // s = znssstable->Get(0, vset_->icmp_, internal_key, value, tmp[i],
+      //                     &status);
       if (s.ok()) {
         if (status == EntryStatus::notfound) {
           continue;
@@ -92,7 +94,10 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
     SSZoneMetaData* m = ss_[level][index];
     if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
         ucmp->Compare(key, m->largest.user_key()) <= 0) {
-      s = znssstable->Get(level, vset_->icmp_, internal_key, value, m, &status);
+      s = vset_->table_cache_->Get(options, m, level, internal_key, value,
+                                   &status);
+      // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
+      // &status);
       if (s.ok()) {
         if (status != EntryStatus::found) {
           continue;

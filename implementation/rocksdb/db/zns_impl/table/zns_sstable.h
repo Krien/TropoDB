@@ -40,7 +40,8 @@ class ZnsSSTable {
   virtual Status InvalidateSSZone(SSZoneMetaData* meta) = 0;
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(Slice content, SSZoneMetaData* meta) = 0;
-  virtual Iterator* NewIterator(SSZoneMetaData* meta) = 0;
+  virtual Iterator* NewIterator(SSZoneMetaData* meta,
+                                const InternalKeyComparator& icmp) = 0;
   virtual void EncodeTo(std::string* dst) = 0;
   virtual bool EncodeFrom(Slice* data) = 0;
   inline uint64_t GetTail() { return write_tail_; }

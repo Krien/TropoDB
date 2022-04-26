@@ -16,7 +16,8 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
                              ZNSSSTableManager* znssstable,
-                             ZnsManifest* manifest, uint64_t lba_size)
+                             ZnsManifest* manifest, uint64_t lba_size,
+                             ZnsTableCache* table_cache)
     : dummy_versions_(this),
       current_(nullptr),
       icmp_(icmp),
@@ -24,7 +25,8 @@ ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
       manifest_(manifest),
       lba_size_(lba_size),
       ss_number_(0),
-      logged_(false) {
+      logged_(false),
+      table_cache_(table_cache) {
   AppendVersion(new ZnsVersion(this));
 };
 
@@ -164,10 +166,7 @@ Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   for (; base_iter != base_end; ++base_iter) {
     const int level = (*base_iter).first;
     SSZoneMetaData m = (*base_iter).second;
-    s = znssstable_->InvalidateSSZone(level, &m);
-    if (!s.ok()) {
-      return s;
-    }
+    table_cache_->Evict(m.number);
   }
   return s;
 }

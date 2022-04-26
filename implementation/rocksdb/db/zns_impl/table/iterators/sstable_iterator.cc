@@ -3,24 +3,27 @@
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-SSTableIterator::SSTableIterator(char* data, size_t count, NextPair nextf)
+SSTableIterator::SSTableIterator(char* data, size_t count, NextPair nextf,
+                                 const InternalKeyComparator& icmp)
     : data_(data),
       walker_(data),
       nextf_(nextf),
       index_(0),
       count_(count),
       current_val_("deadbeef"),
-      current_key_("deadbeef") {}
+      current_key_("deadbeef"),
+      icmp_(icmp) {}
 
 SSTableIterator::~SSTableIterator() = default;
 
 void SSTableIterator::Seek(const Slice& target) {
   walker_ = data_;
   index_ = 0;
+  Slice target_ptr_stripped = ExtractUserKey(target);
   while (Valid()) {
     index_++;
     nextf_(&walker_, &current_key_, &current_val_);
-    if (target.compare(current_key_) == 0) {
+    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
       break;
     }
   }

@@ -14,6 +14,7 @@
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_table_cache.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -28,7 +29,7 @@ class ZnsVersionSet {
  public:
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
-                uint64_t lba_size);
+                uint64_t lba_size, ZnsTableCache* table_cache);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
   ~ZnsVersionSet();
@@ -97,6 +98,7 @@ class ZnsVersionSet {
   uint64_t last_sequence_;
   uint64_t ss_number_;
   bool logged_;
+  ZnsTableCache* table_cache_;
 };
 
 class ZnsVersionSet::Builder {

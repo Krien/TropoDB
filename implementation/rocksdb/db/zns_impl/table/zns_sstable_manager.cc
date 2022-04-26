@@ -113,9 +113,10 @@ L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() {
   return dynamic_cast<L0ZnsSSTable*>(sstable_wal_level_[0]);
 }
 
-Iterator* ZNSSSTableManager::NewIterator(size_t level, SSZoneMetaData* meta) {
+Iterator* ZNSSSTableManager::NewIterator(size_t level, SSZoneMetaData* meta,
+                                         const InternalKeyComparator& icmp) {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->NewIterator(meta);
+  return sstable_wal_level_[level]->NewIterator(meta, icmp);
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(size_t level,

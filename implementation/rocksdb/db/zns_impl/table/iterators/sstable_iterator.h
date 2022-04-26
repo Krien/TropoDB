@@ -3,6 +3,7 @@
 #ifndef ZNS_SSTABLE_ITERATOR_H
 #define ZNS_SSTABLE_ITERATOR_H
 
+#include "db/dbformat.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -19,7 +20,8 @@ typedef void (*NextPair)(char** src, Slice* key, Slice* value);
  */
 class SSTableIterator : public Iterator {
  public:
-  SSTableIterator(char* data, size_t count, NextPair nextf);
+  SSTableIterator(char* data, size_t count, NextPair nextf,
+                  const InternalKeyComparator& icmp);
   ~SSTableIterator();
   bool Valid() const override { return index_ <= count_ && count_ > 0; }
   Slice key() const override {
@@ -46,6 +48,7 @@ class SSTableIterator : public Iterator {
   size_t count_;
   Slice current_val_;
   Slice current_key_;
+  const InternalKeyComparator icmp_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

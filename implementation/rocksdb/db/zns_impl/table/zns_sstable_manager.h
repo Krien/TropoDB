@@ -33,7 +33,8 @@ class ZNSSSTableManager : public RefCounter {
   Status InvalidateSSZone(size_t level, SSZoneMetaData* meta);
   Status InvalidateUpTo(size_t level, uint64_t tail);
   L0ZnsSSTable* GetL0SSTableLog();
-  Iterator* NewIterator(size_t level, SSZoneMetaData* meta);
+  Iterator* NewIterator(size_t level, SSZoneMetaData* meta,
+                        const InternalKeyComparator& icmp);
   SSTableBuilder* NewBuilder(size_t level, SSZoneMetaData* meta);
   // Used for persistency
   void EncodeTo(std::string* dst);

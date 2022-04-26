@@ -40,11 +40,13 @@ void LNZoneIterator::Prev() {
 }
 
 LNIterator::LNIterator(Iterator* ln_iterator,
-                       NewZoneIteratorFunction zone_function, void* arg)
+                       NewZoneIteratorFunction zone_function, void* arg,
+                       const InternalKeyComparator& icmp)
     : zone_function_(zone_function),
       arg_(arg),
       index_iter_(ln_iterator),
-      data_iter_(nullptr) {}
+      data_iter_(nullptr),
+      icmp_(icmp) {}
 
 LNIterator::~LNIterator() = default;
 
@@ -123,7 +125,7 @@ void LNIterator::InitDataZone() {
   if (data_iter_.iter() != nullptr && handle.compare(data_zone_handle_) == 0) {
     return;
   }
-  Iterator* iter = (*zone_function_)(arg_, handle);
+  Iterator* iter = (*zone_function_)(arg_, handle, icmp_);
   data_zone_handle_.assign(handle.data(), handle.size());
   SetDataIterator(iter);
 }

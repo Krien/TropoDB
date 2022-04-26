@@ -1049,6 +1049,7 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/table/zns_sstable.cc
   db/zns_impl/table/l0_zns_sstable.cc
   db/zns_impl/table/ln_zns_sstable.cc
+  db/zns_impl/table/zns_table_cache.cc
   db/zns_impl/table/iterators/sstable_iterator.cc
   db/zns_impl/table/iterators/sstable_ln_iterator.cc
   db/zns_impl/table/iterators/merging_iterator.cc

@@ -19,7 +19,8 @@ class LNZnsSSTable : public ZnsSSTable {
   ~LNZnsSSTable();
   bool EnoughSpaceAvailable(Slice slice) override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
-  Iterator* NewIterator(SSZoneMetaData* meta) override;
+  Iterator* NewIterator(SSZoneMetaData* meta,
+                        const InternalKeyComparator& icmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
              std::string* value, SSZoneMetaData* meta,
              EntryStatus* entry) override;

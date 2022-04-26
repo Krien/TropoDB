@@ -285,7 +285,8 @@ Status LNZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
   return s;
 }
 
-Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta) {
+Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta,
+                                    const InternalKeyComparator& icmp) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);
@@ -296,7 +297,7 @@ Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta) {
   memcpy(data, sstable.data(), sstable.size());
   uint32_t count;
   data = (char*)GetVarint32Ptr(data, data + 5, &count);
-  return new SSTableIterator(data, (size_t)count, &ParseNext);
+  return new SSTableIterator(data, (size_t)count, &ParseNext, icmp);
 }
 
 void LNZnsSSTable::EncodeTo(std::string* dst) {

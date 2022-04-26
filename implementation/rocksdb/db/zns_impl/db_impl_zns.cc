@@ -25,6 +25,7 @@
 #include "db/zns_impl/persistence/zns_wal.h"
 #include "db/zns_impl/persistence/zns_wal_manager.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/zns_table_cache.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -297,6 +298,10 @@ void DBImplZNS::BackgroundCompaction() {
   }
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? RemoveObsoleteZones() : s;
+  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+    if (!s.ok()) {
+    printf("ERROR during compaction!!!\n");
+    }
   // printf("Compacted!!\n");
 }
 
@@ -437,8 +442,13 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();
 
+  Options opts(options, ColumnFamilyOptions());
+  table_cache_ =
+      new ZnsTableCache(opts, internal_comparator_, 100, ss_manager_);
+
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
-                                device_info.lba_size);
+                                device_info.lba_size, table_cache_);
+
   return Status::OK();
 }
 
@@ -468,6 +478,7 @@ DBImplZNS::~DBImplZNS() {
   if (wal_man_ != nullptr) wal_man_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
+  if (table_cache_ != nullptr) delete table_cache_;
   if (channel_factory_ != nullptr) channel_factory_->Unref();
   if (device_manager_ != nullptr) {
     SZD::z_destroy(*device_manager_);
