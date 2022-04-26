@@ -22,10 +22,10 @@ class RefCounter {
     }
   }
 
-  inline int Getref() { return refs_; }
+  inline size_t Getref() { return refs_; }
 
  protected:
-  int refs_ = 0;
+  size_t refs_ = 0;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

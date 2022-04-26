@@ -1,7 +1,7 @@
 #include "db/zns_impl/persistence/zns_wal_manager.h"
 
 #include "db/write_batch_internal.h"
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -15,7 +15,7 @@
 #include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsWALManager::ZnsWALManager(QPairFactory* qpair_factory,
+ZnsWALManager::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                              const SZD::DeviceInfo& info,
                              const uint64_t min_zone_head,
                              uint64_t max_zone_head, size_t wal_count)
@@ -27,7 +27,7 @@ ZnsWALManager::ZnsWALManager(QPairFactory* qpair_factory,
 
   for (size_t i = 0; i < wal_count_; ++i) {
     ZNSWAL* newwal =
-        new ZNSWAL(qpair_factory, info, wal_walker, wal_walker + wal_range);
+        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range);
     printf("WAL range %lu %lu\n", wal_walker / info.zone_size,
            (wal_walker + wal_range) / info.zone_size);
     newwal->Ref();

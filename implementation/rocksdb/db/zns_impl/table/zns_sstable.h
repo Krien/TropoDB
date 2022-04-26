@@ -3,8 +3,7 @@
 #ifndef ZNS_SSTABLE_H
 #define ZNS_SSTABLE_H
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
@@ -29,8 +28,9 @@ class SSTableBuilder {
 
 class ZnsSSTable {
  public:
-  ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
-             const uint64_t min_zone_head, uint64_t max_zone_head);
+  ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
+             const SZD::DeviceInfo& info, const uint64_t min_zone_head,
+             uint64_t max_zone_head);
   virtual ~ZnsSSTable();
   virtual Status ReadSSTable(Slice* sstable, SSZoneMetaData* meta) = 0;
   virtual Status Get(const InternalKeyComparator& icmp, const Slice& key,
@@ -61,8 +61,8 @@ class ZnsSSTable {
   uint64_t zone_size_;
   uint64_t lba_size_;
   // references
-  QPairFactory* qpair_factory_;
-  SZD::QPair** qpair_;
+  SZD::SZDChannelFactory* channel_factory_;
+  SZD::SZDChannel* channel_;
 };
 
 int FindSS(const InternalKeyComparator& icmp,

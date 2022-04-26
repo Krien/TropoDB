@@ -3,8 +3,7 @@
 #ifndef ZNS_COMMITER_H
 #define ZNS_COMMITER_H
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -33,7 +32,7 @@ static_assert(kZnsRecordTypeLast == 5);
  */
 class ZnsCommitter {
  public:
-  ZnsCommitter(SZD::QPair* qpair, const SZD::DeviceInfo& info);
+  ZnsCommitter(SZD::SZDChannel* channel, const SZD::DeviceInfo& info);
   // No copying or implicits
   ZnsCommitter(const ZnsCommitter&) = delete;
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
@@ -42,15 +41,7 @@ class ZnsCommitter {
   bool SpaceEnough(const Slice& data, uint64_t min, uint64_t max);
   Status Commit(const Slice& data, uint64_t* addr);
   Status SafeCommit(const Slice& data, uint64_t* addr, uint64_t min,
-                    uint64_t max) {
-    if (*addr < min || *addr > max || min > max) {
-      return Status::Corruption("Corrupt pointers");
-    }
-    if (!SpaceEnough(data, *addr, max)) {
-      return Status::IOError("No space left");
-    }
-    return Commit(data, addr);
-  }
+                    uint64_t max);
 
   bool GetCommitReader(uint64_t begin, uint64_t end);
   // Can not be called without first getting the commit
@@ -59,7 +50,7 @@ class ZnsCommitter {
   bool CloseCommit();
 
  private:
-  SZD::QPair* qpair_;
+  SZD::SZDChannel* channel_;
   uint64_t zone_size_;
   uint64_t lba_size_;
   uint64_t zasl_;

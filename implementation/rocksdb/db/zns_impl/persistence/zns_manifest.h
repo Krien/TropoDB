@@ -3,8 +3,7 @@
 #ifndef ZNS_MANIFEST_H
 #define ZNS_MANIFEST_H
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/ref_counter.h"
 #include "rocksdb/slice.h"
@@ -13,8 +12,9 @@
 namespace ROCKSDB_NAMESPACE {
 class ZnsManifest : public RefCounter {
  public:
-  ZnsManifest(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
-              const uint64_t min_zone_head, uint64_t max_zone_head);
+  ZnsManifest(SZD::SZDChannelFactory* channel_factory,
+              const SZD::DeviceInfo& info, const uint64_t min_zone_head,
+              uint64_t max_zone_head);
   ~ZnsManifest();
   Status Scan();
   Status NewManifest(const Slice& record);
@@ -45,8 +45,8 @@ class ZnsManifest : public RefCounter {
   uint64_t lba_size_;
   uint64_t zone_byte_range;
   // references
-  QPairFactory* qpair_factory_;
-  SZD::QPair** qpair_;
+  SZD::SZDChannelFactory* channel_factory_;
+  SZD::SZDChannel* channel_;
   ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE

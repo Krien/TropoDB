@@ -3,7 +3,6 @@
 #ifndef L0_ZNS_SSTABLE_H
 #define L0_ZNS_SSTABLE_H
 
-#include "db/zns_impl/io/qpair_factory.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
@@ -15,8 +14,9 @@ namespace ROCKSDB_NAMESPACE {
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
  public:
-  L0ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
-               const uint64_t min_zone_head, uint64_t max_zone_head);
+  L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
+               const SZD::DeviceInfo& info, const uint64_t min_zone_head,
+               uint64_t max_zone_head);
   ~L0ZnsSSTable();
   bool EnoughSpaceAvailable(Slice slice) override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;

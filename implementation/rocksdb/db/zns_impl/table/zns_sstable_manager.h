@@ -4,8 +4,7 @@
 #define ZNS_SSTABLE_MANAGER_H
 
 #include "db/zns_impl/config.h"
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
@@ -20,7 +19,7 @@ class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {
  public:
   ZNSSSTableManager(
-      QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
+      SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
       std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count]);
   ~ZNSSSTableManager();
 
@@ -49,7 +48,7 @@ class ZNSSSTableManager : public RefCounter {
   // wals
   ZnsSSTable* sstable_wal_level_[ZnsConfig::level_count];
   // references
-  QPairFactory* qpair_factory_;
+  SZD::SZDChannelFactory* channel_factory_;
   std::pair<uint64_t, uint64_t> ranges_[ZnsConfig::level_count];
 };
 }  // namespace ROCKSDB_NAMESPACE

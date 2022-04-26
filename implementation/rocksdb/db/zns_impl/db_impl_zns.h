@@ -22,8 +22,7 @@
 
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/persistence/zns_wal.h"
@@ -299,7 +298,7 @@ class DBImplZNS : public DB {
   // Constant after construction
   const DBOptions options_;
   SZD::DeviceManager** device_manager_;
-  QPairFactory* qpair_factory_;
+  SZD::SZDChannelFactory* channel_factory_;
   ZNSWAL* wal_;
   ZnsWALManager* wal_man_;
   ZnsManifest* manifest_;

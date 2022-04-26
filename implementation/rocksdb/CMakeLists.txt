@@ -1040,7 +1040,7 @@ endif()
 
 set(ZNS_LSM_SOURCES
   db/zns_impl/db_impl_zns.cc
-  db/zns_impl/io/qpair_factory.cc
+  db/zns_impl/io/szd_port.cc
   db/zns_impl/memtable/zns_memtable.cc
   db/zns_impl/persistence/zns_committer.cc
   db/zns_impl/persistence/zns_wal.cc

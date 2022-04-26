@@ -1,7 +1,6 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
@@ -48,13 +47,13 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
   bool started_;
 };
 
-L0ZnsSSTable::L0ZnsSSTable(QPairFactory* qpair_factory,
+L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
                            const uint64_t min_zone_head, uint64_t max_zone_head)
-    : ZnsSSTable(qpair_factory, info, min_zone_head, max_zone_head),
+    : ZnsSSTable(channel_factory, info, min_zone_head, max_zone_head),
       pseudo_write_head_(max_zone_head) {}
 
-L0ZnsSSTable::~L0ZnsSSTable() {}
+L0ZnsSSTable::~L0ZnsSSTable() = default;
 
 SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new L0ZnsSSTable::Builder(this, meta);
@@ -115,25 +114,19 @@ Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   if (!SetWriteAddress(content).ok()) {
     return Status::IOError("Not enough space available for L0");
   }
-  uint64_t zcalloc_size;
-  char* payload =
-      ZnsUtils::slice_to_spdkformat(&zcalloc_size, content, *qpair_, lba_size_);
-  if (payload == nullptr) {
-    return Status::MemoryLimit();
-  }
   meta->lba = write_head_;
   mutex_.Lock();
-  if (SZD::z_append(*qpair_, &write_head_, payload, zcalloc_size) != 0) {
-    SZD::z_free(*qpair_, payload);
+  if (!FromStatus(channel_->DirectAppend(&write_head_, (void*)content.data(),
+                                         content.size(), false))
+           .ok()) {
     mutex_.Unlock();
     return Status::IOError("Error during appending\n");
   }
-  SZD::z_free(*qpair_, payload);
   mutex_.Unlock();
   zone_head_ = (write_head_ / zone_size_) * zone_size_;
-  meta->lba_count = zcalloc_size / lba_size_;
+  meta->lba_count = write_head_ - meta->lba;
   return Status::OK();
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   Status s = Status::OK();
@@ -174,31 +167,35 @@ bool L0ZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
 }
 
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
+  Status s = Status::OK();
   if (!ValidateReadAddress(meta)) {
-    printf("corrupt\n");
-    printf("MEta %lu %lu %lu\n", meta->lba, meta->lba_count, write_tail_);
     return Status::Corruption("Invalid metadata");
   }
-  // Lba by lba...
-  void* payload = SZD::z_calloc(*qpair_, lba_size_, sizeof(char));
-  if (payload == nullptr) {
-    return Status::IOError("Error allocating DMA\n");
+  char* buffer = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
+  // We are going to reserve some DMA memory for the loop, as we are reading Lba
+  // by lba....
+  if (!(s = FromStatus(channel_->ReserveBuffer(lba_size_))).ok()) {
+    return s;
   }
-  char* payloadc = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
+  char* z_buffer;
+  if (!(s = FromStatus(channel_->GetBuffer((void**)&z_buffer))).ok()) {
+    return s;
+  }
+  mutex_.Lock();
   for (uint64_t i = 0; i < meta->lba_count; i++) {
-    mutex_.Lock();
-    int rc = SZD::z_read(*qpair_, meta->lba + i, payload, lba_size_);
-    mutex_.Unlock();
-    if (rc != 0) {
-      SZD::z_free(*qpair_, payload);
-      free(payloadc);
+    if (!FromStatus(channel_->ReadIntoBuffer(meta->lba + i, 0, lba_size_))
+             .ok()) {
+      mutex_.Unlock();
+      delete buffer;
+      channel_->FreeBuffer();
       return Status::IOError("Error reading SSTable");
     }
-    memcpy(payloadc + i * lba_size_, payload, lba_size_);
+    memcpy(buffer + i * lba_size_, z_buffer, lba_size_);
   }
-  SZD::z_free(*qpair_, payload);
-  *sstable = Slice((char*)payloadc, meta->lba_count * lba_size_);
-  return Status::OK();
+  s = FromStatus(channel_->FreeBuffer());
+  mutex_.Unlock();
+  *sstable = Slice((char*)buffer, meta->lba_count * lba_size_);
+  return s;
 }
 
 void L0ZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
@@ -250,10 +247,8 @@ Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   }
   write_tail_ = end_lba;
   uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
-  for (uint64_t i = zone_tail_; i < cur_zone; i += zone_size_) {
-    // printf("resetting zone %lu \n", i);
-    int rc = SZD::z_reset(*qpair_, i, false);
-    if (rc != 0) {
+  for (uint64_t slba = zone_tail_; slba < cur_zone; slba += zone_size_) {
+    if (!FromStatus(channel_->ResetZone(slba)).ok()) {
       return Status::IOError("Error resetting SSTable tail");
     }
   }

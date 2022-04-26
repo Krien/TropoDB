@@ -3,8 +3,7 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/ref_counter.h"
@@ -19,7 +18,7 @@ namespace ROCKSDB_NAMESPACE {
  */
 class ZNSWAL : public RefCounter {
  public:
-  ZNSWAL(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
+  ZNSWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_head, uint64_t max_zone_head);
   // No copying or implicits
   ZNSWAL(const ZNSWAL&) = delete;
@@ -41,8 +40,8 @@ class ZNSWAL : public RefCounter {
   uint64_t zone_size_;
   uint64_t lba_size_;
   // references
-  QPairFactory* qpair_factory_;
-  SZD::QPair** qpair_;
+  SZD::SZDChannelFactory* channel_factory_;
+  SZD::SZDChannel* channel_;
   ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE

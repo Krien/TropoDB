@@ -2,7 +2,7 @@
 #ifdef ZNS_PLUGIN_ENABLED
 #ifndef ZNS_UTILS_H
 #define ZNS_UTILS_H
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {

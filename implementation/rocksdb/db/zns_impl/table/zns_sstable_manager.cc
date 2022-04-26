@@ -1,7 +1,7 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 
 #include "db/zns_impl/config.h"
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
@@ -15,17 +15,17 @@
 namespace ROCKSDB_NAMESPACE {
 
 ZNSSSTableManager::ZNSSSTableManager(
-    QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
+    SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
     std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count])
-    : qpair_factory_(qpair_factory) {
-  assert(qpair_factory_ != nullptr);
-  qpair_factory_->Ref();
-  sstable_wal_level_[0] =
-      new L0ZnsSSTable(qpair_factory_, info, ranges[0].first, ranges[0].second);
+    : channel_factory_(channel_factory) {
+  assert(channel_factory_ != nullptr);
+  channel_factory_->Ref();
+  sstable_wal_level_[0] = new L0ZnsSSTable(channel_factory_, info,
+                                           ranges[0].first, ranges[0].second);
   ranges_[0] = ranges[0];
   for (size_t level = 1; level < ZnsConfig::level_count; level++) {
     sstable_wal_level_[level] = new LNZnsSSTable(
-        qpair_factory_, info, ranges[level].first, ranges[level].second);
+        channel_factory_, info, ranges[level].first, ranges[level].second);
     ranges_[level] = ranges[level];
   }
 }
@@ -35,8 +35,8 @@ ZNSSSTableManager::~ZNSSSTableManager() {
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     if (sstable_wal_level_[i] != nullptr) delete sstable_wal_level_[i];
   }
-  qpair_factory_->Unref();
-  qpair_factory_ = nullptr;
+  channel_factory_->Unref();
+  channel_factory_ = nullptr;
 }
 
 Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,

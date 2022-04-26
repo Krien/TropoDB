@@ -20,7 +20,7 @@
 #include "db/zns_impl/index/zns_compaction.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/persistence/zns_wal.h"
 #include "db/zns_impl/persistence/zns_wal_manager.h"
@@ -378,8 +378,8 @@ Status DBImplZNS::OpenDevice() {
   if (rc != 0) {
     return Status::IOError("Error opening ZNS device");
   }
-  qpair_factory_ = new QPairFactory(*device_manager_);
-  qpair_factory_->Ref();
+  channel_factory_ = new SZD::SZDChannelFactory(*device_manager_, 0x100);
+  channel_factory_->Ref();
   return Status::OK();
 }
 
@@ -387,12 +387,12 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   assert(device_manager_ != nullptr);
   SZD::DeviceInfo device_info = (*device_manager_)->info;
   manifest_ =
-      new ZnsManifest(qpair_factory_, device_info, 0,
+      new ZnsManifest(channel_factory_, device_info, 0,
                       device_info.zone_size * ZnsConfig::manifest_zones);
   manifest_->Ref();
 
   wal_man_ =
-      new ZnsWALManager(qpair_factory_, device_info,
+      new ZnsWALManager(channel_factory_, device_info,
                         device_info.zone_size * ZnsConfig::manifest_zones,
                         device_info.zone_size * ZnsConfig::manifest_zones +
                             device_info.zone_size * ZnsConfig::wal_count *
@@ -431,7 +431,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
            ranges[ZnsConfig::level_count - 1].first / device_info.zone_size,
            ranges[ZnsConfig::level_count - 1].second / device_info.zone_size);
   }
-  ss_manager_ = new ZNSSSTableManager(qpair_factory_, device_info, ranges);
+  ss_manager_ = new ZNSSSTableManager(channel_factory_, device_info, ranges);
   ss_manager_->Ref();
 
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
@@ -443,14 +443,14 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
 }
 
 Status DBImplZNS::ResetDevice() {
-  qpair_factory_->Ref();
-  SZD::QPair** qpair = (SZD::QPair**)calloc(1, sizeof(SZD::QPair*));
-  qpair_factory_->register_qpair(qpair);
-  int rc = SZD::z_reset(*qpair, 0, true);
-  qpair_factory_->unregister_qpair(*qpair);
-  qpair_factory_->Unref();
-  delete qpair;
-  return rc == 0 ? Status::OK() : Status::IOError("Error resetting device");
+  Status s;
+  SZD::SZDChannel* channel;
+  channel_factory_->Ref();
+  channel_factory_->register_channel(&channel);
+  s = FromStatus(channel->ResetAllZones());
+  channel_factory_->unregister_channel(channel);
+  channel_factory_->Unref();
+  return s.ok() ? Status::OK() : Status::IOError("Error resetting device");
 }
 
 DBImplZNS::~DBImplZNS() {
@@ -468,7 +468,7 @@ DBImplZNS::~DBImplZNS() {
   if (wal_man_ != nullptr) wal_man_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
-  if (qpair_factory_ != nullptr) qpair_factory_->Unref();
+  if (channel_factory_ != nullptr) channel_factory_->Unref();
   if (device_manager_ != nullptr) {
     SZD::z_destroy(*device_manager_);
     free(device_manager_);

@@ -1,10 +1,12 @@
 #include "db/zns_impl/table/zns_sstable.h"
 
-#include "db/zns_impl/io/device_wrapper.h"
-#include "db/zns_impl/io/qpair_factory.h"
+#include <memory>
+
+#include "db/zns_impl/io/szd_port.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
+ZnsSSTable::ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
+                       const SZD::DeviceInfo& info,
                        const uint64_t min_zone_head, uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
@@ -14,23 +16,19 @@ ZnsSSTable::ZnsSSTable(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
       max_zone_head_(max_zone_head),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
-      qpair_factory_(qpair_factory) {
+      channel_factory_(channel_factory) {
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
-  assert(qpair_factory_ != nullptr);
-  qpair_ = new SZD::QPair*;
-  qpair_factory_->Ref();
-  qpair_factory_->register_qpair(qpair_);
+  assert(channel_factory_ != nullptr);
+  channel_factory_->Ref();
+  channel_factory_->register_channel(&channel_, min_zone_head, max_zone_head);
 }
 
 ZnsSSTable::~ZnsSSTable() {
-  // printf("Deleting SSTable WAL.\n");
-  if (qpair_ != nullptr) {
-    qpair_factory_->unregister_qpair(*qpair_);
-    delete qpair_;
-  }
-  qpair_factory_->Unref();
-  qpair_factory_ = nullptr;
+  printf("Deleting SSTable manager.\n");
+  channel_factory_->unregister_channel(channel_);
+  channel_factory_->Unref();
+  channel_factory_ = nullptr;
 }
 
 void ZnsSSTable::PutKVPair(std::string* dst, const Slice& key,

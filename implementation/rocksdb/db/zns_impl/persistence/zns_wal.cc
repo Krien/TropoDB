@@ -1,7 +1,7 @@
 #include "db/zns_impl/persistence/zns_wal.h"
 
 #include "db/write_batch_internal.h"
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -13,33 +13,32 @@
 #include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZNSWAL::ZNSWAL(QPairFactory* qpair_factory, const SZD::DeviceInfo& info,
-               const uint64_t min_zone_head, uint64_t max_zone_head)
+ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
+               const SZD::DeviceInfo& info, const uint64_t min_zone_head,
+               uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
       min_zone_head_(min_zone_head),
       max_zone_head_(max_zone_head),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
-      qpair_factory_(qpair_factory) {
+      channel_factory_(channel_factory) {
   assert(zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
-  assert(qpair_factory_ != nullptr);
-  qpair_ = new SZD::QPair*;
-  qpair_factory_->Ref();
-  qpair_factory_->register_qpair(qpair_);
-  committer_ = new ZnsCommitter(*qpair_, info);
+  assert(channel_factory_ != nullptr);
+  channel_factory_->Ref();
+  channel_factory_->register_channel(&channel_, min_zone_head_, max_zone_head_);
+  committer_ = new ZnsCommitter(channel_, info);
 }
 
 ZNSWAL::~ZNSWAL() {
   // printf("Deleting WAL.\n");
   delete committer_;
-  if (qpair_ != nullptr) {
-    qpair_factory_->unregister_qpair(*qpair_);
-    delete qpair_;
+  if (channel_ != nullptr) {
+    channel_factory_->unregister_channel(channel_);
   }
-  qpair_factory_->Unref();
-  qpair_factory_ = nullptr;
+  channel_factory_->Unref();
+  channel_factory_ = nullptr;
 }
 
 void ZNSWAL::Append(Slice data) {
@@ -55,10 +54,7 @@ Status ZNSWAL::Reset() {
   Status s;
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
        slba += zone_size_) {
-    s = SZD::z_reset(*qpair_, slba, false) == 0
-            ? Status::OK()
-            : Status::IOError("Reset WAL zone error");
-    if (!s.ok()) {
+    if (!(s = FromStatus(channel_->ResetZone(slba))).ok()) {
       return s;
     }
   }
@@ -69,12 +65,13 @@ Status ZNSWAL::Reset() {
 }
 
 Status ZNSWAL::Recover() {
+  Status s;
   uint64_t write_head = min_zone_head_;
   uint64_t zone_head = min_zone_head_, old_zone_head = min_zone_head_;
   for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
        slba += zone_size_) {
-    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
-      return Status::IOError("Error getting zonehead for WAL");
+    if (!(s = FromStatus(channel_->ZoneHead(slba, &zone_head))).ok()) {
+      return s;
     }
     // head is at last zone that is not empty
     if (zone_head > slba) {
@@ -123,7 +120,8 @@ bool ZNSWAL::Empty() { return write_head_ == min_zone_head_; }
 
 bool ZNSWAL::SpaceLeft(const Slice& data) {
   (void)data;
-  // TODO: this is not safe...
+  // TODO: this is not safe and kind of strange, it sets max reliable writesize
+  // to 26*lbasize (10k on 512, 92k on 4096)...
   bool space_left = write_head_ + 26 < max_zone_head_;
   return space_left;
 }

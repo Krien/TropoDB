@@ -1,13 +1,13 @@
 #include "db/zns_impl/persistence/zns_manifest.h"
 
-#include "db/zns_impl/io/device_wrapper.h"
+#include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/io/zns_utils.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
+ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
                          const SZD::DeviceInfo& info,
                          const uint64_t min_zone_head, uint64_t max_zone_head)
     : current_lba_(min_zone_head_),
@@ -20,25 +20,24 @@ ZnsManifest::ZnsManifest(QPairFactory* qpair_factory,
       max_zone_head_(max_zone_head),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
-      qpair_factory_(qpair_factory) {
+      channel_factory_(channel_factory) {
   assert(max_zone_head_ < info.lba_cap);
   assert(zone_head_ % info.lba_size == 0);
-  assert(qpair_factory_ != nullptr);
+  assert(channel_factory_ != nullptr);
+  channel_factory_->Ref();
   assert(min_zone_head_ < max_zone_head_);
-  qpair_ = new SZD::QPair*;
-  qpair_factory_->Ref();
-  qpair_factory_->register_qpair(qpair_);
-  committer_ = new ZnsCommitter(*qpair_, info);
+  channel_factory_->register_channel(&channel_, min_zone_head_, max_zone_head_);
+  committer_ = new ZnsCommitter(channel_, info);
 }
 
 ZnsManifest::~ZnsManifest() {
   // printf("Deleting manifest\n");
   delete committer_;
-  if (qpair_ != nullptr) {
-    qpair_factory_->unregister_qpair(*qpair_);
-    delete qpair_;
+  if (channel_ != nullptr) {
+    channel_factory_->unregister_channel(channel_);
   }
-  qpair_factory_->Unref();
+  channel_factory_->Unref();
+  channel_factory_ = nullptr;
 }
 
 Status ZnsManifest::Scan() { return Status::NotSupported(); }
@@ -125,12 +124,13 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
 }
 
 Status ZnsManifest::RecoverLog() {
+  Status s;
   uint64_t log_tail = min_zone_head_, log_head = min_zone_head_;
   // Scan for tail
   uint64_t slba;
   uint64_t zone_head = min_zone_head_, old_zone_head = min_zone_head_;
   for (slba = min_zone_head_; slba < max_zone_head_; slba += zone_size_) {
-    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+    if (!(s = FromStatus(channel_->ZoneHead(slba, &zone_head))).ok()) {
       return Status::IOError("Error getting zonehead for CURRENT");
     }
     // tail is at first zone that is not empty
@@ -142,7 +142,7 @@ Status ZnsManifest::RecoverLog() {
   }
   // Scan for head
   for (; slba < max_zone_head_; slba += zone_size_) {
-    if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+    if (!(s = FromStatus(channel_->ZoneHead(slba, &zone_head))).ok()) {
       return Status::IOError("Error getting zonehead for CURRENT");
     }
     // The first zone with a head more than 0 and less than max_zone, holds the
@@ -165,7 +165,7 @@ Status ZnsManifest::RecoverLog() {
   // start AFTER head.
   if (log_head > 0 && log_tail == 0) {
     for (slba += zone_size_; slba < max_zone_head_; slba += zone_size_) {
-      if (SZD::z_get_zone_head(*qpair_, slba, &zone_head) != 0) {
+      if (!(s = FromStatus(channel_->ZoneHead(slba, &zone_head))).ok()) {
         return Status::IOError("Error getting zonehead for CURRENT");
       }
       if (zone_head > slba) {
@@ -242,15 +242,9 @@ Status ZnsManifest::Recover() {
 Status ZnsManifest::RemoveObsoleteZones() { return Status::NotSupported(); }
 
 Status ZnsManifest::Reset() {
-  for (uint64_t slba = min_zone_head_; slba < max_zone_head_;
-       slba += zone_size_) {
-    int rc = SZD::z_reset(*qpair_, slba, false);
-    if (rc != 0) {
-      return Status::IOError("Error during zone reset of Manifest");
-    }
-  }
+  Status s = FromStatus(channel_->ResetAllZones());
   current_lba_ = min_zone_head_;
-  return Status::OK();
+  return s;
 }
 
 }  // namespace ROCKSDB_NAMESPACE
