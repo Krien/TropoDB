@@ -102,7 +102,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(size_t level, uint64_t tail,
   }
   // lagging tail
   else {
-    // printf("lagging\n");
+    // printf("lagging tail %lu %lu\n", tail, written_tail);
     meta.lba = written_tail;
     meta.lba_count = tail - written_tail;
     if (meta.lba_count > 0) {
@@ -110,24 +110,6 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(size_t level, uint64_t tail,
     }
   }
   return Status::OK();
-  // if (tail < ranges_[level].first || tail > ranges_[level].second) {
-  //   return Status::OK();
-  // }
-  // if (tail > sstable_wal_level_[level]->GetTail()) {
-  //   meta.lba = sstable_wal_level_[level]->GetTail();
-  //   meta.lba_count = tail - sstable_wal_level_[level]->GetTail();
-  //   return sstable_wal_level_[level]->InvalidateSSZone(&meta);
-  // } else if (tail < sstable_wal_level_[level]->GetTail()) {
-  //   meta.lba = sstable_wal_level_[level]->GetTail();
-  //   meta.lba_count =
-  //       ranges_[level].second - sstable_wal_level_[level]->GetTail();
-  //   Status s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
-  //   if (!s.ok()) return s;
-  //   meta.lba = ranges_[level].first;
-  //   meta.lba_count = tail - ranges_[level].first;
-  //   return sstable_wal_level_[level]->InvalidateSSZone(&meta);
-  // }
-  // return Status::OK();
 }
 
 Status ZNSSSTableManager::Get(size_t level, const InternalKeyComparator& icmp,

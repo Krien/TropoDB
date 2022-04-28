@@ -294,8 +294,7 @@ Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta,
   if (!s.ok()) {
     return nullptr;
   }
-  char* data = new char[sstable.size() + 1];
-  memcpy(data, sstable.data(), sstable.size());
+  char* data = (char*)sstable.data();
   uint32_t count = DecodeFixed32(data);
   return new SSTableIterator(data, sstable.size(), (size_t)count, &ParseNext,
                              icmp);

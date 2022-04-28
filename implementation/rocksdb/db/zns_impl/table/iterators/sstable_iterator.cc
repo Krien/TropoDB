@@ -18,7 +18,7 @@ SSTableIterator::SSTableIterator(char* data, size_t data_size, size_t count,
       icmp_(icmp),
       restart_index_(0) {}
 
-SSTableIterator::~SSTableIterator() = default;
+SSTableIterator::~SSTableIterator() { free(data_); };
 
 void SSTableIterator::Seek(const Slice& target) {
   Slice target_ptr_stripped = ExtractUserKey(target);
