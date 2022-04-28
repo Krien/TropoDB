@@ -44,6 +44,9 @@ Status ZnsManifest::Scan() { return Status::NotSupported(); }
 
 Status ZnsManifest::NewManifest(const Slice& record) {
   // TODO: wraparound
+  if (!committer_->SpaceEnough(record, write_head_, max_zone_head_)) {
+    return Status::NoSpace();
+  }
   Status s = committer_->SafeCommit(record, &write_head_, min_zone_head_,
                                     max_zone_head_);
   zone_head_ = (write_head_ / zone_size_) * zone_size_;

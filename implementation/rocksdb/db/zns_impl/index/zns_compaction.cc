@@ -16,7 +16,7 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
-  // printf("Compacting from <%d>\n", first_level_);
+  printf("Compacting from <%d>\n", first_level_);
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
@@ -107,6 +107,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
                                    ZnsVersionEdit* edit, SSZoneMetaData* meta) {
   Status s = Status::OK();
   SSTableBuilder* current_builder = *builder;
+  meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
   // printf("adding... %u %lu %lu\n", first_level_ + 1, meta->lba,
@@ -146,7 +147,6 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
   Status s = Status::OK();
   {
     SSZoneMetaData meta;
-    meta.number = vset_->NewSSNumber();
     SSTableBuilder* builder =
         vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
     {

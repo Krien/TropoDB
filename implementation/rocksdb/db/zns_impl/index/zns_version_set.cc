@@ -63,6 +63,7 @@ void ZnsVersionSet::GetLiveZoneRanges(
     if (!ran_set) {
       ran = temp_ran;
       ran_set = true;
+      // printf("range %lu %lu \n", ran.first, ran.second);
     } else if (temp_ran.first != temp_ran.second) {
       ran.first = temp_ran.first;
     }
@@ -100,6 +101,17 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
     builder.Apply(edit);
     builder.SaveTo(v);
   }
+  s = CommitVersion(v, znssstable_);
+  // Installing?
+  if (s.ok()) {
+    AppendVersion(v);
+  }
+  RecalculateScore();
+  return s;
+}
+
+void ZnsVersionSet::RecalculateScore() {
+  ZnsVersion* v = current_;
   int best_level = -1;
   double best_score = -1;
   double score;
@@ -109,16 +121,11 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
     if (score > best_score) {
       best_score = score;
       best_level = i;
+      // printf("Score %f from level %d\n", best_score, best_level);
     }
   }
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
-  s = CommitVersion(v, znssstable_);
-  // Installing?
-  if (s.ok()) {
-    AppendVersion(v);
-  }
-  return s;
 }
 
 Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {

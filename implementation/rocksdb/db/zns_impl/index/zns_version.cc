@@ -78,7 +78,8 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
           continue;
         }
         znssstable->Unref();
-        return s;
+        return status == EntryStatus::found ? s
+                                            : Status::NotFound("Entry deleted");
       }
     }
   }
@@ -103,7 +104,8 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
           continue;
         }
         znssstable->Unref();
-        return s;
+        return status == EntryStatus::found ? s
+                                            : Status::NotFound("Entry deleted");
       }
     }
   }

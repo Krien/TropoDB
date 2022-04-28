@@ -42,6 +42,7 @@ ZnsCommitter::~ZnsCommitter() {
 bool ZnsCommitter::SpaceEnough(const Slice& data, uint64_t min, uint64_t max) {
   size_t fragcount = data.size() / zasl_ + 1;
   size_t size_needed = fragcount * kZnsHeaderSize + data.size();
+  size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
   size_t size_available = (max - min) * lba_size_;
   return size_needed < size_available;
 }
@@ -172,7 +173,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      channel_->ReadIntoBuffer(commit_ptr_ + 1, lba_size_, to_read - lba_size_);
+      channel_->ReadIntoBuffer(commit_ptr_ + 1, lba_size_, to_read - lba_size_,
+                               false);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.

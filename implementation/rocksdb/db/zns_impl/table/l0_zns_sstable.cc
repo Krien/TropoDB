@@ -116,6 +116,7 @@ Status L0ZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
   }
   meta->lba = write_head_;
   mutex_.Lock();
+  // printf("write head %lu, max %lu\n", write_head_, max_zone_head_);
   if (!FromStatus(channel_->DirectAppend(&write_head_, (void*)content.data(),
                                          content.size(), false))
            .ok()) {
@@ -265,7 +266,8 @@ Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   zone_tail_ = cur_zone;
   // Wraparound
   if (zone_tail_ == max_zone_head_) {
-    zone_tail_ = write_tail_ = min_zone_head_;
+    pseudo_write_head_ = write_head_;
+    write_head_ = zone_tail_ = write_tail_ = min_zone_head_;
   }
   return Status::OK();
 }

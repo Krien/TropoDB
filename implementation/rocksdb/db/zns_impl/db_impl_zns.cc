@@ -206,13 +206,12 @@ Status DBImplZNS::MakeRoomForWrite() {
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
-      // printf("is it done????\n");
       bg_work_finished_signal_.Wait();
     } else if (versions_->NeedsFlushing()) {
-      // printf("waiting for compaction\n");
+      printf("waiting for compaction\n");
+      MaybeScheduleCompaction(false);
       bg_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
-      // printf("waiting for WAL clearing\n");
       bg_work_finished_signal_.Wait();
     } else {
       // create new WAL
@@ -228,7 +227,7 @@ Status DBImplZNS::MakeRoomForWrite() {
     }
   }
   return Status::OK();
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 void DBImplZNS::MaybeScheduleCompaction(bool force) {
   // printf("Scheduling?\n");
@@ -250,6 +249,7 @@ void DBImplZNS::BGWork(void* db) {
 }
 
 void DBImplZNS::BackgroundCall() {
+  // printf("bg\n");
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   {
@@ -261,6 +261,7 @@ void DBImplZNS::BackgroundCall() {
   // cascading.
   MaybeScheduleCompaction(false);
   bg_work_finished_signal_.SignalAll();
+  // printf("bg done\n");
 }
 
 void DBImplZNS::BackgroundCompaction() {
@@ -296,12 +297,13 @@ void DBImplZNS::BackgroundCompaction() {
     printf("ERROR during compaction!!!\n");
     return;
   }
+  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? RemoveObsoleteZones() : s;
-  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
-    if (!s.ok()) {
+  versions_->RecalculateScore();
+  if (!s.ok()) {
     printf("ERROR during compaction!!!\n");
-    }
+  }
   // printf("Compacted!!\n");
 }
 
@@ -321,6 +323,7 @@ Status DBImplZNS::CompactMemtable() {
       edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count,
                            meta.numbers, meta.smallest, meta.largest);
       s = versions_->LogAndApply(&edit);
+      s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
     } else {
       printf("Fatal error \n");
     }
@@ -329,7 +332,6 @@ Status DBImplZNS::CompactMemtable() {
     // wal
     s = wal_man_->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
-    s = RemoveObsoleteZones();
     // printf("Flushed!!\n");
   }
   return s;
@@ -350,7 +352,8 @@ Status DBImplZNS::RemoveObsoleteZones() {
   std::vector<std::pair<uint64_t, uint64_t>> ranges;
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     versions_->GetLiveZoneRanges(i, &ranges);
-    s = ss_manager_->InvalidateUpTo(i, ranges.back().first);
+    s = ss_manager_->SetValidRangeAndReclaim(i, ranges.back().first,
+                                             ranges.back().second);
     if (!s.ok()) return s;
   }
   return s;
@@ -512,7 +515,7 @@ Status DBImplZNS::Open(
     s = impl->InitWAL();
   }
   if (s.ok()) {
-    impl->RemoveObsoleteZones();
+    // impl->RemoveObsoleteZones();
     impl->MaybeScheduleCompaction(false);
   }
   impl->mutex_.Unlock();
@@ -523,9 +526,9 @@ Status DBImplZNS::Open(
   }
   return s;
   // recover?
-  //  !readonly: set directories, lockfile and check if current manifest exists
-  //  create_if_missing (NewDB). verify options and system compability readonly
-  //  find or error
+  //  !readonly: set directories, lockfile and check if current manifest
+  //  exists create_if_missing (NewDB). verify options and system compability
+  //  readonly find or error
   // recover version
   // setid
   // recover from WAL
@@ -557,7 +560,8 @@ Status DBImplZNS::Recover() {
   if (!s.ok()) {
     return options_.create_if_missing ? ResetDevice() : s;
   }
-  // TODO: currently this still writes a new version... if not an identical one.
+  // TODO: currently this still writes a new version... if not an identical
+  // one.
   if (options_.error_if_exists) {
     return Status::InvalidArgument("DB already exists");
   }
@@ -835,8 +839,8 @@ Status DBImplZNS::GetPropertiesOfTablesInRange(
 }
 
 Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
-  // Destroy "all" files from the DB. Since we do not use multitenancy, we might
-  // as well reset the device.
+  // Destroy "all" files from the DB. Since we do not use multitenancy, we
+  // might as well reset the device.
   Status s;
   DBImplZNS* impl = new DBImplZNS(options, dbname);
   s = impl->OpenDevice();

@@ -31,7 +31,7 @@ class ZNSSSTableManager : public RefCounter {
   Status Get(size_t level, const InternalKeyComparator& icmp, const Slice& key,
              std::string* value, SSZoneMetaData* meta, EntryStatus* entry);
   Status InvalidateSSZone(size_t level, SSZoneMetaData* meta);
-  Status InvalidateUpTo(size_t level, uint64_t tail);
+  Status SetValidRangeAndReclaim(size_t level, uint64_t tail, uint64_t head);
   L0ZnsSSTable* GetL0SSTableLog();
   Iterator* NewIterator(size_t level, SSZoneMetaData* meta,
                         const InternalKeyComparator& icmp);
@@ -42,6 +42,7 @@ class ZNSSSTableManager : public RefCounter {
   // Used for compaction
   double GetFractionFilled(size_t level);
   // Used for cleaning
+  void GetDefaultRange(int level, std::pair<uint64_t, uint64_t>* range);
   void GetRange(int level, const std::vector<SSZoneMetaData*>& metas,
                 std::pair<uint64_t, uint64_t>* range);
 

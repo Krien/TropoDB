@@ -72,28 +72,62 @@ Status ZNSSSTableManager::InvalidateSSZone(size_t level, SSZoneMetaData* meta) {
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::InvalidateUpTo(size_t level, uint64_t tail) {
+Status ZNSSSTableManager::SetValidRangeAndReclaim(size_t level, uint64_t tail,
+                                                  uint64_t head) {
   assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
-  // printf("delete %lu %lu\n", tail, sstable_wal_level_[level]->GetTail());
-  if (tail < ranges_[level].first || tail > ranges_[level].second) {
-    return Status::OK();
-  }
-  if (tail > sstable_wal_level_[level]->GetTail()) {
-    meta.lba = sstable_wal_level_[level]->GetTail();
-    meta.lba_count = tail - sstable_wal_level_[level]->GetTail();
-    return sstable_wal_level_[level]->InvalidateSSZone(&meta);
-  } else if (tail < sstable_wal_level_[level]->GetTail()) {
-    meta.lba = sstable_wal_level_[level]->GetTail();
-    meta.lba_count =
-        ranges_[level].second - sstable_wal_level_[level]->GetTail();
+
+  uint64_t written_head = sstable_wal_level_[level]->GetHead();
+  uint64_t written_tail = sstable_wal_level_[level]->GetTail();
+  uint64_t max_z = ranges_[level].second;
+  uint64_t min_z = ranges_[level].first;
+
+  // we completely looped around, meaning we can invalidate from tail up to end
+  // at least
+  if (head < written_head && tail <= head) {
+    meta.lba = written_tail;
+    meta.lba_count = max_z - written_tail;
+    // printf("looped %lu %lu %lu %lu\n", meta.lba, meta.lba_count,
+    // written_head,
+    //       head);
     Status s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
     if (!s.ok()) return s;
-    meta.lba = ranges_[level].first;
-    meta.lba_count = tail - ranges_[level].first;
-    return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    // still the lagging tail
+    if (tail < head) {
+      meta.lba = min_z;
+      meta.lba_count = tail;
+      s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    }
+    return s;
+  }
+  // lagging tail
+  else {
+    // printf("lagging\n");
+    meta.lba = written_tail;
+    meta.lba_count = tail - written_tail;
+    if (meta.lba_count > 0) {
+      return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    }
   }
   return Status::OK();
+  // if (tail < ranges_[level].first || tail > ranges_[level].second) {
+  //   return Status::OK();
+  // }
+  // if (tail > sstable_wal_level_[level]->GetTail()) {
+  //   meta.lba = sstable_wal_level_[level]->GetTail();
+  //   meta.lba_count = tail - sstable_wal_level_[level]->GetTail();
+  //   return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+  // } else if (tail < sstable_wal_level_[level]->GetTail()) {
+  //   meta.lba = sstable_wal_level_[level]->GetTail();
+  //   meta.lba_count =
+  //       ranges_[level].second - sstable_wal_level_[level]->GetTail();
+  //   Status s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
+  //   if (!s.ok()) return s;
+  //   meta.lba = ranges_[level].first;
+  //   meta.lba_count = tail - ranges_[level].first;
+  //   return sstable_wal_level_[level]->InvalidateSSZone(&meta);
+  // }
+  // return Status::OK();
 }
 
 Status ZNSSSTableManager::Get(size_t level, const InternalKeyComparator& icmp,
@@ -149,7 +183,14 @@ double ZNSSSTableManager::GetFractionFilled(size_t level) {
       head >= tail
           ? (head - tail)
           : (ranges_[level].second - tail + head - ranges_[level].first);
-  return sum / (ranges_[level].second - ranges_[level].first);
+  double fract = (double)sum /
+                 ((double)ranges_[level].second - (double)ranges_[level].first);
+  return fract;
+}
+
+void ZNSSSTableManager::GetDefaultRange(int level,
+                                        std::pair<uint64_t, uint64_t>* range) {
+  *range = std::make_pair(ranges_[level].first, ranges_[level].first);
 }
 
 void ZNSSSTableManager::GetRange(int level,
@@ -159,8 +200,8 @@ void ZNSSSTableManager::GetRange(int level,
   //   *range = std::make_pair(metas[metas.size()-1]->lba,
   //   metas[0]->lba+metas[0]->lba_count);
   // }
-  uint64_t lowest = 0, lowest_res = 0;
-  uint64_t highest = 0, highest_res = 0;
+  uint64_t lowest = 0, lowest_res = ranges_[level].first;
+  uint64_t highest = 0, highest_res = ranges_[level].second;
   bool first = false;
 
   for (auto n = metas.begin(); n != metas.end(); n++) {
@@ -168,7 +209,7 @@ void ZNSSSTableManager::GetRange(int level,
       lowest = (*n)->number;
       lowest_res = (*n)->lba;
       highest = (*n)->number;
-      highest_res = (*n)->lba;
+      highest_res = (*n)->lba + (*n)->lba_count;
       first = true;
     }
     if (lowest > (*n)->number) {
@@ -177,11 +218,13 @@ void ZNSSSTableManager::GetRange(int level,
     }
     if (highest < (*n)->number) {
       highest = (*n)->number;
-      highest_res = (*n)->lba;
+      highest_res = (*n)->lba + (*n)->lba_count;
     }
   }
   if (first) {
     *range = std::make_pair(lowest_res, highest_res);
+  } else {
+    *range = std::make_pair(ranges_[level].first, ranges_[level].first);
   }
   // TODO: higher levels will need more info.
 }

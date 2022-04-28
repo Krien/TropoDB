@@ -74,7 +74,8 @@ Status ZnsTableCache::Get(const ReadOptions& options, SSZoneMetaData* meta,
     it->Seek(key);
     if (it->Valid()) {
       *value = it->value().ToString();
-      *status = value->size() > 0 ? EntryStatus::found : EntryStatus::deleted;
+      *status =
+          it->value().size() > 0 ? EntryStatus::found : EntryStatus::deleted;
     } else {
       *status = EntryStatus::notfound;
     }

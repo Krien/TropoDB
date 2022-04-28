@@ -36,6 +36,7 @@ class ZnsVersionSet {
 
   Status WriteSnapshot(std::string* snapshot_dst, ZnsVersion* version);
   Status LogAndApply(ZnsVersionEdit* edit);
+  void RecalculateScore();
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
   void GetLiveZoneRanges(size_t level,
