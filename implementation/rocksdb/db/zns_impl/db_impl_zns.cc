@@ -382,7 +382,9 @@ Status DBImplZNS::OpenDevice() {
   if (rc != 0) {
     return Status::IOError("Error opening SPDK");
   }
-  rc = SZD::z_open(*device_manager_, this->name_.c_str());
+  SZD::DeviceOpenOptions ooptions = {.min_zone = ZnsConfig::min_zone,
+                                     .max_zone = ZnsConfig::max_zone};
+  rc = SZD::z_open(*device_manager_, this->name_.c_str(), &ooptions);
   if (rc != 0) {
     return Status::IOError("Error opening ZNS device");
   }

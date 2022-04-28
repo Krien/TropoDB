@@ -91,13 +91,12 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     EncodeFixed32(fragment, crc);
     // Actual commit
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
-    s = FromStatus(
-        channel_->FlushBufferSection(&write_head, 0, fragment_length, false));
+    s = FromStatus(channel_->FlushBufferSection(
+        &write_head, 0, fragment_length + kZnsHeaderSize, false));
     zone_head = (write_head / zone_size_) * zone_size_;
     if (!s.ok()) {
       return s;
     }
-
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
@@ -160,7 +159,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    channel_->ReadIntoBuffer(commit_ptr_, 0, lba_size_);
+    channel_->ReadIntoBuffer(commit_ptr_, 0, lba_size_, true);
     // parse header
     const char* header = buffer_;
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
@@ -173,7 +172,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
       channel_->ReadIntoBuffer(commit_ptr_ + 1, lba_size_, to_read - lba_size_,
-                               false);
+                               true);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.

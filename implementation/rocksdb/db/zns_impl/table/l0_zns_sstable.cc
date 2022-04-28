@@ -191,7 +191,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   for (uint64_t step = 0; step < steps; ++step) {
     current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
     if (!FromStatus(channel_->ReadIntoBuffer(meta->lba + step * stepsize, 0,
-                                             current_step_size_bytes))
+                                             current_step_size_bytes, true))
              .ok()) {
       mutex_.Unlock();
       delete[] buffer;
