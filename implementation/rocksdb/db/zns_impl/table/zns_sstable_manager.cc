@@ -59,7 +59,9 @@ Status ZNSSSTableManager::CopySSTable(size_t l1, size_t l2,
   if (!s.ok()) {
     return s;
   }
-  return sstable_wal_level_[l2]->WriteSSTable(original, meta);
+  s = sstable_wal_level_[l2]->WriteSSTable(original, meta);
+  delete[] original.data();
+  return s;
 }
 
 bool ZNSSSTableManager::EnoughSpaceAvailable(size_t level, Slice slice) {

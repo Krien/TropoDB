@@ -176,10 +176,12 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
   // by lba....
   if (!(s = FromStatus(channel_->ReserveBuffer(mdts_))).ok()) {
+    delete[] buffer;
     return s;
   }
   char* z_buffer;
   if (!(s = FromStatus(channel_->GetBuffer((void**)&z_buffer))).ok()) {
+    delete[] buffer;
     return s;
   }
   // mdts is always a factor of lba_size, so safe.
@@ -195,7 +197,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
                                              current_step_size_bytes))
              .ok()) {
       mutex_.Unlock();
-      delete buffer;
+      delete[] buffer;
       channel_->FreeBuffer();
       return Status::IOError("Error reading SSTable");
     }
@@ -240,12 +242,14 @@ Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
     ParseNext(&walker, &key, &value);
     if (user_comparator->Compare(ExtractUserKey(key), key_ptr_stripped) == 0) {
       *status = value.size() > 0 ? EntryStatus::found : EntryStatus::deleted;
-      *value_ptr = std::string(value.data(), value.size());
+      value_ptr->assign(value.data(), value.size());
+      delete[] sstable.data();
       return Status::OK();
     }
     counter++;
   }
   *status = EntryStatus::notfound;
+  delete[] sstable.data();
   return Status::OK();
 }
 

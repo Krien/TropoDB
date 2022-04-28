@@ -190,27 +190,25 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
       }
     }
     commit_ptr_ += (length + lba_size_ - 1) / lba_size_;
-    char* read = (char*)calloc(length, sizeof(char*));
-    memcpy(read, header + kZnsHeaderSize, length);
-    Slice fragment = Slice(read, length);
     switch (type) {
       case ZnsRecordType::kFullType:
-        *record = fragment;
+        scratch_->assign(header + kZnsHeaderSize, length);
+        *record = Slice(*scratch_);
         return true;
       case ZnsRecordType::kFirstType:
-        scratch_->assign(fragment.data(), fragment.size());
+        scratch_->assign(header + kZnsHeaderSize, length);
         in_fragmented_record = true;
         break;
       case ZnsRecordType::kMiddleType:
         if (!in_fragmented_record) {
         } else {
-          scratch_->append(fragment.data(), fragment.size());
+          scratch_->append(header + kZnsHeaderSize, length);
         }
         break;
       case ZnsRecordType::kLastType:
         if (!in_fragmented_record) {
         } else {
-          scratch_->append(fragment.data(), fragment.size());
+          scratch_->append(header + kZnsHeaderSize, length);
           *record = Slice(*scratch_);
           return true;
         }

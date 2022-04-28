@@ -440,6 +440,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
            ranges[ZnsConfig::level_count - 1].second / device_info.zone_size);
   }
   ss_manager_ = new ZNSSSTableManager(channel_factory_, device_info, ranges);
+  delete[] ranges;
   ss_manager_->Ref();
 
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
