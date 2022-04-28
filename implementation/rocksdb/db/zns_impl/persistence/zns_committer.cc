@@ -2,7 +2,6 @@
 
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/io/szd_port.h"
-#include "db/zns_impl/io/zns_utils.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"

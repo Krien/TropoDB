@@ -1,7 +1,6 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
 
 #include "db/zns_impl/io/szd_port.h"
-#include "db/zns_impl/io/zns_utils.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
 
@@ -60,9 +59,8 @@ SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
 }
 
 bool L0ZnsSSTable::EnoughSpaceAvailable(Slice slice) {
-  uint64_t zcalloc_size = 0;
-  ZnsUtils::allign_size(&zcalloc_size, Slice(slice), lba_size_);
-  uint64_t blocks_needed = zcalloc_size / lba_size_;
+  uint64_t alligned_size = channel_->allign_size(slice.size());
+  uint64_t blocks_needed = alligned_size / lba_size_;
 
   // head got ahead of tail :)
   if (write_head_ >= write_tail_) {
@@ -80,9 +78,8 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(Slice slice) {
 }
 
 Status L0ZnsSSTable::SetWriteAddress(Slice slice) {
-  uint64_t zcalloc_size = 0;
-  ZnsUtils::allign_size(&zcalloc_size, Slice(slice), lba_size_);
-  uint64_t blocks_needed = zcalloc_size / lba_size_;
+  uint64_t alligned_size = channel_->allign_size(slice.size());
+  uint64_t blocks_needed = alligned_size / lba_size_;
 
   // head got ahead of tail :)
   if (write_head_ >= write_tail_) {
