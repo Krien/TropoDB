@@ -7,7 +7,8 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsSSTable::ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                        const SZD::DeviceInfo& info,
-                       const uint64_t min_zone_head, uint64_t max_zone_head)
+                       const uint64_t min_zone_head,
+                       const uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
       zone_tail_(min_zone_head),
@@ -40,8 +41,9 @@ void ZnsSSTable::PutKVPair(std::string* dst, const Slice& key,
   dst->append(value.data(), value.size());
 }
 
-void ZnsSSTable::GeneratePreamble(std::string* dst,
-                                  std::vector<uint32_t> kv_pair_offsets_) {
+void ZnsSSTable::GeneratePreamble(
+    std::string* dst, const std::vector<uint32_t>& kv_pair_offsets_) {
+  // TODO: this is not a bottleneck, but it is ugly...
   std::string preamble;
   PutFixed32(&preamble, kv_pair_offsets_.size());
   for (auto entry = begin(kv_pair_offsets_); entry != end(kv_pair_offsets_);
@@ -51,13 +53,13 @@ void ZnsSSTable::GeneratePreamble(std::string* dst,
   *dst = preamble.append(*dst);
 }
 
-int FindSS(const InternalKeyComparator& icmp,
-           const std::vector<SSZoneMetaData*>& ss, const Slice& key) {
-  uint32_t left = 0;
-  uint32_t right = ss.size();
+size_t FindSS(const InternalKeyComparator& icmp,
+              const std::vector<SSZoneMetaData*>& ss, const Slice& key) {
+  size_t left = 0;
+  size_t right = ss.size();
   // binary search I guess.
   while (left < right) {
-    uint32_t mid = (left + right) / 2;
+    size_t mid = (left + right) / 2;
     const SSZoneMetaData* m = ss[mid];
     if (icmp.InternalKeyComparator::Compare(m->largest.Encode(), key) < 0) {
       left = mid + 1;

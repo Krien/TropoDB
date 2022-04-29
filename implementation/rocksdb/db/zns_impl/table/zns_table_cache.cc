@@ -23,8 +23,8 @@ static void DeleteEntry(const Slice& key, void* value) {
 // }
 
 ZnsTableCache::ZnsTableCache(const Options& options,
-                             const InternalKeyComparator& icmp, int entries,
-                             ZNSSSTableManager* ssmanager)
+                             const InternalKeyComparator& icmp,
+                             const size_t entries, ZNSSSTableManager* ssmanager)
     : icmp_(icmp), options_(options), ssmanager_(ssmanager) {
   LRUCacheOptions opts;
   opts.capacity = entries;
@@ -33,11 +33,11 @@ ZnsTableCache::ZnsTableCache(const Options& options,
 
 ZnsTableCache::~ZnsTableCache() { cache_.reset(); }
 
-Status ZnsTableCache::FindSSZone(SSZoneMetaData* meta, size_t level,
+Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta, const size_t level,
                                  Cache::Handle** handle) {
   Status s;
-  char buf[sizeof(meta->number)];
-  EncodeFixed64(buf, meta->number);
+  char buf[sizeof(meta.number)];
+  EncodeFixed64(buf, meta.number);
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == nullptr) {
@@ -48,7 +48,8 @@ Status ZnsTableCache::FindSSZone(SSZoneMetaData* meta, size_t level,
 }
 
 Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
-                                     SSZoneMetaData* meta, size_t level,
+                                     const SSZoneMetaData& meta,
+                                     const size_t level,
                                      ZnsSSTable** tableptr) {
   if (tableptr != nullptr) {
     *tableptr = nullptr;
@@ -64,8 +65,9 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   return it;
 }
 
-Status ZnsTableCache::Get(const ReadOptions& options, SSZoneMetaData* meta,
-                          size_t level, const Slice& key, std::string* value,
+Status ZnsTableCache::Get(const ReadOptions& options,
+                          const SSZoneMetaData& meta, const size_t level,
+                          const Slice& key, std::string* value,
                           EntryStatus* status) {
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
@@ -84,7 +86,7 @@ Status ZnsTableCache::Get(const ReadOptions& options, SSZoneMetaData* meta,
   return s;
 }
 
-void ZnsTableCache::Evict(uint64_t ss_number) {
+void ZnsTableCache::Evict(const uint64_t ss_number) {
   char buf[sizeof(ss_number)];
   EncodeFixed64(buf, ss_number);
   cache_->Erase(Slice(buf, sizeof(buf)));

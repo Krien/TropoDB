@@ -8,7 +8,8 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
                          const SZD::DeviceInfo& info,
-                         const uint64_t min_zone_head, uint64_t max_zone_head)
+                         const uint64_t min_zone_head,
+                         const uint64_t max_zone_head)
     : current_lba_(min_zone_head_),
       manifest_start_(max_zone_head_),  // enforce corruption
       manifest_end_(min_zone_head_),    // enforce corruption

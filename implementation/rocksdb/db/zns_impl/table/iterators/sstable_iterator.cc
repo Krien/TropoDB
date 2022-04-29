@@ -3,19 +3,19 @@
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-SSTableIterator::SSTableIterator(char* data, size_t data_size, size_t count,
-                                 NextPair nextf,
+SSTableIterator::SSTableIterator(char* data, const size_t data_size,
+                                 const size_t count, NextPair nextf,
                                  const InternalKeyComparator& icmp)
     : data_(data),
       data_size_(data_size),
       kv_pairs_offset_(sizeof(uint32_t) * (count + 1)),
+      count_(count),
+      icmp_(icmp),
+      nextf_(nextf),
       index_(count),
       walker_(data_ + kv_pairs_offset_),
-      nextf_(nextf),
-      count_(count),
       current_val_("deadbeef"),
       current_key_("deadbeef"),
-      icmp_(icmp),
       restart_index_(0) {}
 
 SSTableIterator::~SSTableIterator() { free(data_); };
@@ -23,9 +23,9 @@ SSTableIterator::~SSTableIterator() { free(data_); };
 void SSTableIterator::Seek(const Slice& target) {
   Slice target_ptr_stripped = ExtractUserKey(target);
 
-  // // binary search as seen in LevelDB.
-  uint32_t left = 0;
-  uint32_t right = count_ - 1;
+  // binary search as seen in LevelDB.
+  size_t left = 0;
+  size_t right = count_ - 1;
   int current_key_compare = 0;
 
   if (Valid()) {
@@ -40,8 +40,8 @@ void SSTableIterator::Seek(const Slice& target) {
     }
   }
 
-  uint32_t mid = 0;
-  uint32_t region_offset = 0;
+  size_t mid = 0;
+  size_t region_offset = 0;
   while (left < right) {
     mid = (left + right + 1) / 2;
     SeekToRestartPoint(mid);
@@ -108,14 +108,14 @@ bool SSTableIterator::ParseNextKey() {
   return true;
 }
 
-void SSTableIterator::SeekToRestartPoint(uint32_t index) {
+void SSTableIterator::SeekToRestartPoint(const uint32_t index) {
   current_key_.clear();
   index_ = index;
   walker_ = data_ + GetRestartPoint(index_);
   current_val_ = Slice(walker_, 0);
 }
 
-uint32_t SSTableIterator::GetRestartPoint(uint32_t index) {
+uint32_t SSTableIterator::GetRestartPoint(const uint32_t index) const {
   return index == 0 ? kv_pairs_offset_
                     : DecodeFixed32(data_ + index * sizeof(uint32_t)) +
                           kv_pairs_offset_;

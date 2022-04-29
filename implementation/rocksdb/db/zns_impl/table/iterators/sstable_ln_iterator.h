@@ -24,8 +24,7 @@ namespace ROCKSDB_NAMESPACE {
 class LNZoneIterator : public Iterator {
  public:
   LNZoneIterator(const InternalKeyComparator& icmp,
-                 const std::vector<SSZoneMetaData*>* slist,
-                 const uint16_t level);
+                 const std::vector<SSZoneMetaData*>* slist, const size_t level);
   ~LNZoneIterator();
   bool Valid() const override { return index_ < slist_->size(); }
   Slice key() const override {
@@ -49,10 +48,11 @@ class LNZoneIterator : public Iterator {
 
  private:
   const InternalKeyComparator icmp_;
+  const size_t level_;
   const std::vector<SSZoneMetaData*>* const slist_;
+  // Iterator
   size_t index_;
-  const uint16_t level_;
-
+  // This is mutable because value and key are const... As in LevelDB.
   mutable char value_buf_[18];
 };
 

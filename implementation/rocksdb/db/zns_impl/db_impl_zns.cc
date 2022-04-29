@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
+#include <numeric>
 #include <set>
 #include <string>
 #include <vector>
@@ -396,47 +397,44 @@ Status DBImplZNS::OpenDevice() {
 Status DBImplZNS::InitDB(const DBOptions& options) {
   assert(device_manager_ != nullptr);
   SZD::DeviceInfo device_info = (*device_manager_)->info;
-  manifest_ =
-      new ZnsManifest(channel_factory_, device_info, 0,
-                      device_info.zone_size * ZnsConfig::manifest_zones);
-  manifest_->Ref();
+  uint64_t zone_head = ZnsConfig::min_zone;
+  uint64_t zone_step = 0;
 
-  wal_man_ =
-      new ZnsWALManager(channel_factory_, device_info,
-                        device_info.zone_size * ZnsConfig::manifest_zones,
-                        device_info.zone_size * ZnsConfig::manifest_zones +
-                            device_info.zone_size * ZnsConfig::wal_count *
-                                ZnsConfig::zones_foreach_wal,
-                        ZnsConfig::wal_count);
+  zone_step = device_info.zone_size * ZnsConfig::manifest_zones;
+  manifest_ = new ZnsManifest(channel_factory_, device_info, zone_head,
+                              zone_head + zone_step);
+  manifest_->Ref();
+  zone_head += zone_step;
+
+  zone_step = device_info.zone_size * ZnsConfig::wal_count *
+              ZnsConfig::zones_foreach_wal;
+  wal_man_ = new ZnsWALManager(channel_factory_, device_info, zone_head,
+                               zone_step + zone_head, ZnsConfig::wal_count);
   wal_man_->Ref();
+  zone_head += zone_step;
 
   std::pair<uint64_t, uint64_t>* ranges =
       new std::pair<uint64_t, uint64_t>[ZnsConfig::level_count];
   {
     uint64_t nzones = device_info.lba_cap / device_info.zone_size;
-    uint64_t distr = 0;
-    for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-      distr += ZnsConfig::ss_distribution[i];
-    }
-    uint64_t distr_walker =
-        (ZnsConfig::manifest_zones +
-         ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal) *
-        device_info.zone_size;
-    uint64_t step = 0;
+    uint64_t distr = std::accumulate(
+        ZnsConfig::ss_distribution,
+        ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
     for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-      step = (nzones / distr) * ZnsConfig::ss_distribution[i] *
-             device_info.zone_size;
-      step = (step / device_info.zone_size) < ZnsConfig::min_ss_zone_count
-                 ? ZnsConfig::min_ss_zone_count * device_info.zone_size
-                 : step;
-      ranges[i] = std::make_pair(distr_walker, distr_walker + step);
-      distr_walker += step;
+      zone_step = (nzones / distr) * ZnsConfig::ss_distribution[i] *
+                  device_info.zone_size;
+      zone_step =
+          (zone_step / device_info.zone_size) < ZnsConfig::min_ss_zone_count
+              ? ZnsConfig::min_ss_zone_count * device_info.zone_size
+              : zone_step;
+      ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
+      zone_head += zone_step;
       printf("SS range  %lu %lu \n", ranges[i].first / device_info.zone_size,
              ranges[i].second / device_info.zone_size);
     }
-    step = (nzones * device_info.zone_size) - distr_walker;
+    zone_step = (nzones * device_info.zone_size) - zone_head;
     ranges[ZnsConfig::level_count - 1] =
-        std::make_pair(distr_walker, distr_walker + step);
+        std::make_pair(zone_head, zone_head + zone_step);
     printf("SS range  %lu %lu \n",
            ranges[ZnsConfig::level_count - 1].first / device_info.zone_size,
            ranges[ZnsConfig::level_count - 1].second / device_info.zone_size);

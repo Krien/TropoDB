@@ -7,7 +7,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 struct SSZoneMetaData {
-  SSZoneMetaData() : refs(0), allowed_seeks(1 << 30), lba_count(0) {}
+  SSZoneMetaData()
+      : refs(0),
+        allowed_seeks(1 << 30),
+        number(0),
+        lba(0),
+        numbers(0),
+        lba_count(0) {}
   SSZoneMetaData(SSZoneMetaData* other)
       : refs(other->refs),
         allowed_seeks(other->allowed_seeks),
@@ -19,7 +25,7 @@ struct SSZoneMetaData {
         largest(other->largest) {}
   int refs;
   int allowed_seeks;     // Seeks allowed until compaction
-  uint64_t number;       // version identifuer
+  uint64_t number;       // version identifier
   uint64_t lba;          // start lba
   uint64_t numbers;      // number of kv pairs
   uint64_t lba_count;    // data size in lbas

@@ -18,7 +18,7 @@ class ZnsWALManager : public RefCounter {
  public:
   ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                 const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-                uint64_t max_zone_head, size_t wal_count);
+                const uint64_t max_zone_head, const size_t wal_count);
   // No copying or implicits
   ZnsWALManager(const ZnsWALManager&) = delete;
   ZnsWALManager& operator=(const ZnsWALManager&) = delete;
@@ -41,7 +41,7 @@ class ZnsWALManager : public RefCounter {
   std::vector<ZNSWAL*> wals;
   size_t wal_head_;
   size_t wal_tail_;
-  size_t wal_count_;
+  const size_t wal_count_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

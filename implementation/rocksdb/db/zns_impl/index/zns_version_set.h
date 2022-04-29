@@ -29,7 +29,7 @@ class ZnsVersionSet {
  public:
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
-                uint64_t lba_size, ZnsTableCache* table_cache);
+                const uint64_t lba_size, ZnsTableCache* table_cache);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
   ~ZnsVersionSet();
@@ -39,10 +39,10 @@ class ZnsVersionSet {
   void RecalculateScore();
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
-  void GetLiveZoneRanges(size_t level,
+  void GetLiveZoneRanges(const size_t level,
                          std::vector<std::pair<uint64_t, uint64_t>>* ranges);
 
-  inline ZnsVersion* current() { return current_; }
+  inline ZnsVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
   inline void SetLastSequence(uint64_t s) {
     assert(s >= last_sequence_);
@@ -64,7 +64,8 @@ class ZnsVersionSet {
 
   bool NeedsCompaction() const {
     // printf("Score %f \n", current_->compaction_score_);
-    return current_->compaction_score_ >= 1;
+    return current_->compaction_score_ >= 1 &&
+           current_->compaction_level_ != ZnsConfig::level_count + 1;
   }
 
   bool NeedsFlushing() const {
@@ -108,7 +109,7 @@ class ZnsVersionSet::Builder {
   ~Builder();
   void Apply(const ZnsVersionEdit* edit);
   void SaveTo(ZnsVersion* v);
-  void MaybeAddZone(ZnsVersion* v, int level, SSZoneMetaData* f);
+  void MaybeAddZone(ZnsVersion* v, size_t level, SSZoneMetaData* f);
 
  private:
   // Helper to sort by v->files_[file_number].smallest

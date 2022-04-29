@@ -39,7 +39,7 @@ class ZnsCompaction {
                       SSZoneMetaData* meta);
   bool IsBaseLevelForKey(const Slice& user_key);
 
-  int first_level_;
+  size_t first_level_;
   // arbitrary???
   uint64_t max_lba_count = 8;
   ZnsVersionSet* vset_;

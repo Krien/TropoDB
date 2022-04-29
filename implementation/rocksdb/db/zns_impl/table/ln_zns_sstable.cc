@@ -36,7 +36,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
     return table_->WriteSSTable(Slice(buffer_), meta_);
   }
 
-  uint64_t GetSize() override { return (uint64_t)buffer_.size(); }
+  uint64_t GetSize() const override { return (uint64_t)buffer_.size(); }
 
  private:
   LNZnsSSTable* table_;
@@ -48,7 +48,8 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
 
 LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
-                           const uint64_t min_zone_head, uint64_t max_zone_head)
+                           const uint64_t min_zone_head,
+                           const uint64_t max_zone_head)
     : ZnsSSTable(channel_factory, info, min_zone_head, max_zone_head),
       pseudo_write_head_(max_zone_head) {}
 
@@ -58,7 +59,7 @@ SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new LNZnsSSTable::Builder(this, meta);
 }
 
-bool LNZnsSSTable::EnoughSpaceAvailable(Slice slice) {
+bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   uint64_t alligned_size = channel_->allign_size(slice.size());
   uint64_t blocks_needed = alligned_size / lba_size_;
 
@@ -77,7 +78,7 @@ bool LNZnsSSTable::EnoughSpaceAvailable(Slice slice) {
   return false;
 }
 
-Status LNZnsSSTable::SetWriteAddress(Slice slice) {
+Status LNZnsSSTable::SetWriteAddress(const Slice& slice) {
   uint64_t alligned_size = channel_->allign_size(slice.size());
   uint64_t blocks_needed = alligned_size / lba_size_;
 
@@ -106,21 +107,18 @@ Status LNZnsSSTable::SetWriteAddress(Slice slice) {
   return Status::OK();
 }
 
-Status LNZnsSSTable::WriteSSTable(Slice content, SSZoneMetaData* meta) {
+Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!SetWriteAddress(content).ok()) {
     printf("OUT OF SPACE...\n");
     return Status::IOError("Not enough space available for L0");
   }
   meta->lba = write_head_;
-  mutex_.Lock();
   if (!FromStatus(channel_->DirectAppend(&write_head_, (void*)content.data(),
                                          content.size(), false))
            .ok()) {
-    mutex_.Unlock();
     return Status::IOError("Error during appending\n");
   }
-  mutex_.Unlock();
   zone_head_ = (write_head_ / zone_size_) * zone_size_;
   meta->lba_count = write_head_ - meta->lba;
   return Status::OK();
@@ -147,29 +145,30 @@ Status LNZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   return s;
 }
 
-bool LNZnsSSTable::ValidateReadAddress(SSZoneMetaData* meta) {
+bool LNZnsSSTable::ValidateReadAddress(const SSZoneMetaData& meta) const {
   if (write_head_ >= write_tail_) {
     // [---------------WTvvvvWH--]
-    if (meta->lba < write_tail_ || meta->lba + meta->lba_count > write_head_) {
+    if (meta.lba < write_tail_ || meta.lba + meta.lba_count > write_head_) {
       return false;
     }
   } else {
     // [vvvvvvvvvvvvvvvvWH---WTvv]
-    if ((meta->lba > write_head_ && meta->lba < write_tail_) ||
-        (meta->lba + meta->lba_count > write_head_ &&
-         meta->lba + meta->lba_count < write_tail_)) {
+    if ((meta.lba > write_head_ && meta.lba < write_tail_) ||
+        (meta.lba + meta.lba_count > write_head_ &&
+         meta.lba + meta.lba_count < write_tail_)) {
       return false;
     }
   }
   return true;
 }
 
-Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
+Status LNZnsSSTable::ReadSSTable(Slice* sstable,
+                                 const SSZoneMetaData& meta) const {
   Status s = Status::OK();
   if (!ValidateReadAddress(meta)) {
     return Status::Corruption("Invalid metadata");
   }
-  char* buffer = (char*)calloc(meta->lba_count * lba_size_, sizeof(char));
+  char* buffer = (char*)calloc(meta.lba_count * lba_size_, sizeof(char));
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
   // by lba....
   if (!(s = FromStatus(channel_->ReserveBuffer(mdts_))).ok()) {
@@ -183,17 +182,15 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
   }
   // mdts is always a factor of lba_size, so safe.
   uint64_t stepsize = mdts_ / lba_size_;
-  uint64_t steps = (meta->lba_count + stepsize - 1) / stepsize;
+  uint64_t steps = (meta.lba_count + stepsize - 1) / stepsize;
   uint64_t current_step_size_bytes = mdts_;
   uint64_t last_step_size =
-      mdts_ - (steps * stepsize - meta->lba_count) * lba_size_;
-  mutex_.Lock();
+      mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
   for (uint64_t step = 0; step < steps; ++step) {
     current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    if (!FromStatus(channel_->ReadIntoBuffer(meta->lba + step * stepsize, 0,
+    if (!FromStatus(channel_->ReadIntoBuffer(meta.lba + step * stepsize, 0,
                                              current_step_size_bytes, true))
              .ok()) {
-      mutex_.Unlock();
       delete[] buffer;
       channel_->FreeBuffer();
       return Status::IOError("Error reading SSTable");
@@ -202,8 +199,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, SSZoneMetaData* meta) {
            current_step_size_bytes);
   }
   s = FromStatus(channel_->FreeBuffer());
-  mutex_.Unlock();
-  *sstable = Slice((char*)buffer, meta->lba_count * lba_size_);
+  *sstable = Slice((char*)buffer, meta.lba_count * lba_size_);
   return s;
 }
 
@@ -219,7 +215,8 @@ void LNZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
 
 Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const Slice& key_ptr, std::string* value_ptr,
-                         SSZoneMetaData* meta, EntryStatus* status) {
+                         const SSZoneMetaData& meta,
+                         EntryStatus* status) const {
   Slice sstable;
   Status s;
   s = ReadSSTable(&sstable, meta);
@@ -272,14 +269,14 @@ Status LNZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
   return Status::OK();
 }
 
-Status LNZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
-  Status s = ConsumeTail(meta->lba, meta->lba + meta->lba_count);
+Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
+  Status s = ConsumeTail(meta.lba, meta.lba + meta.lba_count);
   if (!s.ok()) {
     return s;
   }
   // Slight hack to make sure that no space is lost when there is a gap between
   // max and last sstable.
-  if (meta->lba + meta->lba_count == pseudo_write_head_ &&
+  if (meta.lba + meta.lba_count == pseudo_write_head_ &&
       pseudo_write_head_ != max_zone_head_) {
     s = ConsumeTail(pseudo_write_head_, max_zone_head_);
     pseudo_write_head_ = max_zone_head_;
@@ -287,8 +284,8 @@ Status LNZnsSSTable::InvalidateSSZone(SSZoneMetaData* meta) {
   return s;
 }
 
-Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta,
-                                    const InternalKeyComparator& icmp) {
+Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
+                                    const InternalKeyComparator& icmp) const {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);
@@ -301,7 +298,7 @@ Iterator* LNZnsSSTable::NewIterator(SSZoneMetaData* meta,
                              icmp);
 }
 
-void LNZnsSSTable::EncodeTo(std::string* dst) {
+void LNZnsSSTable::EncodeTo(std::string* dst) const {
   PutVarint64(dst, zone_head_);
   PutVarint64(dst, write_head_);
   PutVarint64(dst, zone_tail_);

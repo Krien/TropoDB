@@ -23,8 +23,10 @@ void ZnsVersionEdit::Clear() {
   ss_number = 0;
 }
 
-void ZnsVersionEdit::AddSSDefinition(int level, uint64_t number, uint64_t lba,
-                                     uint64_t lba_count, uint64_t numbers,
+void ZnsVersionEdit::AddSSDefinition(const size_t level, const uint64_t number,
+                                     const uint64_t lba,
+                                     const uint64_t lba_count,
+                                     const uint64_t numbers,
                                      const InternalKey& smallest,
                                      const InternalKey& largest) {
   SSZoneMetaData f;
@@ -37,11 +39,12 @@ void ZnsVersionEdit::AddSSDefinition(int level, uint64_t number, uint64_t lba,
   new_ss_.push_back(std::make_pair(level, f));
 }
 
-void ZnsVersionEdit::RemoveSSDefinition(int level, uint64_t number) {
+void ZnsVersionEdit::RemoveSSDefinition(const size_t level,
+                                        const uint64_t number) {
   deleted_ss_.insert(std::make_pair(level, number));
 }
 
-void ZnsVersionEdit::EncodeTo(std::string* dst) {
+void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   // comparator
   if (has_comparator_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kComparator));

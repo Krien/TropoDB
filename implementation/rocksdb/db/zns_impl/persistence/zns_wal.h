@@ -19,12 +19,12 @@ namespace ROCKSDB_NAMESPACE {
 class ZNSWAL : public RefCounter {
  public:
   ZNSWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
-         const uint64_t min_zone_head, uint64_t max_zone_head);
+         const uint64_t min_zone_head, const uint64_t max_zone_head);
   // No copying or implicits
   ZNSWAL(const ZNSWAL&) = delete;
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
-  void Append(Slice data);
+  Status Append(const Slice& data);
   Status Reset();
   Status Recover();
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
@@ -32,13 +32,14 @@ class ZNSWAL : public RefCounter {
   bool SpaceLeft(const Slice& data);
 
  private:
-  // data
+  // log
   uint64_t zone_head_;
   uint64_t write_head_;
-  uint64_t min_zone_head_;
-  uint64_t max_zone_head_;
-  uint64_t zone_size_;
-  uint64_t lba_size_;
+  // const after initialisation
+  const uint64_t min_zone_head_;
+  const uint64_t max_zone_head_;
+  const uint64_t zone_size_;
+  const uint64_t lba_size_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel* channel_;

@@ -22,21 +22,23 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsTableCache {
  public:
   ZnsTableCache(const Options& options, const InternalKeyComparator& icmp,
-                int entries, ZNSSSTableManager* ssmanager);
+                const size_t entries, ZNSSSTableManager* ssmanager);
   ZnsTableCache(const ZnsTableCache&) = delete;
   ZnsTableCache& operator=(const ZnsTableCache&) = delete;
   ~ZnsTableCache();
 
-  Iterator* NewIterator(const ReadOptions& options, SSZoneMetaData* meta,
-                        size_t level, ZnsSSTable** tableptr = nullptr);
+  Iterator* NewIterator(const ReadOptions& options, const SSZoneMetaData& meta,
+                        const size_t level, ZnsSSTable** tableptr = nullptr);
 
-  Status Get(const ReadOptions& options, SSZoneMetaData* meta, size_t level,
-             const Slice& key, std::string* value, EntryStatus* status);
+  Status Get(const ReadOptions& options, const SSZoneMetaData& meta,
+             size_t level, const Slice& key, std::string* value,
+             EntryStatus* status);
 
-  void Evict(uint64_t ss_number);
+  void Evict(const uint64_t ss_number);
 
  private:
-  Status FindSSZone(SSZoneMetaData* meta, size_t level, Cache::Handle** handle);
+  Status FindSSZone(const SSZoneMetaData& meta, const size_t level,
+                    Cache::Handle** handle);
 
   const InternalKeyComparator icmp_;
   const Options& options_;

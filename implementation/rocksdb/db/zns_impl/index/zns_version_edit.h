@@ -28,16 +28,17 @@ class ZnsVersionEdit {
   ~ZnsVersionEdit() = default;
 
   void Clear();
-  void AddSSDefinition(int level, uint64_t number, uint64_t lba,
-                       uint64_t lba_count, uint64_t numbers,
-                       const InternalKey& smallest, const InternalKey& largest);
-  void RemoveSSDefinition(int level, uint64_t number);
+  void AddSSDefinition(const size_t level, const uint64_t number,
+                       const uint64_t lba, const uint64_t lba_count,
+                       const uint64_t numbers, const InternalKey& smallest,
+                       const InternalKey& largest);
+  void RemoveSSDefinition(const size_t level, const uint64_t number);
   // Used for Manifest logic
-  void EncodeTo(std::string* dst);
+  void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
 
   // Setters
-  void SetLastSequence(SequenceNumber seq) {
+  void SetLastSequence(const SequenceNumber seq) {
     has_last_sequence_ = true;
     last_sequence_ = seq;
   }
@@ -45,7 +46,7 @@ class ZnsVersionEdit {
     has_comparator_ = true;
     comparator_ = name.ToString();
   }
-  void SetSSNumber(uint64_t num) {
+  void SetSSNumber(const uint64_t num) {
     has_next_ss_number = true;
     ss_number = num;
   }
@@ -54,9 +55,9 @@ class ZnsVersionEdit {
   friend class ZnsVersionSet;
   friend class ZnsCompaction;
 
-  std::vector<std::pair<int, SSZoneMetaData>> new_ss_;
+  std::vector<std::pair<size_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
-  std::vector<std::pair<int, SSZoneMetaData>> deleted_ss_seq_;
+  std::vector<std::pair<size_t, SSZoneMetaData>> deleted_ss_seq_;
   SequenceNumber last_sequence_;
   bool has_last_sequence_;
   std::string comparator_;

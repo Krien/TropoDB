@@ -14,7 +14,7 @@
 namespace ROCKSDB_NAMESPACE {
 ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
                const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-               uint64_t max_zone_head)
+               const uint64_t max_zone_head)
     : zone_head_(min_zone_head),
       write_head_(min_zone_head),
       min_zone_head_(min_zone_head),
@@ -40,13 +40,11 @@ ZNSWAL::~ZNSWAL() {
   channel_factory_ = nullptr;
 }
 
-void ZNSWAL::Append(Slice data) {
+Status ZNSWAL::Append(const Slice& data) {
   Status s = committer_->SafeCommit(data, &write_head_, min_zone_head_,
                                     max_zone_head_);
   zone_head_ = (write_head_ / zone_size_) * zone_size_;
-  if (!s.ok()) {
-    printf("Error in commit on WAL %s\n", s.getState());
-  }
+  return s;
 }
 
 Status ZNSWAL::Reset() {

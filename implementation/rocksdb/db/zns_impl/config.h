@@ -6,8 +6,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <numeric>
-
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {

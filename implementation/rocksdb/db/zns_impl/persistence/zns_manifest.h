@@ -14,7 +14,7 @@ class ZnsManifest : public RefCounter {
  public:
   ZnsManifest(SZD::SZDChannelFactory* channel_factory,
               const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-              uint64_t max_zone_head);
+              const uint64_t max_zone_head);
   ~ZnsManifest();
   Status Scan();
   Status NewManifest(const Slice& record);
@@ -31,19 +31,19 @@ class ZnsManifest : public RefCounter {
   Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest);
   Status ValidateManifestPointers();
 
-  // ephemeral
+  // State
   uint64_t current_lba_;
   uint64_t manifest_start_;
   uint64_t manifest_end_;
-  // logic
+  // Log
   uint64_t zone_head_;
   uint64_t write_head_;
   uint64_t zone_tail_;
-  uint64_t min_zone_head_;
-  uint64_t max_zone_head_;
-  uint64_t zone_size_;
-  uint64_t lba_size_;
-  uint64_t zone_byte_range;
+  // const after init
+  const uint64_t min_zone_head_;
+  const uint64_t max_zone_head_;
+  const uint64_t zone_size_;
+  const uint64_t lba_size_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel* channel_;

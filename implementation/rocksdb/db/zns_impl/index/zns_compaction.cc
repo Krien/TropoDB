@@ -16,7 +16,7 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
-  printf("Compacting from <%d>\n", first_level_);
+  printf("Compacting from <%ld>\n", first_level_);
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }

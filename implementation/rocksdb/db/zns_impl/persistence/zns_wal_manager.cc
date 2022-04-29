@@ -17,7 +17,8 @@ namespace ROCKSDB_NAMESPACE {
 ZnsWALManager::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                              const SZD::DeviceInfo& info,
                              const uint64_t min_zone_head,
-                             uint64_t max_zone_head, size_t wal_count)
+                             const uint64_t max_zone_head,
+                             const size_t wal_count)
     : wal_head_(0), wal_tail_(wal_count - 1), wal_count_(wal_count) {
   assert((max_zone_head - min_zone_head) % wal_count_ == 0);
   uint64_t wal_range = (max_zone_head - min_zone_head) / wal_count_;

@@ -20,10 +20,10 @@ ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
       next_(this),
       prev_(this),
       compaction_score_(-1),
-      compaction_level_(-1) {}
+      compaction_level_(ZnsConfig::level_count + 1) {}
 
 ZnsVersion::~ZnsVersion() {
-  // printf("Deleting version structure.\n");
+  printf("Deleting version structure.\n");
   assert(refs_ == 0);
   // Remove from linked list
   prev_->next_ = next_;

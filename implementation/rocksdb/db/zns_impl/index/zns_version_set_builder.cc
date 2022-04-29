@@ -102,7 +102,7 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
   }
 }
 
-void ZnsVersionSet::Builder::MaybeAddZone(ZnsVersion* v, int level,
+void ZnsVersionSet::Builder::MaybeAddZone(ZnsVersion* v, const size_t level,
                                           SSZoneMetaData* f) {
   if (levels_[level].deleted_ss.count(f->number) > 0) {
     // File is deleted: do nothing
