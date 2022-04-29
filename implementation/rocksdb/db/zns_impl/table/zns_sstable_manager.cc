@@ -43,13 +43,15 @@ Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
   return GetL0SSTableLog()->FlushMemTable(mem, meta);
 }
 
-Status ZNSSSTableManager::WriteSSTable(const size_t level, const Slice& content,
+Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
+                                       const Slice& content,
                                        SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->WriteSSTable(content, meta);
 }
 
-Status ZNSSSTableManager::CopySSTable(const size_t level1, const size_t level2,
+Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
+                                      const uint8_t level2,
                                       SSZoneMetaData* meta) const {
   Status s;
   Slice original;
@@ -63,19 +65,19 @@ Status ZNSSSTableManager::CopySSTable(const size_t level1, const size_t level2,
   return s;
 }
 
-bool ZNSSSTableManager::EnoughSpaceAvailable(const size_t level,
+bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
                                              const Slice& slice) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->EnoughSpaceAvailable(slice);
 }
 
-Status ZNSSSTableManager::InvalidateSSZone(const size_t level,
+Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
                                            const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::SetValidRangeAndReclaim(const size_t level,
+Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
                                                   const uint64_t tail,
                                                   const uint64_t head) const {
   assert(level < ZnsConfig::level_count);
@@ -116,7 +118,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(const size_t level,
   return Status::OK();
 }
 
-Status ZNSSSTableManager::Get(const size_t level,
+Status ZNSSSTableManager::Get(const uint8_t level,
                               const InternalKeyComparator& icmp,
                               const Slice& key_ptr, std::string* value_ptr,
                               const SSZoneMetaData& meta,
@@ -125,7 +127,7 @@ Status ZNSSSTableManager::Get(const size_t level,
   return sstable_wal_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
 }
 
-Status ZNSSSTableManager::ReadSSTable(const size_t level, Slice* sstable,
+Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
                                       const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->ReadSSTable(sstable, meta);
@@ -136,13 +138,13 @@ L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
 }
 
 Iterator* ZNSSSTableManager::NewIterator(
-    const size_t level, const SSZoneMetaData& meta,
+    const uint8_t level, const SSZoneMetaData& meta,
     const InternalKeyComparator& icmp) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->NewIterator(meta, icmp);
 }
 
-SSTableBuilder* ZNSSSTableManager::NewBuilder(const size_t level,
+SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
                                               SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_wal_level_[level]->NewBuilder(meta);
@@ -164,7 +166,7 @@ Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
   return Status::OK();
 }
 
-double ZNSSSTableManager::GetFractionFilled(const size_t level) const {
+double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
   uint64_t head = sstable_wal_level_[level]->GetHead();
   uint64_t tail = sstable_wal_level_[level]->GetTail();
@@ -178,11 +180,11 @@ double ZNSSSTableManager::GetFractionFilled(const size_t level) const {
 }
 
 void ZNSSSTableManager::GetDefaultRange(
-    size_t level, std::pair<uint64_t, uint64_t>* range) const {
+    const uint8_t level, std::pair<uint64_t, uint64_t>* range) const {
   *range = std::make_pair(ranges_[level].first, ranges_[level].first);
 }
 
-void ZNSSSTableManager::GetRange(const size_t level,
+void ZNSSSTableManager::GetRange(const uint8_t level,
                                  const std::vector<SSZoneMetaData*>& metas,
                                  std::pair<uint64_t, uint64_t>* range) const {
   // if (metas.size() > 1) {

@@ -60,7 +60,7 @@ class ZnsVersion : public RefCounter {
   ZnsVersion* next_;
   ZnsVersion* prev_;
   double compaction_score_;
-  size_t compaction_level_;
+  uint8_t compaction_level_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

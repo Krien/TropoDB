@@ -39,7 +39,7 @@ class ZnsVersionSet {
   void RecalculateScore();
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
-  void GetLiveZoneRanges(const size_t level,
+  void GetLiveZoneRanges(const uint8_t level,
                          std::vector<std::pair<uint64_t, uint64_t>>* ranges);
 
   inline ZnsVersion* current() const { return current_; }
@@ -49,11 +49,11 @@ class ZnsVersionSet {
     last_sequence_ = s;
   }
   inline uint64_t NewSSNumber() { return ss_number_++; }
-  inline int NumLevelZones(int level) const {
-    assert(level >= 0 && level < ZnsConfig::level_count);
+  inline int NumLevelZones(uint8_t level) const {
+    assert(level < ZnsConfig::level_count);
     return current_->ss_[level].size();
   }
-  inline int NumLevelBytes(int level) const {
+  inline int NumLevelBytes(uint8_t level) const {
     const std::vector<SSZoneMetaData*>& ss = current_->ss_[level];
     int64_t sum = 0;
     for (size_t i = 0; i < ss.size(); i++) {
@@ -109,7 +109,7 @@ class ZnsVersionSet::Builder {
   ~Builder();
   void Apply(const ZnsVersionEdit* edit);
   void SaveTo(ZnsVersion* v);
-  void MaybeAddZone(ZnsVersion* v, size_t level, SSZoneMetaData* f);
+  void MaybeAddZone(ZnsVersion* v, uint8_t level, SSZoneMetaData* f);
 
  private:
   // Helper to sort by v->files_[file_number].smallest

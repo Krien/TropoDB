@@ -24,7 +24,8 @@ namespace ROCKSDB_NAMESPACE {
 class LNZoneIterator : public Iterator {
  public:
   LNZoneIterator(const InternalKeyComparator& icmp,
-                 const std::vector<SSZoneMetaData*>* slist, const size_t level);
+                 const std::vector<SSZoneMetaData*>* slist,
+                 const uint8_t level);
   ~LNZoneIterator();
   bool Valid() const override { return index_ < slist_->size(); }
   Slice key() const override {
@@ -35,7 +36,7 @@ class LNZoneIterator : public Iterator {
     assert(Valid());
     EncodeFixed64(value_buf_, (*slist_)[index_]->lba);
     EncodeFixed64(value_buf_ + 8, (*slist_)[index_]->lba_count);
-    EncodeFixed16(value_buf_ + 16, level_);
+    EncodeFixed8(value_buf_ + 16, level_);
     return Slice(value_buf_, sizeof(value_buf_));
   }
   Status status() const override { return Status::OK(); }
@@ -48,7 +49,7 @@ class LNZoneIterator : public Iterator {
 
  private:
   const InternalKeyComparator icmp_;
-  const size_t level_;
+  const uint8_t level_;
   const std::vector<SSZoneMetaData*>* const slist_;
   // Iterator
   size_t index_;

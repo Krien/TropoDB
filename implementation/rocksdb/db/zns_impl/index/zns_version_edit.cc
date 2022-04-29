@@ -23,7 +23,7 @@ void ZnsVersionEdit::Clear() {
   ss_number = 0;
 }
 
-void ZnsVersionEdit::AddSSDefinition(const size_t level, const uint64_t number,
+void ZnsVersionEdit::AddSSDefinition(const uint8_t level, const uint64_t number,
                                      const uint64_t lba,
                                      const uint64_t lba_count,
                                      const uint64_t numbers,
@@ -39,7 +39,7 @@ void ZnsVersionEdit::AddSSDefinition(const size_t level, const uint64_t number,
   new_ss_.push_back(std::make_pair(level, f));
 }
 
-void ZnsVersionEdit::RemoveSSDefinition(const size_t level,
+void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
                                         const uint64_t number) {
   deleted_ss_.insert(std::make_pair(level, number));
 }
@@ -66,7 +66,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   // deleted pointers
   for (const auto& deleted_file_kvp : deleted_ss_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedSSTable));
-    PutVarint32(dst, deleted_file_kvp.first);   // level
+    PutFixed8(dst, deleted_file_kvp.first);     // level
     PutVarint64(dst, deleted_file_kvp.second);  // lba
   }
 
@@ -74,7 +74,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   for (size_t i = 0; i < new_ss_.size(); i++) {
     const SSZoneMetaData& m = new_ss_[i].second;
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
-    PutVarint32(dst, new_ss_[i].first);  // level
+    PutFixed8(dst, new_ss_[i].first);  // level
     PutVarint64(dst, m.number);
     PutVarint64(dst, m.lba);
     PutVarint64(dst, m.numbers);
@@ -94,9 +94,9 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
-static bool GetLevel(Slice* input, int* level) {
-  uint32_t v;
-  if (GetVarint32(input, &v) && v < (uint32_t)ZnsConfig::level_count) {
+static bool GetLevel(Slice* input, uint8_t* level) {
+  uint8_t v;
+  if (GetFixed8(input, &v) && v < ZnsConfig::level_count) {
     *level = v;
     return true;
   } else {
@@ -110,7 +110,7 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
   uint32_t tag;
   ZnsVersionTag versiontag;
   Slice str;
-  int level;
+  uint8_t level;
   uint64_t number;
   SSZoneMetaData m;
   while (msg == nullptr && GetVarint32(&input, &tag)) {

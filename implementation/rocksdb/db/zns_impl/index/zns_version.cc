@@ -29,7 +29,7 @@ ZnsVersion::~ZnsVersion() {
   prev_->next_ = next_;
   next_->prev_ = prev_;
   // Drop refs
-  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     for (size_t i = 0; i < ss_[level].size(); i++) {
       SSZoneMetaData* m = ss_[level][i];
       assert(m->refs > 0);
@@ -85,7 +85,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   }
 
   // Other levels
-  for (size_t level = 1; level < ZnsConfig::level_count; ++level) {
+  for (uint8_t level = 1; level < ZnsConfig::level_count; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
     uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);

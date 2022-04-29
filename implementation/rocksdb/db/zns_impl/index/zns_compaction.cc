@@ -14,9 +14,13 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset) : vset_(vset) {
+ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset)
+    : max_lba_count_(((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+                      vset->lba_size_) *
+                     vset->lba_size_),
+      vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
-  printf("Compacting from <%ld>\n", first_level_);
+  printf("Compacting from <%d>\n", first_level_);
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
@@ -33,13 +37,13 @@ void ZnsCompaction::SetupTargets(const std::vector<SSZoneMetaData*>& t1,
 Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const InternalKeyComparator& icmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
-  SSZoneMetaData* meta = new SSZoneMetaData();
+  SSZoneMetaData meta;
   uint64_t lba_start = DecodeFixed64(file_value.data());
   uint64_t lba_count = DecodeFixed64(file_value.data() + 8);
-  size_t level = (size_t)DecodeFixed16(file_value.data() + 16);
-  meta->lba = lba_start;
-  meta->lba_count = lba_count;
-  Iterator* iterator = zns->NewIterator(level, meta, icmp);
+  uint8_t level = DecodeFixed8(file_value.data() + 16);
+  meta.lba = lba_start;
+  meta.lba_count = lba_count;
+  Iterator* iterator = zns->NewIterator(level, std::move(meta), icmp);
   return iterator;
 }
 
@@ -192,7 +196,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         if (drop) {
         } else {
           s = builder->Apply(key, value);
-          if (builder->GetSize() / vset_->lba_size_ >= max_lba_count) {
+          if (builder->GetSize() / vset_->lba_size_ >= max_lba_count_) {
             s = FlushSSTable(&builder, edit, &meta);
           }
         }

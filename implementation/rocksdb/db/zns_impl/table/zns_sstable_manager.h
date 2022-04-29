@@ -23,33 +23,34 @@ class ZNSSSTableManager : public RefCounter {
       const std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count]);
   ~ZNSSSTableManager();
 
-  bool EnoughSpaceAvailable(const size_t level, const Slice& slice) const;
+  bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) const;
-  Status CopySSTable(const size_t level1, const size_t level2,
+  Status CopySSTable(const uint8_t level1, const uint8_t level2,
                      SSZoneMetaData* meta) const;
-  Status WriteSSTable(const size_t level, const Slice& content,
+  Status WriteSSTable(const uint8_t level, const Slice& content,
                       SSZoneMetaData* meta) const;
-  Status ReadSSTable(const size_t level, Slice* sstable,
+  Status ReadSSTable(const uint8_t level, Slice* sstable,
                      const SSZoneMetaData& meta) const;
-  Status Get(const size_t level, const InternalKeyComparator& icmp,
+  Status Get(const uint8_t level, const InternalKeyComparator& icmp,
              const Slice& key, std::string* value, const SSZoneMetaData& meta,
              EntryStatus* entry) const;
-  Status InvalidateSSZone(const size_t level, const SSZoneMetaData& meta) const;
-  Status SetValidRangeAndReclaim(const size_t level, const uint64_t tail,
+  Status InvalidateSSZone(const uint8_t level,
+                          const SSZoneMetaData& meta) const;
+  Status SetValidRangeAndReclaim(const uint8_t level, const uint64_t tail,
                                  const uint64_t head) const;
   L0ZnsSSTable* GetL0SSTableLog() const;
-  Iterator* NewIterator(const size_t level, const SSZoneMetaData& meta,
+  Iterator* NewIterator(const uint8_t level, const SSZoneMetaData& meta,
                         const InternalKeyComparator& icmp) const;
-  SSTableBuilder* NewBuilder(const size_t level, SSZoneMetaData* meta) const;
+  SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& data);
   // Used for compaction
-  double GetFractionFilled(const size_t level) const;
+  double GetFractionFilled(const uint8_t level) const;
   // Used for cleaning
-  void GetDefaultRange(const size_t level,
+  void GetDefaultRange(const uint8_t level,
                        std::pair<uint64_t, uint64_t>* range) const;
-  void GetRange(const size_t level, const std::vector<SSZoneMetaData*>& metas,
+  void GetRange(const uint8_t level, const std::vector<SSZoneMetaData*>& metas,
                 std::pair<uint64_t, uint64_t>* range) const;
 
  private:

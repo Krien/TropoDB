@@ -52,7 +52,7 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
 }
 
 void ZnsVersionSet::GetLiveZoneRanges(
-    const size_t level, std::vector<std::pair<uint64_t, uint64_t>>* ranges) {
+    const uint8_t level, std::vector<std::pair<uint64_t, uint64_t>>* ranges) {
   std::pair ran = std::make_pair<uint64_t, uint64_t>(0, 0);
   bool ran_set = false;
   for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
@@ -76,7 +76,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   ZnsVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stuff
-  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData* m = ss[i];
@@ -112,7 +112,7 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
 
 void ZnsVersionSet::RecalculateScore() {
   ZnsVersion* v = current_;
-  size_t best_level = ZnsConfig::level_count + 1;
+  uint8_t best_level = ZnsConfig::level_count + 1;
   double best_score = -1;
   double score;
   for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
@@ -164,14 +164,14 @@ Status ZnsVersionSet::Compact(ZnsCompaction* c) {
 
 Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   Status s = Status::OK();
-  std::vector<std::pair<size_t, rocksdb::SSZoneMetaData>>& base_ss =
+  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>& base_ss =
       edit->deleted_ss_seq_;
-  std::vector<std::pair<size_t, rocksdb::SSZoneMetaData>>::const_iterator
+  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
       base_iter = base_ss.begin();
-  std::vector<std::pair<size_t, rocksdb::SSZoneMetaData>>::const_iterator
+  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
       base_end = base_ss.end();
   for (; base_iter != base_end; ++base_iter) {
-    const int level = (*base_iter).first;
+    const uint8_t level = (*base_iter).first;
     SSZoneMetaData m = (*base_iter).second;
     table_cache_->Evict(m.number);
   }
@@ -243,7 +243,7 @@ Status ZnsVersionSet::Recover() {
 
   // Setup numbers, temporary hack...
   if (ss_number_ == 0) {
-    for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+    for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
       std::vector<SSZoneMetaData*>& m = current_->ss_[i];
       for (size_t j = 0; j < m.size(); j++) {
         ss_number_ = ss_number_ > m[j]->number ? ss_number_ : m[j]->number + 1;
@@ -255,7 +255,7 @@ Status ZnsVersionSet::Recover() {
 
 std::string ZnsVersionSet::DebugString() {
   std::string result;
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
     std::vector<SSZoneMetaData*>& m = current_->ss_[i];
     result.append("\t" + std::to_string(i) + ": " + std::to_string(m.size()) +
                   "\n");

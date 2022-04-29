@@ -21,6 +21,10 @@ namespace ROCKSDB_NAMESPACE {
 // Lower-level versions of Put... that write directly into a character buffer
 // REQUIRES: dst has enough space for the value being written
 // -- Implementation of the functions declared above
+inline void EncodeFixed8(char* buf, uint8_t value) {
+  memcpy(buf, &value, sizeof(value));
+}
+
 inline void EncodeFixed16(char* buf, uint16_t value) {
   if (port::kLittleEndian) {
     memcpy(buf, &value, sizeof(value));
@@ -58,6 +62,13 @@ inline void EncodeFixed64(char* buf, uint64_t value) {
 
 // Lower-level versions of Get... that read directly from a character buffer
 // without any bounds checking.
+
+inline uint8_t DecodeFixed8(const char* ptr) {
+  // Load the raw bytes
+  uint8_t result;
+  memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
+  return result;
+}
 
 inline uint16_t DecodeFixed16(const char* ptr) {
   if (port::kLittleEndian) {

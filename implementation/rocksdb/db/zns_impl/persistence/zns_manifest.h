@@ -29,7 +29,7 @@ class ZnsManifest : public RefCounter {
   Status RecoverLog();
   Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest);
   Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest);
-  Status ValidateManifestPointers();
+  Status ValidateManifestPointers() const;
 
   // State
   uint64_t current_lba_;

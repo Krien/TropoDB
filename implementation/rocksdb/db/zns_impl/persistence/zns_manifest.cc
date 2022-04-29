@@ -53,7 +53,7 @@ Status ZnsManifest::NewManifest(const Slice& record) {
   return s;
 }
 
-Status ZnsManifest::ValidateManifestPointers() {
+Status ZnsManifest::ValidateManifestPointers() const {
   if (manifest_start_ >= manifest_end_) {
     return Status::Corruption("manifest pointers");
   }
