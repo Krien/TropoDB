@@ -17,6 +17,7 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
                    kMaxSequenceNumber, 0 /* column_family_id */));
   mem_->GetMemTable()->Ref();
   write_buffer_size_ = options.write_buffer_size;  // options.write_buffer_size;
+  arena_ = new Arena();
 }
 
 ZNSMemTable::~ZNSMemTable() {
@@ -25,6 +26,7 @@ ZNSMemTable::~ZNSMemTable() {
   delete mem_->GetMemTable();
   delete mem_;
   delete wb_;
+  delete arena_;
 }
 
 Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
@@ -50,7 +52,6 @@ bool ZNSMemTable::ShouldScheduleFlush() {
 }
 
 InternalIterator* ZNSMemTable::NewIterator() {
-  Arena arena;
-  return mem_->GetMemTable()->NewIterator(ReadOptions(), &arena);
+  return mem_->GetMemTable()->NewIterator(ReadOptions(), arena_);
 }
 }  // namespace ROCKSDB_NAMESPACE

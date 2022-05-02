@@ -29,6 +29,7 @@ class ZNSMemTable : public RefCounter {
 
  private:
   ColumnFamilyMemTables* mem_;
+  Arena* arena_;
   WriteBufferManager* wb_;
   size_t write_buffer_size_;
 };
