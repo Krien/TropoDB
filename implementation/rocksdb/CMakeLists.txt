@@ -936,7 +936,7 @@ set(SOURCES
    utilities/transactions/lock/range/range_tree/lib/util/memarena.cc)
 
 if ( ZNS_PLUGIN )
-  set(ZNS_DEVICE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/simpleznsdevice")
+  set(ZNS_DEVICE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/SimpleZNSDevice")
   add_subdirectory("${ZNS_DEVICE_DIRECTORY}")
   link_directories("${SPDK_LIB_DIRS};${ZNS_DEVICE_DIRECTORY}/lib")
 endif()
@@ -1065,7 +1065,7 @@ add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_V
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
   ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
 if ( ZNS_PLUGIN )
-  target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
+  target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE szd_lib)
 endif()
 
 if(ROCKSDB_BUILD_SHARED)
@@ -1074,9 +1074,9 @@ if(ROCKSDB_BUILD_SHARED)
     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
   set_property(TARGET ${ROCKSDB_SHARED_OBJ_LIB}  PROPERTY POSITION_INDEPENDENT_CODE ON)
     if ( ZNS_PLUGIN )
-      target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE znsdevice_lib)
+      target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE szd_lib)
       add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
-      target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
+      target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE szd_lib)
     else ( ZNS_PLUGIN )
       add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}>  ${BUILD_VERSION_CC})
     endif()
@@ -1156,7 +1156,7 @@ if(NOT WIN32 OR ROCKSDB_INSTALL_ON_WINDOWS)
   if (ZNS_PLUGIN)
     install(DIRECTORY "${ZNS_DEVICE_DIRECTORY}/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(
-      TARGETS znsdevice_lib
+      TARGETS szd_lib
       EXPORT RocksDBTargets
       COMPONENT runtime
       ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -1450,8 +1450,7 @@ if(WITH_TESTS)
       )
       target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
       if ( ZNS_PLUGIN )
-        target_link_libraries(${exename}${ARTIFACT_SUFFIX} znsdevice_lib)
-        target_link_libraries(${exename}${ARTIFACT_SUFFIX} ${SPDK_LIBRARY_DEPENDENCIES})
+        target_link_libraries(${exename}${ARTIFACT_SUFFIX} szd_lib)
       endif()
       if(NOT "${exename}" MATCHES "db_sanity_test")
         gtest_discover_tests(${exename} DISCOVERY_TIMEOUT 120)
@@ -1487,7 +1486,7 @@ if(WITH_BENCHMARK_TOOLS)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
   if ( ZNS_PLUGIN )
-    target_link_libraries(db_bench${ARTIFACT_SUFFIX} znsdevice_lib)
+    target_link_libraries(db_bench${ARTIFACT_SUFFIX} szd_lib)
   endif()
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
@@ -1573,7 +1572,7 @@ if ( ZNS_PLUGIN  )
     target_link_libraries(${test}  PRIVATE
       ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
       testharness gtest
-      znsdevice_lib ${SPDK_LIBRARY_DEPENDENCIES})
+      szd_lib)
     set_property(TARGET ${test} PROPERTY POSITION_INDEPENDENT_CODE ON)
   endforeach()
 

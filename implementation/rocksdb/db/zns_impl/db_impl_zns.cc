@@ -375,17 +375,17 @@ Status DBImplZNS::OpenDevice() {
   int rc = 0;
   SZD::DeviceOptions device_options = {.name = "ZNSLSM", !SZD::device_set};
   if (!SZD::device_set) {
-    rc = SZD::z_init(device_manager_, &device_options);
+    rc = SZD::szd_init(device_manager_, &device_options);
     SZD::device_set = true;
   } else {
-    rc = SZD::z_init(device_manager_, &device_options);
+    rc = SZD::szd_init(device_manager_, &device_options);
   }
   if (rc != 0) {
     return Status::IOError("Error opening SPDK");
   }
   SZD::DeviceOpenOptions ooptions = {.min_zone = ZnsConfig::min_zone,
                                      .max_zone = ZnsConfig::max_zone};
-  rc = SZD::z_open(*device_manager_, this->name_.c_str(), &ooptions);
+  rc = SZD::szd_open(*device_manager_, this->name_.c_str(), &ooptions);
   if (rc != 0) {
     return Status::IOError("Error opening ZNS device");
   }
@@ -460,7 +460,9 @@ Status DBImplZNS::ResetDevice() {
   Status s;
   SZD::SZDChannel* channel;
   channel_factory_->Ref();
-  channel_factory_->register_channel(&channel);
+  channel_factory_->register_channel(
+      &channel, ZnsConfig::min_zone * (*device_manager_)->info.lba_size,
+      ZnsConfig::max_zone * (*device_manager_)->info.lba_size);
   s = FromStatus(channel->ResetAllZones());
   channel_factory_->unregister_channel(channel);
   channel_factory_->Unref();
@@ -485,7 +487,7 @@ DBImplZNS::~DBImplZNS() {
   if (table_cache_ != nullptr) delete table_cache_;
   if (channel_factory_ != nullptr) channel_factory_->Unref();
   if (device_manager_ != nullptr) {
-    SZD::z_destroy(*device_manager_);
+    SZD::szd_destroy(*device_manager_);
     free(device_manager_);
   }
   // printf("exiting \n");
