@@ -397,14 +397,24 @@ int main(int argc, char **argv) {
       if (!s.ok()) {
         cout << "reading of test DB failed with " << s.ToString()
              << " for the key (read from the shadowdb): "
-             << it->key().ToString() << "\n";
+             << it->key().ToString();
+        auto x = testdata.find(it->key().ToString());
+        if (x != testdata.end())
+          cout << " NEW!";
+        else
+          cout << " OLD!";
+        cout << "\n";
         continue;
       }
       assert(s.ok());
       // now we have shadow value and test value - they must be the same
-      assert(test_value == it->value().ToString());
+      if (test_value != it->value().ToString()) {
+        std::cout << "wrong val " << it->value().ToString() << " should be "
+                  << test_value << "\n";
+      } else {
+        ent++;
+      }
       test_value = "";
-      ent++;
     }
     cout << "********************************************** \n";
     std::cout << "OK: all " << ent << " out of " << ent_total
@@ -444,7 +454,10 @@ int main(int argc, char **argv) {
     std::string test_value;
     for (auto it = testdata.begin(); it != testdata.end(); ++it) {
       s = ctx_test->db->Get(ro, it->first, &test_value);
-      assert(!s.ok() && test_value.length() == 0);
+      if (s.ok()) {
+        std::cout << test_value.length() << "\n";
+        assert(!s.ok() && test_value.length() == 0);
+      }
       if (!single) {
         s = ctx_shadow->db->Get(ro, it->first, &test_value);
         assert(!s.ok() && test_value.length() == 0);

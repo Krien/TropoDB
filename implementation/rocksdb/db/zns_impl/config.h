@@ -15,27 +15,27 @@ namespace ROCKSDB_NAMESPACE {
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
 namespace ZnsConfig {
-const static uint8_t level_count =
-    7; /**< Amount of LSM-tree levels L0 up to LN */
-const static size_t manifest_zones =
+constexpr static uint8_t level_count =
+    4; /**< Amount of LSM-tree levels L0 up to LN */
+constexpr static size_t manifest_zones =
     2; /**< Amount of zones to reserve for metadata*/
-const static size_t zones_foreach_wal = 3; /**< Amount of zones for each WAL*/
-const static size_t wal_count = 5; /**< Maximum amount of concurrent WALS*/
-const static size_t ss_distribution[level_count] = {
-    1, 2,  3, 5,
-    8, 13, 21}; /**< each level i gets \f$\frac{Xi}{\sum_{i=0}^{N}
-                   x}\f$  of the remaining zones*/
-const static size_t min_ss_zone_count =
+constexpr static size_t zones_foreach_wal =
+    3;                                 /**< Amount of zones for each WAL*/
+constexpr static size_t wal_count = 5; /**< Maximum amount of concurrent WALS*/
+constexpr static size_t ss_distribution[level_count] = {
+    1, 2, 3, 5}; /**< each level i gets \f$\frac{Xi}{\sum_{i=0}^{N}
+                  x}\f$  of the remaining zones*/
+constexpr static size_t min_ss_zone_count =
     5; /**< Minimum amount of zones for each LSM-tree level*/
-const static double ss_compact_treshold[level_count]{
-    0.75, 0.85, 0.85, 0.85,
-    0.85, 0.85, 0.85}; /**< Fraction of lbas that need to be filled to trigger
-                          compaction for a level.*/
-const static uint64_t max_bytes_sstable_ =
-    2 * 1024 * 1024;  // Based on LevelDBs max_file_size. Be carefull, this will
-                      // scale up depending on lba_size!
-const static uint64_t min_zone = 0;   /**< Minimum zone to use for database.*/
-const static uint64_t max_zone = 100; /**< Maximum zone to use for database*/
+constexpr static double ss_compact_treshold[level_count]{
+    0.75, 0.85, 0.85, 0.85}; /**< Fraction of lbas that need to be filled to
+                          trigger compaction for a level.*/
+constexpr static uint64_t max_bytes_sstable_ =
+    256 * 1024;  // Based on LevelDBs max_file_size. Be carefull, this will
+                 // scale up depending on lba_size!
+constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
+constexpr static uint64_t max_zone =
+    100; /**< Maximum zone to use for database*/
 
 // Configs are asking for trouble... As they say in security, never trust user
 // input! Even/especially your own.
