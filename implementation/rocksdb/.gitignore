@@ -25,7 +25,6 @@ rocksdb.pc
 *.vcxproj
 *.vcxproj.filters
 *.sln
-*.cmake
 .watchmanconfig
 CMakeCache.txt
 CMakeFiles/

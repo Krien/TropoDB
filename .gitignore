@@ -1,6 +1,4 @@
 # Specific
-bin/
-lib/
 build/
 out/
 doc_doxygen/
