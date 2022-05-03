@@ -148,6 +148,10 @@ Status ZnsManifest::ReadManifest(std::string* manifest) {
   if (!s.ok()) {
     return s;
   }
+  if (manifest_start_ == manifest_end_) {
+    return Status::IOError();
+  }
+
   Slice record;
   // Read data from commits. If necessary wraparound from end to start.
   if (manifest_end_ > manifest_start_) {

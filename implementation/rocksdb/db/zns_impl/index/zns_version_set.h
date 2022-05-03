@@ -88,8 +88,7 @@ class ZnsVersionSet {
 
   void AppendVersion(ZnsVersion* v);
   Status CommitVersion(ZnsVersion* v, ZNSSSTableManager* man);
-  Status DecodeFrom(const Slice& input, ZnsVersionEdit* edit,
-                    ZNSSSTableManager* man);
+  Status DecodeFrom(const Slice& input, ZnsVersionEdit* edit);
 
   ZnsVersion dummy_versions_;
   ZnsVersion* current_;

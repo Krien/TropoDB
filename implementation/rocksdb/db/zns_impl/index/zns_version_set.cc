@@ -136,17 +136,11 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   std::string version_data;
   PutVarint32(&version_data, static_cast<uint32_t>(ZnsCommitTag::kEdit));
   PutLengthPrefixedSlice(&version_data, version_body);
-  // Setup SSManager pointers
-  std::string manager_body;
-  man->EncodeTo(&manager_body);
-  std::string manager_data;
-  PutVarint32(&manager_data, static_cast<uint32_t>(ZnsCommitTag::kSSManager));
-  PutLengthPrefixedSlice(&manager_data, manager_body);
   // Padding
   std::string closer;
   PutVarint32(&closer, static_cast<uint32_t>(ZnsCommitTag::kClosing));
   // Write
-  Slice result = version_data.append(manager_data).append(closer);
+  Slice result = version_data.append(closer);
   uint64_t current_lba;
   s = manifest_->GetCurrentWriteHead(&current_lba);
   s = manifest_->NewManifest(result);
@@ -178,8 +172,7 @@ Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   return s;
 }
 
-Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit,
-                                 ZNSSSTableManager* man) {
+Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit) {
   Status s = Status::OK();
   Slice input = Slice(src);
   uint32_t tag;
@@ -197,11 +190,8 @@ Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit,
         }
         break;
       case ZnsCommitTag::kSSManager:
-        if (GetLengthPrefixedSlice(&input, &sub_input)) {
-          s = man->DecodeFrom(sub_input);
-        } else {
-          s = Status::Corruption("VersionSet", "SStable data");
-        }
+        // No longer supported
+        return Status::Corruption();
         break;
       case ZnsCommitTag::kClosing:
         force = true;
@@ -224,8 +214,13 @@ Status ZnsVersionSet::Recover() {
   std::string manifest_data;
   s = manifest_->ReadManifest(&manifest_data);
 
+  s = znssstable_->Recover();
+  if (!s.ok()) {
+    return s;
+  }
+
   ZnsVersionEdit edit;
-  s = DecodeFrom(manifest_data, &edit, znssstable_);
+  s = DecodeFrom(manifest_data, &edit);
   if (!s.ok()) {
     return s;
   }

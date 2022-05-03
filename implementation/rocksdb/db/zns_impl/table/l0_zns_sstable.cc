@@ -51,7 +51,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t min_zone_head,
                            const uint64_t max_zone_head)
     : ZnsSSTable(channel_factory, info, min_zone_head, max_zone_head),
-      pseudo_write_head_(max_zone_head) {}
+      log_(channel_factory_, info, min_zone_head_, max_zone_head_) {}
 
 L0ZnsSSTable::~L0ZnsSSTable() = default;
 
@@ -60,69 +60,22 @@ SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
 }
 
 bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
-  uint64_t alligned_size = channel_->allign_size(slice.size());
-  uint64_t blocks_needed = alligned_size / lba_size_;
-
-  // head got ahead of tail :)
-  if (write_head_ >= write_tail_) {
-    // [vvvvTZ-WT----------WZ-WHvvvvv]
-    uint64_t space_end = max_zone_head_ - write_head_;
-    uint64_t space_begin = zone_tail_ - min_zone_head_;
-    return space_end > blocks_needed || space_begin > blocks_needed;
-  } else {
-    // [--WZ--WHvvvvvvvvTZ----WT---]
-    uint64_t space = zone_tail_ - write_head_;
-    return space > blocks_needed;
-  }
-  // not possible or false and true are not the only booleans.
-  return false;
-}
-
-Status L0ZnsSSTable::SetWriteAddress(const Slice& slice) {
-  uint64_t alligned_size = channel_->allign_size(slice.size());
-  uint64_t blocks_needed = alligned_size / lba_size_;
-
-  // head got ahead of tail :)
-  if (write_head_ >= write_tail_) {
-    // [vvvvTZ-WT----------WZ-WHvvvvv]
-    uint64_t space_end = max_zone_head_ - write_head_;
-    uint64_t space_begin = zone_tail_ - min_zone_head_;
-    if (space_end < blocks_needed && space_begin < blocks_needed) {
-      return Status::NoSpace();
-    }
-    // Cutoff the head (we can not split SSTables at this point, it would
-    // fracture the table)
-    if (space_end < blocks_needed) {
-      pseudo_write_head_ = write_head_;
-      write_head_ = min_zone_head_;
-      zone_head_ = min_zone_head_;
-    }
-  } else {
-    // [--WZ--WHvvvvvvvvTZ----WT---]
-    uint64_t space = zone_tail_ - write_head_;
-    if (space < blocks_needed) {
-      return Status::NoSpace();
-    }
-  }
-  return Status::OK();
+  return log_.SpaceLeft(slice.size());
 }
 
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
-  if (!SetWriteAddress(content).ok()) {
+  if (!EnoughSpaceAvailable(content)) {
     return Status::IOError("Not enough space available for L0");
   }
-  meta->lba = write_head_;
-  // printf("write head %lu, max %lu\n", write_head_, max_zone_head_);
-  if (!FromStatus(channel_->DirectAppend(&write_head_, (void*)content.data(),
-                                         content.size(), false))
+  meta->lba = log_.GetWriteHead();
+  if (!FromStatus(
+           log_.Append(content.data(), content.size(), &meta->lba_count, false))
            .ok()) {
     return Status::IOError("Error during appending\n");
   }
-  zone_head_ = (write_head_ / zone_size_) * zone_size_;
-  meta->lba_count = write_head_ - meta->lba;
   return Status::OK();
-}  // namespace ROCKSDB_NAMESPACE
+}
 
 Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   Status s = Status::OK();
@@ -145,26 +98,10 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   return s;
 }
 
-bool L0ZnsSSTable::ValidateReadAddress(const SSZoneMetaData& meta) const {
-  if (write_head_ >= write_tail_) {
-    // [---------------WTvvvvWH--]
-    if (meta.lba < write_tail_ || meta.lba + meta.lba_count > write_head_) {
-      return false;
-    }
-  } else {
-    // [vvvvvvvvvvvvvvvvWH---WTvv]
-    if ((meta.lba > write_head_ && meta.lba < write_tail_) ||
-        (meta.lba + meta.lba_count > write_head_ &&
-         meta.lba + meta.lba_count < write_tail_)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
-  if (!ValidateReadAddress(meta)) {
+  if (meta.lba > max_zone_head_ || meta.lba < min_zone_head_ ||
+      meta.lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
@@ -175,7 +112,6 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   }
   char* raw_buffer;
   if (!(s = FromStatus(buffer_.GetBuffer((void**)&raw_buffer))).ok()) {
-    buffer_.FreeBuffer();
     return s;
   }
 
@@ -188,19 +124,19 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
   for (uint64_t step = 0; step < steps; ++step) {
     current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    if (!FromStatus(channel_->ReadIntoBuffer(&buffer_,
-                                             meta.lba + step * stepsize, 0,
-                                             current_step_size_bytes, true))
+    uint64_t addr = meta.lba + step * stepsize;
+    addr =
+        addr > max_zone_head_ ? min_zone_head_ + (addr - max_zone_head_) : addr;
+    if (!FromStatus(log_.Read(&buffer_, addr, current_step_size_bytes, true))
              .ok()) {
+      printf("progr\n");
       delete[] slice_buffer;
-      buffer_.FreeBuffer();
       return Status::IOError("Error reading SSTable");
     }
     memcpy(slice_buffer + step * stepsize * lba_size_, raw_buffer,
            current_step_size_bytes);
   }
   *sstable = Slice((char*)slice_buffer, meta.lba_count * lba_size_);
-  buffer_.FreeBuffer();
   return s;
 }
 
@@ -247,42 +183,8 @@ Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
   return Status::OK();
 }
 
-Status L0ZnsSSTable::ConsumeTail(uint64_t begin_lba, uint64_t end_lba) {
-  if (begin_lba != write_tail_ || begin_lba > end_lba) {
-    return Status::InvalidArgument("begin lba is malformed");
-  }
-  if (end_lba > max_zone_head_) {
-    return Status::InvalidArgument("end lba is malformed");
-  }
-  write_tail_ = end_lba;
-  uint64_t cur_zone = (write_tail_ / zone_size_) * zone_size_;
-  for (uint64_t slba = zone_tail_; slba < cur_zone; slba += zone_size_) {
-    if (!FromStatus(channel_->ResetZone(slba)).ok()) {
-      return Status::IOError("Error resetting SSTable tail");
-    }
-  }
-  zone_tail_ = cur_zone;
-  // Wraparound
-  if (zone_tail_ == max_zone_head_) {
-    pseudo_write_head_ = write_head_;
-    write_head_ = zone_tail_ = write_tail_ = min_zone_head_;
-  }
-  return Status::OK();
-}
-
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  Status s = ConsumeTail(meta.lba, meta.lba + meta.lba_count);
-  if (!s.ok()) {
-    return s;
-  }
-  // Slight hack to make sure that no space is lost when there is a gap between
-  // max and last sstable.
-  if (meta.lba + meta.lba_count == pseudo_write_head_ &&
-      pseudo_write_head_ != max_zone_head_) {
-    s = ConsumeTail(pseudo_write_head_, max_zone_head_);
-    pseudo_write_head_ = max_zone_head_;
-  }
-  return s;
+  return FromStatus(log_.ConsumeTail(meta.lba, meta.lba + meta.lba_count));
 }
 
 Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
@@ -299,20 +201,6 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
                              icmp);
 }
 
-void L0ZnsSSTable::EncodeTo(std::string* dst) const {
-  PutVarint64(dst, zone_head_);
-  PutVarint64(dst, write_head_);
-  PutVarint64(dst, zone_tail_);
-  PutVarint64(dst, write_tail_);
-  PutVarint64(dst, pseudo_write_head_);
-}
-
-bool L0ZnsSSTable::EncodeFrom(Slice* data) {
-  bool res =
-      GetVarint64(data, &zone_head_) && GetVarint64(data, &write_head_) &&
-      GetVarint64(data, &zone_tail_) && GetVarint64(data, &write_tail_) &&
-      GetVarint64(data, &pseudo_write_head_);
-  return res;
-}
+Status L0ZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
 
 }  // namespace ROCKSDB_NAMESPACE

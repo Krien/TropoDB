@@ -9,27 +9,19 @@ ZnsSSTable::ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                        const SZD::DeviceInfo& info,
                        const uint64_t min_zone_head,
                        const uint64_t max_zone_head)
-    : zone_head_(min_zone_head),
-      write_head_(min_zone_head),
-      zone_tail_(min_zone_head),
-      write_tail_(min_zone_head),
-      min_zone_head_(min_zone_head),
+    : min_zone_head_(min_zone_head),
       max_zone_head_(max_zone_head),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       mdts_(info.mdts),
       channel_factory_(channel_factory),
       buffer_(0, lba_size_) {
-  assert(zone_head_ < info.lba_cap);
-  assert(zone_head_ % info.lba_size == 0);
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
-  channel_factory_->register_channel(&channel_, min_zone_head, max_zone_head);
 }
 
 ZnsSSTable::~ZnsSSTable() {
   printf("Deleting SSTable manager.\n");
-  channel_factory_->unregister_channel(channel_);
   channel_factory_->Unref();
   channel_factory_ = nullptr;
 }

@@ -59,7 +59,9 @@ void SSTableIterator::Seek(const Slice& target) {
       restart_index_ = left;
       break;
     }
-    ParseNextKey();
+    if (!ParseNextKey()) {
+      break;
+    }
   }
   // OLD lineair
   // SeekToRestartPoint(0);

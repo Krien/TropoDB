@@ -28,18 +28,16 @@ class LNZnsSSTable : public ZnsSSTable {
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
-  void EncodeTo(std::string* dst) const override;
-  bool EncodeFrom(Slice* data) override;
+  Status Recover() override;
+  uint64_t GetTail() const override { return log_.GetWriteTail(); }
+  uint64_t GetHead() const override { return log_.GetWriteHead(); }
 
  private:
   class Builder;
 
-  Status SetWriteAddress(const Slice& slice);
-  Status ConsumeTail(const uint64_t begin_lba, const uint64_t end_lba);
-  bool ValidateReadAddress(const SSZoneMetaData& meta) const;
   static void ParseNext(char** src, Slice* key, Slice* value);
 
-  uint64_t pseudo_write_head_;
+  SZD::SZDCircularLog log_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

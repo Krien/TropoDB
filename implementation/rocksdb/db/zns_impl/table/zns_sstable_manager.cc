@@ -150,20 +150,14 @@ SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
   return sstable_wal_level_[level]->NewBuilder(meta);
 }
 
-void ZNSSSTableManager::EncodeTo(std::string* dst) const {
+Status ZNSSSTableManager::Recover() {
+  Status s = Status::OK();
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    sstable_wal_level_[i]->EncodeTo(dst);
-  }
-}
-
-Status ZNSSSTableManager::DecodeFrom(const Slice& data) {
-  Slice input = Slice(data);
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (!sstable_wal_level_[i]->EncodeFrom(&input)) {
-      return Status::Corruption("Corrupt level");
+    if (!(s = sstable_wal_level_[i]->Recover()).ok()) {
+      return s;
     }
   }
-  return Status::OK();
+  return s;
 }
 
 double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {

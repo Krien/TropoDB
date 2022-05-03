@@ -29,20 +29,18 @@ class L0ZnsSSTable : public ZnsSSTable {
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
-  void EncodeTo(std::string* dst) const override;
-  bool EncodeFrom(Slice* data) override;
+  Status Recover() override;
+  uint64_t GetTail() const override { return log_.GetWriteTail(); }
+  uint64_t GetHead() const override { return log_.GetWriteHead(); }
 
  private:
   friend class ZnsSSTableManagerInternal;
 
   class Builder;
 
-  Status SetWriteAddress(const Slice& slice);
-  Status ConsumeTail(const uint64_t begin_lba, const uint64_t end_lba);
-  bool ValidateReadAddress(const SSZoneMetaData& meta) const;
   static void ParseNext(char** src, Slice* key, Slice* value);
 
-  uint64_t pseudo_write_head_;
+  SZD::SZDCircularLog log_;
 };
 
 /**
@@ -50,12 +48,6 @@ class L0ZnsSSTable : public ZnsSSTable {
  */
 class ZnsSSTableManagerInternal {
  public:
-  static inline uint64_t GetZoneHead(L0ZnsSSTable* sstable) {
-    return sstable->zone_head_;
-  }
-  static inline uint64_t GetWriteHead(L0ZnsSSTable* sstable) {
-    return sstable->write_head_;
-  }
   static inline uint64_t GetMinZoneHead(L0ZnsSSTable* sstable) {
     return sstable->min_zone_head_;
   }
@@ -67,11 +59,6 @@ class ZnsSSTableManagerInternal {
   }
   static inline uint64_t GetLbaSize(L0ZnsSSTable* sstable) {
     return sstable->lba_size_;
-  }
-
-  static Status ConsumeTail(L0ZnsSSTable* sstable, uint64_t begin_lba,
-                            uint64_t end_lba) {
-    return sstable->ConsumeTail(begin_lba, end_lba);
   }
 };
 

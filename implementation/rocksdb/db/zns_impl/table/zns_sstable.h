@@ -42,10 +42,9 @@ class ZnsSSTable {
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(const SSZoneMetaData& meta,
                                 const InternalKeyComparator& icmp) = 0;
-  virtual void EncodeTo(std::string* dst) const = 0;
-  virtual bool EncodeFrom(Slice* data) = 0;
-  inline uint64_t GetTail() const { return write_tail_; }
-  inline uint64_t GetHead() const { return write_head_; }
+  virtual Status Recover() = 0;
+  virtual uint64_t GetTail() const = 0;
+  virtual uint64_t GetHead() const = 0;
 
  protected:
   friend class SSTableBuilder;
@@ -53,11 +52,6 @@ class ZnsSSTable {
   static void GeneratePreamble(std::string* dst,
                                const std::vector<uint32_t>& kv_pair_offsets_);
 
-  // Log
-  uint64_t zone_head_;
-  uint64_t write_head_;
-  uint64_t zone_tail_;
-  uint64_t write_tail_;
   // const after init
   const uint64_t min_zone_head_;
   const uint64_t max_zone_head_;
@@ -66,7 +60,6 @@ class ZnsSSTable {
   const uint64_t mdts_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
-  SZD::SZDChannel* channel_;
   SZD::SZDBuffer buffer_;
 };
 

@@ -43,8 +43,7 @@ class ZNSSSTableManager : public RefCounter {
                         const InternalKeyComparator& icmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
-  void EncodeTo(std::string* dst) const;
-  Status DecodeFrom(const Slice& data);
+  Status Recover();
   // Used for compaction
   double GetFractionFilled(const uint8_t level) const;
   // Used for cleaning
