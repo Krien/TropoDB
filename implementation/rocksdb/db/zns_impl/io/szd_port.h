@@ -5,6 +5,9 @@
 #ifndef ZNS_DEVICE
 #define ZNS_DEVICE
 #include <szd/cpp/datastructures/szd_buffer.h>
+#include <szd/cpp/datastructures/szd_circular_log.h>
+#include <szd/cpp/datastructures/szd_log.h>
+#include <szd/cpp/datastructures/szd_once_log.h>
 #include <szd/cpp/szd_channel.h>
 #include <szd/cpp/szd_channel_factory.h>
 #include <szd/szd.h>

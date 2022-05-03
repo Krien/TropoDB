@@ -32,17 +32,17 @@ static_assert(kZnsRecordTypeLast == 5);
  */
 class ZnsCommitter {
  public:
-  ZnsCommitter(SZD::SZDChannel* channel, const SZD::DeviceInfo& info);
+  ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info);
   // No copying or implicits
   ZnsCommitter(const ZnsCommitter&) = delete;
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
   ~ZnsCommitter();
 
-  bool SpaceEnough(const Slice& data, uint64_t min, uint64_t max);
-  Status Commit(const Slice& data, uint64_t* addr);
-  Status SafeCommit(const Slice& data, uint64_t* addr, uint64_t min,
-                    uint64_t max);
+  bool SpaceEnough(const Slice& data);
+  Status Commit(const Slice& data);
+  Status SafeCommit(const Slice& data);
 
+  // Get the commit
   bool GetCommitReader(uint64_t begin, uint64_t end);
   // Can not be called without first getting the commit
   bool SeekCommitReader(Slice* record);
@@ -50,7 +50,7 @@ class ZnsCommitter {
   bool CloseCommit();
 
  private:
-  SZD::SZDChannel* channel_;
+  SZD::SZDLog* log_;
   uint64_t zone_size_;
   uint64_t lba_size_;
   uint64_t zasl_;

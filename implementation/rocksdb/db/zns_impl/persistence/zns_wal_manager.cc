@@ -37,7 +37,6 @@ ZnsWALManager::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
 }
 
 ZnsWALManager::~ZnsWALManager() {
-  // printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
   for (auto i = wals.begin(); i != wals.end(); ++i) {
     if ((*i) != nullptr) (*i)->Unref();
   }

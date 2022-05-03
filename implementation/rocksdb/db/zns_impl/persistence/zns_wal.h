@@ -24,17 +24,19 @@ class ZNSWAL : public RefCounter {
   ZNSWAL(const ZNSWAL&) = delete;
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
-  Status Append(const Slice& data);
-  Status Reset();
-  Status Recover();
+  inline Status Append(const Slice& data) {
+    return committer_.SafeCommit(data);
+  }
+  inline Status Reset() { return FromStatus(log_.ResetAll()); }
+  inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
+  inline bool Empty() { return log_.Empty(); }
+  inline bool SpaceLeft(const Slice& data) {
+    return log_.SpaceLeft(data.size());
+  }
+
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
-  bool Empty();
-  bool SpaceLeft(const Slice& data);
 
  private:
-  // log
-  uint64_t zone_head_;
-  uint64_t write_head_;
   // const after initialisation
   const uint64_t min_zone_head_;
   const uint64_t max_zone_head_;
@@ -42,8 +44,8 @@ class ZNSWAL : public RefCounter {
   const uint64_t lba_size_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
-  SZD::SZDChannel* channel_;
-  ZnsCommitter* committer_;
+  SZD::SZDOnceLog log_;
+  ZnsCommitter committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

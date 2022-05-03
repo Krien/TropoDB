@@ -17,9 +17,8 @@ static void InitTypeCrc(uint32_t* type_crc) {
   }
 }
 
-ZnsCommitter::ZnsCommitter(SZD::SZDChannel* channel,
-                           const SZD::DeviceInfo& info)
-    : channel_(channel),
+ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info)
+    : log_(log),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
@@ -27,6 +26,7 @@ ZnsCommitter::ZnsCommitter(SZD::SZDChannel* channel,
       scratch_(nullptr) {
   InitTypeCrc(type_crc_);
 }
+
 ZnsCommitter::~ZnsCommitter() {
   if (scratch_ != nullptr) {
     delete scratch_;
@@ -34,15 +34,14 @@ ZnsCommitter::~ZnsCommitter() {
   }
 }
 
-bool ZnsCommitter::SpaceEnough(const Slice& data, uint64_t min, uint64_t max) {
+bool ZnsCommitter::SpaceEnough(const Slice& data) {
   size_t fragcount = data.size() / zasl_ + 1;
   size_t size_needed = fragcount * kZnsHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
-  size_t size_available = (max - min) * lba_size_;
-  return size_needed < size_available;
+  return log_->SpaceLeft(size_needed);
 }
 
-Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
+Status ZnsCommitter::Commit(const Slice& data) {
   Status s;
   const char* ptr = data.data();
   size_t left = data.size();
@@ -55,11 +54,10 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     return s;
   }
 
-  uint64_t write_head = *addr;
-  uint64_t zone_head = (*addr / zone_size_) * zone_size_;
-
   bool begin = true;
   do {
+    uint64_t write_head = log_->GetWriteHead();
+    uint64_t zone_head = (write_head / zone_size_) * zone_size_;
     // determine next fragment part.
     size_t avail = ((zone_head + zone_size_) - write_head) * lba_size_;
     avail = (avail > zasl_ ? zasl_ : avail) - kZnsHeaderSize;
@@ -87,8 +85,8 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     EncodeFixed32(fragment, crc);
     // Actual commit
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
-    s = FromStatus(channel_->FlushBufferSection(
-        buffer_, &write_head, 0, fragment_length + kZnsHeaderSize, false));
+    s = FromStatus(log_->Append(buffer_, 0, fragment_length + kZnsHeaderSize,
+                                nullptr, false));
     zone_head = (write_head / zone_size_) * zone_size_;
     if (!s.ok()) {
       return s;
@@ -98,19 +96,14 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     begin = false;
   } while (s.ok() && left > 0);
   s = FromStatus(buffer_.FreeBuffer());
-  *addr = write_head;
   return s;
 }  // namespace ROCKSDB_NAMESPACE
 
-Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* addr, uint64_t min,
-                                uint64_t max) {
-  if (*addr < min || *addr > max || min > max) {
-    return Status::Corruption("Corrupt pointers");
-  }
-  if (!SpaceEnough(data, *addr, max)) {
+Status ZnsCommitter::SafeCommit(const Slice& data) {
+  if (!log_->SpaceLeft(data.size())) {
     return Status::IOError("No space left");
   }
-  return Commit(data, addr);
+  return Commit(data);
 }
 
 bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
@@ -147,7 +140,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    channel_->ReadIntoBuffer(&buffer_, commit_ptr_, 0, lba_size_, true);
+    log_->Read(&buffer_, 0, lba_size_, commit_ptr_, true);
     // parse header
     const char* header;
     buffer_.GetBuffer((void**)&header);
@@ -160,8 +153,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      channel_->ReadIntoBuffer(&buffer_, commit_ptr_ + 1, lba_size_,
-                               to_read - lba_size_, true);
+      log_->Read(&buffer_, lba_size_, to_read - lba_size_, commit_ptr_ + 1,
+                 false);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.

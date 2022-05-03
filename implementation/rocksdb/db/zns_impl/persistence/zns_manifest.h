@@ -16,17 +16,19 @@ class ZnsManifest : public RefCounter {
               const SZD::DeviceInfo& info, const uint64_t min_zone_head,
               const uint64_t max_zone_head);
   ~ZnsManifest();
-  Status Scan();
   Status NewManifest(const Slice& record);
   Status ReadManifest(std::string* manifest);
   Status GetCurrentWriteHead(uint64_t* current);
   Status SetCurrent(uint64_t current_lba);
   Status Recover();
-  Status RemoveObsoleteZones();
-  Status Reset();
+  inline Status Reset() {
+    Status s = FromStatus(log_.ResetAll());
+    current_lba_ = min_zone_head_;
+    return s;
+  }
 
  private:
-  Status RecoverLog();
+  inline Status RecoverLog() { return FromStatus(log_.RecoverPointers()); }
   Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest);
   Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest);
   Status ValidateManifestPointers() const;
@@ -36,9 +38,8 @@ class ZnsManifest : public RefCounter {
   uint64_t manifest_start_;
   uint64_t manifest_end_;
   // Log
-  uint64_t zone_head_;
-  uint64_t write_head_;
-  uint64_t zone_tail_;
+  SZD::SZDCircularLog log_;
+  ZnsCommitter committer_;
   // const after init
   const uint64_t min_zone_head_;
   const uint64_t max_zone_head_;
@@ -46,8 +47,6 @@ class ZnsManifest : public RefCounter {
   const uint64_t lba_size_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
-  SZD::SZDChannel* channel_;
-  ZnsCommitter* committer_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif
