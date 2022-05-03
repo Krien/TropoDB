@@ -76,7 +76,8 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   for (uint8_t level = 1; level < ZnsConfig::level_count; ++level) {
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
-    uint32_t index = FindSS(vset_->icmp_, ss_[level], internal_key);
+    uint32_t index = ZNSSSTableManager::FindSSTableIndex(
+        vset_->icmp_, ss_[level], internal_key);
     if (index >= num_ss) {
       continue;
     }

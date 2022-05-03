@@ -15,7 +15,7 @@ LNZoneIterator::LNZoneIterator(const InternalKeyComparator& icmp,
 LNZoneIterator::~LNZoneIterator() = default;
 
 void LNZoneIterator::Seek(const Slice& target) {
-  index_ = FindSS(icmp_, *slist_, target);
+  index_ = ZNSSSTableManager::FindSSTableIndex(icmp_, *slist_, target);
 }
 
 void LNZoneIterator::SeekForPrev(const Slice& target) {

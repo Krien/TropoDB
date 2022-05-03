@@ -48,9 +48,6 @@ class ZnsSSTable {
 
  protected:
   friend class SSTableBuilder;
-  static void PutKVPair(std::string* dst, const Slice& key, const Slice& value);
-  static void GeneratePreamble(std::string* dst,
-                               const std::vector<uint32_t>& kv_pair_offsets_);
 
   // const after init
   const uint64_t min_zone_head_;
@@ -63,8 +60,6 @@ class ZnsSSTable {
   SZD::SZDBuffer buffer_;
 };
 
-size_t FindSS(const InternalKeyComparator& icmp,
-              const std::vector<SSZoneMetaData*>& ss, const Slice& key);
 }  // namespace ROCKSDB_NAMESPACE
 #endif
 #endif

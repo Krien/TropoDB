@@ -51,6 +51,10 @@ class ZNSSSTableManager : public RefCounter {
                        std::pair<uint64_t, uint64_t>* range) const;
   void GetRange(const uint8_t level, const std::vector<SSZoneMetaData*>& metas,
                 std::pair<uint64_t, uint64_t>* range) const;
+  // Utils
+  static size_t FindSSTableIndex(const InternalKeyComparator& icmp,
+                                 const std::vector<SSZoneMetaData*>& ss,
+                                 const Slice& key);
 
  private:
   // wals

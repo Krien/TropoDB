@@ -3,6 +3,7 @@
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/zns_sstable_coding.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -20,7 +21,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
       meta_->smallest.DecodeFrom(key);
       started_ = true;
     }
-    table_->PutKVPair(&buffer_, key, value);
+    EncodeKVPair(&buffer_, key, value);
     meta_->largest.DecodeFrom(key);
     kv_pair_offsets_.push_back(buffer_.size());
     return Status::OK();
@@ -28,7 +29,7 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
 
   Status Finalise() override {
     meta_->numbers = kv_pair_offsets_.size();
-    table_->GeneratePreamble(&buffer_, kv_pair_offsets_);
+    EncodeSSTablePreamble(&buffer_, kv_pair_offsets_);
     return Status::OK();
   }
 
@@ -75,27 +76,6 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
     return Status::IOError("Error during appending\n");
   }
   return Status::OK();
-}
-
-Status LNZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
-  Status s = Status::OK();
-  SSTableBuilder* builder = NewBuilder(meta);
-  {
-    InternalIterator* iter = mem->NewIterator();
-    iter->SeekToFirst();
-    if (!iter->Valid()) {
-      return Status::Corruption("No valid iterator in the memtable");
-    }
-    for (; iter->Valid(); iter->Next()) {
-      const Slice& key = iter->key();
-      const Slice& value = iter->value();
-      s = builder->Apply(key, value);
-    }
-    s = builder->Finalise();
-    s = builder->Flush();
-  }
-  delete builder;
-  return s;
 }
 
 Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {

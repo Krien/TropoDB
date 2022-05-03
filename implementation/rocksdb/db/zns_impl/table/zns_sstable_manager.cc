@@ -213,4 +213,23 @@ void ZNSSSTableManager::GetRange(const uint8_t level,
   }
   // TODO: higher levels will need more info.
 }
+
+size_t ZNSSSTableManager::FindSSTableIndex(
+    const InternalKeyComparator& icmp, const std::vector<SSZoneMetaData*>& ss,
+    const Slice& key) {
+  size_t left = 0;
+  size_t right = ss.size();
+  // binary search I guess.
+  while (left < right) {
+    size_t mid = (left + right) / 2;
+    const SSZoneMetaData* m = ss[mid];
+    if (icmp.InternalKeyComparator::Compare(m->largest.Encode(), key) < 0) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+  return right;
+}
+
 }  // namespace ROCKSDB_NAMESPACE

@@ -3,6 +3,7 @@
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/zns_sstable_coding.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -20,7 +21,7 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
       meta_->smallest.DecodeFrom(key);
       started_ = true;
     }
-    table_->PutKVPair(&buffer_, key, value);
+    EncodeKVPair(&buffer_, key, value);
     meta_->largest.DecodeFrom(key);
     kv_pair_offsets_.push_back(buffer_.size());
     return Status::OK();
@@ -28,7 +29,7 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
 
   Status Finalise() override {
     meta_->numbers = kv_pair_offsets_.size();
-    table_->GeneratePreamble(&buffer_, kv_pair_offsets_);
+    EncodeSSTablePreamble(&buffer_, kv_pair_offsets_);
     return Status::OK();
   }
 
@@ -129,7 +130,6 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
         addr > max_zone_head_ ? min_zone_head_ + (addr - max_zone_head_) : addr;
     if (!FromStatus(log_.Read(&buffer_, addr, current_step_size_bytes, true))
              .ok()) {
-      printf("progr\n");
       delete[] slice_buffer;
       return Status::IOError("Error reading SSTable");
     }

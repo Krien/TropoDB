@@ -24,7 +24,6 @@ class LNZnsSSTable : public ZnsSSTable {
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
              std::string* value, const SSZoneMetaData& meta,
              EntryStatus* entry) override;
-  Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
