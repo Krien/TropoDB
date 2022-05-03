@@ -54,10 +54,11 @@ class ZnsCommitter {
   uint64_t zone_size_;
   uint64_t lba_size_;
   uint64_t zasl_;
+  // amortise copying
+  SZD::SZDBuffer buffer_;
   // CRC
   uint32_t type_crc_[5];
   // Used for reading
-  char* buffer_;
   std::string* scratch_;
   uint64_t commit_start_, commit_ptr_, commit_end_;
   bool has_commit_;

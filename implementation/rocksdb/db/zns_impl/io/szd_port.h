@@ -4,6 +4,7 @@
 #ifdef ZNS_PLUGIN_ENABLED
 #ifndef ZNS_DEVICE
 #define ZNS_DEVICE
+#include <szd/cpp/datastructures/szd_buffer.h>
 #include <szd/cpp/szd_channel.h>
 #include <szd/cpp/szd_channel_factory.h>
 #include <szd/szd.h>

@@ -23,15 +23,11 @@ ZnsCommitter::ZnsCommitter(SZD::SZDChannel* channel,
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
-      buffer_(nullptr),
+      buffer_(0, info.lba_size),
       scratch_(nullptr) {
   InitTypeCrc(type_crc_);
 }
 ZnsCommitter::~ZnsCommitter() {
-  if (buffer_ != nullptr) {
-    channel_->FreeBuffer();
-    buffer_ = nullptr;
-  }
   if (scratch_ != nullptr) {
     delete scratch_;
     scratch_ = nullptr;
@@ -51,11 +47,11 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
   const char* ptr = data.data();
   size_t left = data.size();
 
-  if (!(s = FromStatus(channel_->ReserveBuffer(zasl_))).ok()) {
+  if (!(s = FromStatus(buffer_.ReallocBuffer(zasl_))).ok()) {
     return s;
   }
   char* fragment;
-  if (!(s = FromStatus(channel_->GetBuffer((void**)&fragment))).ok()) {
+  if (!(s = FromStatus(buffer_.GetBuffer((void**)&fragment))).ok()) {
     return s;
   }
 
@@ -92,7 +88,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     // Actual commit
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
     s = FromStatus(channel_->FlushBufferSection(
-        &write_head, 0, fragment_length + kZnsHeaderSize, false));
+        buffer_, &write_head, 0, fragment_length + kZnsHeaderSize, false));
     zone_head = (write_head / zone_size_) * zone_size_;
     if (!s.ok()) {
       return s;
@@ -101,10 +97,10 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* addr) {
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-  s = FromStatus(channel_->FreeBuffer());
+  s = FromStatus(buffer_.FreeBuffer());
   *addr = write_head;
   return s;
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* addr, uint64_t min,
                                 uint64_t max) {
@@ -128,22 +124,14 @@ bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
   if (scratch_ == nullptr) {
     scratch_ = new std::string;
   }
-  if (buffer_ == nullptr) {
-    if (!FromStatus(channel_->ReserveBuffer(zasl_)).ok()) {
-      return false;
-    }
-    if (!FromStatus(channel_->GetBuffer((void**)&buffer_)).ok()) {
-      return false;
-    }
-  }
-  if (buffer_ == nullptr) {
+  if (!FromStatus(buffer_.ReallocBuffer(zasl_)).ok()) {
     return false;
   }
   return true;
 }
 
 bool ZnsCommitter::SeekCommitReader(Slice* record) {
-  if (!has_commit_) {
+  if (!has_commit_ || buffer_.GetBufferSize() == 0) {
     printf("FATAL, be sure to first get a commit\n");
     return false;
   }
@@ -159,9 +147,10 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    channel_->ReadIntoBuffer(commit_ptr_, 0, lba_size_, true);
+    channel_->ReadIntoBuffer(&buffer_, commit_ptr_, 0, lba_size_, true);
     // parse header
-    const char* header = buffer_;
+    const char* header;
+    buffer_.GetBuffer((void**)&header);
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]);
@@ -171,8 +160,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      channel_->ReadIntoBuffer(commit_ptr_ + 1, lba_size_, to_read - lba_size_,
-                               true);
+      channel_->ReadIntoBuffer(&buffer_, commit_ptr_ + 1, lba_size_,
+                               to_read - lba_size_, true);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -225,10 +214,7 @@ bool ZnsCommitter::CloseCommit() {
     return false;
   }
   has_commit_ = false;
-  if (buffer_ != nullptr) {
-    channel_->FreeBuffer();
-    buffer_ = nullptr;
-  }
+  buffer_.FreeBuffer();
   if (scratch_ != nullptr) {
     delete scratch_;
     scratch_ = nullptr;

@@ -162,24 +162,24 @@ bool LNZnsSSTable::ValidateReadAddress(const SSZoneMetaData& meta) const {
   return true;
 }
 
-Status LNZnsSSTable::ReadSSTable(Slice* sstable,
-                                 const SSZoneMetaData& meta) const {
+Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (!ValidateReadAddress(meta)) {
     return Status::Corruption("Invalid metadata");
   }
-  char* buffer = (char*)calloc(meta.lba_count * lba_size_, sizeof(char));
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
   // by lba....
-  if (!(s = FromStatus(channel_->ReserveBuffer(mdts_))).ok()) {
-    delete[] buffer;
+  uint64_t backed_size = std::min(meta.lba_count * lba_size_, mdts_);
+  if (!(s = FromStatus(buffer_.ReallocBuffer(backed_size))).ok()) {
     return s;
   }
-  char* z_buffer;
-  if (!(s = FromStatus(channel_->GetBuffer((void**)&z_buffer))).ok()) {
-    delete[] buffer;
+  char* raw_buffer;
+  if (!(s = FromStatus(buffer_.GetBuffer((void**)&raw_buffer))).ok()) {
+    buffer_.FreeBuffer();
     return s;
   }
+
+  char* slice_buffer = (char*)calloc(meta.lba_count * lba_size_, sizeof(char));
   // mdts is always a factor of lba_size, so safe.
   uint64_t stepsize = mdts_ / lba_size_;
   uint64_t steps = (meta.lba_count + stepsize - 1) / stepsize;
@@ -188,18 +188,19 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable,
       mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
   for (uint64_t step = 0; step < steps; ++step) {
     current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    if (!FromStatus(channel_->ReadIntoBuffer(meta.lba + step * stepsize, 0,
+    if (!FromStatus(channel_->ReadIntoBuffer(&buffer_,
+                                             meta.lba + step * stepsize, 0,
                                              current_step_size_bytes, true))
              .ok()) {
-      delete[] buffer;
-      channel_->FreeBuffer();
+      delete[] slice_buffer;
+      buffer_.FreeBuffer();
       return Status::IOError("Error reading SSTable");
     }
-    memcpy(buffer + step * stepsize * lba_size_, z_buffer,
+    memcpy(slice_buffer + step * stepsize * lba_size_, raw_buffer,
            current_step_size_bytes);
   }
-  s = FromStatus(channel_->FreeBuffer());
-  *sstable = Slice((char*)buffer, meta.lba_count * lba_size_);
+  *sstable = Slice((char*)slice_buffer, meta.lba_count * lba_size_);
+  buffer_.FreeBuffer();
   return s;
 }
 
@@ -215,8 +216,7 @@ void LNZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
 
 Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta,
-                         EntryStatus* status) const {
+                         const SSZoneMetaData& meta, EntryStatus* status) {
   Slice sstable;
   Status s;
   s = ReadSSTable(&sstable, meta);
@@ -285,7 +285,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
 }
 
 Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
-                                    const InternalKeyComparator& icmp) const {
+                                    const InternalKeyComparator& icmp) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);

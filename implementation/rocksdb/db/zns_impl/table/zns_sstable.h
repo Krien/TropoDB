@@ -32,17 +32,16 @@ class ZnsSSTable {
              const SZD::DeviceInfo& info, const uint64_t min_zone_head,
              const uint64_t max_zone_head);
   virtual ~ZnsSSTable();
-  virtual Status ReadSSTable(Slice* sstable,
-                             const SSZoneMetaData& meta) const = 0;
+  virtual Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) = 0;
   virtual Status Get(const InternalKeyComparator& icmp, const Slice& key,
                      std::string* value, const SSZoneMetaData& meta,
-                     EntryStatus* entry) const = 0;
+                     EntryStatus* entry) = 0;
   virtual bool EnoughSpaceAvailable(const Slice& slice) const = 0;
   virtual Status InvalidateSSZone(const SSZoneMetaData& meta) = 0;
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(const SSZoneMetaData& meta,
-                                const InternalKeyComparator& icmp) const = 0;
+                                const InternalKeyComparator& icmp) = 0;
   virtual void EncodeTo(std::string* dst) const = 0;
   virtual bool EncodeFrom(Slice* data) = 0;
   inline uint64_t GetTail() const { return write_tail_; }
@@ -68,6 +67,7 @@ class ZnsSSTable {
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel* channel_;
+  SZD::SZDBuffer buffer_;
 };
 
 size_t FindSS(const InternalKeyComparator& icmp,
