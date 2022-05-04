@@ -172,6 +172,7 @@ Status ZnsManifest::ReadManifest(std::string* manifest) {
     }
     committer_.CloseCommit();
   }
+  printf("done\n");
   return s;
 }
 

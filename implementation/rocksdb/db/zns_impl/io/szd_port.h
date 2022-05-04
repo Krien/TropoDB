@@ -10,7 +10,7 @@
 #include <szd/cpp/datastructures/szd_once_log.h>
 #include <szd/cpp/szd_channel.h>
 #include <szd/cpp/szd_channel_factory.h>
-#include <szd/szd.h>
+#include <szd/cpp/szd_device.h>
 
 #include "rocksdb/status.h"
 

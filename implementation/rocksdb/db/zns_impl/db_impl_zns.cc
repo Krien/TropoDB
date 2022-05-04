@@ -371,32 +371,32 @@ bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
 }
 
 Status DBImplZNS::OpenDevice() {
-  device_manager_ = new SZD::DeviceManager*;
-  int rc = 0;
-  SZD::DeviceOptions device_options = {.name = "ZNSLSM", !SZD::device_set};
-  if (!SZD::device_set) {
-    rc = SZD::szd_init(device_manager_, &device_options);
-    SZD::device_set = true;
+  zns_device_ = new SZD::SZDDevice("ZNSLSM");
+  Status s;
+  if (SZD::device_set) {
+    s = FromStatus(zns_device_->Reinit());
   } else {
-    rc = SZD::szd_init(device_manager_, &device_options);
+    SZD::device_set = true;
+    s = FromStatus(zns_device_->Init());
   }
-  if (rc != 0) {
+  if (!s.ok()) {
     return Status::IOError("Error opening SPDK");
   }
-  SZD::DeviceOpenOptions ooptions = {.min_zone = ZnsConfig::min_zone,
-                                     .max_zone = ZnsConfig::max_zone};
-  rc = SZD::szd_open(*device_manager_, this->name_.c_str(), &ooptions);
-  if (rc != 0) {
+  s = FromStatus(
+      zns_device_->Open(this->name_, ZnsConfig::min_zone, ZnsConfig::max_zone));
+  if (!s.ok()) {
     return Status::IOError("Error opening ZNS device");
   }
-  channel_factory_ = new SZD::SZDChannelFactory(*device_manager_, 0x100);
+  channel_factory_ =
+      new SZD::SZDChannelFactory(zns_device_->GetDeviceManager(), 0x100);
   channel_factory_->Ref();
   return Status::OK();
 }
 
 Status DBImplZNS::InitDB(const DBOptions& options) {
-  assert(device_manager_ != nullptr);
-  SZD::DeviceInfo device_info = (*device_manager_)->info;
+  assert(zns_device_ != nullptr);
+  SZD::DeviceInfo device_info;
+  zns_device_->GetInfo(&device_info);
   uint64_t zone_head = ZnsConfig::min_zone;
   uint64_t zone_step = 0;
 
@@ -460,9 +460,14 @@ Status DBImplZNS::ResetDevice() {
   Status s;
   SZD::SZDChannel* channel;
   channel_factory_->Ref();
-  channel_factory_->register_channel(
-      &channel, ZnsConfig::min_zone * (*device_manager_)->info.lba_size,
-      ZnsConfig::max_zone * (*device_manager_)->info.lba_size);
+  SZD::DeviceInfo info;
+  s = FromStatus(zns_device_->GetInfo(&info));
+  if (!s.ok()) {
+    return s;
+  }
+  channel_factory_->register_channel(&channel,
+                                     ZnsConfig::min_zone * info.lba_size,
+                                     ZnsConfig::max_zone * info.lba_size);
   s = FromStatus(channel->ResetAllZones());
   channel_factory_->unregister_channel(channel);
   channel_factory_->Unref();
@@ -486,12 +491,9 @@ DBImplZNS::~DBImplZNS() {
   if (manifest_ != nullptr) manifest_->Unref();
   if (table_cache_ != nullptr) delete table_cache_;
   if (channel_factory_ != nullptr) channel_factory_->Unref();
-  if (device_manager_ != nullptr) {
-    SZD::szd_destroy(*device_manager_);
-    free(device_manager_);
-  }
+  if (zns_device_ != nullptr) delete zns_device_;
   // printf("exiting \n");
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 Status DBImplZNS::Open(
     const DBOptions& db_options, const std::string& name,

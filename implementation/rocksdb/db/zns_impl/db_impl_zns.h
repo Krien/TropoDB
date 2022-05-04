@@ -298,7 +298,7 @@ class DBImplZNS : public DB {
 
   // Constant after construction
   const DBOptions options_;
-  SZD::DeviceManager** device_manager_;
+  SZD::SZDDevice* zns_device_;
   SZD::SZDChannelFactory* channel_factory_;
   ZNSWAL* wal_;
   ZnsWALManager* wal_man_;
