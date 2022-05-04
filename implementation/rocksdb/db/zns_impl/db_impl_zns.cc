@@ -460,9 +460,8 @@ Status DBImplZNS::ResetDevice() {
   if (!s.ok()) {
     return s;
   }
-  channel_factory_->register_channel(&channel,
-                                     ZnsConfig::min_zone * info.lba_size,
-                                     ZnsConfig::max_zone * info.lba_size);
+  channel_factory_->register_channel(&channel, ZnsConfig::min_zone,
+                                     ZnsConfig::max_zone);
   s = FromStatus(channel->ResetAllZones());
   channel_factory_->unregister_channel(channel);
   channel_factory_->Unref();
