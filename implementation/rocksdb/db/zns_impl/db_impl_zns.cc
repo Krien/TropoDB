@@ -373,12 +373,7 @@ bool DBImplZNS::SetPreserveDeletesSequenceNumber(SequenceNumber seqnum) {
 Status DBImplZNS::OpenDevice() {
   zns_device_ = new SZD::SZDDevice("ZNSLSM");
   Status s;
-  if (SZD::device_set) {
-    s = FromStatus(zns_device_->Reinit());
-  } else {
-    SZD::device_set = true;
-    s = FromStatus(zns_device_->Init());
-  }
+  s = FromStatus(zns_device_->Init());
   if (!s.ok()) {
     return Status::IOError("Error opening SPDK");
   }

@@ -317,7 +317,4 @@ class DBImplZNS : public DB {
   ZnsTableCache* table_cache_;
 };
 }  // namespace ROCKSDB_NAMESPACE
-namespace SZD {
-static bool device_set = false;
-}
 #endif
