@@ -113,7 +113,7 @@ class DBImplZNS : public DB {
   Status Recover();
   Status InitWAL();
 
-  Status MakeRoomForWrite();
+  Status MakeRoomForWrite(Slice log_entry);
   void MaybeScheduleCompaction(bool force);
   static void BGWork(void* db);
   void BackgroundCall();

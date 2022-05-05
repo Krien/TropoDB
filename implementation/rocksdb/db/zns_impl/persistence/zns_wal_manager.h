@@ -17,8 +17,8 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsWALManager : public RefCounter {
  public:
   ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
-                const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-                const uint64_t max_zone_head, const size_t wal_count);
+                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
+                const uint64_t max_zone_nr, const size_t wal_count);
   // No copying or implicits
   ZnsWALManager(const ZnsWALManager&) = delete;
   ZnsWALManager& operator=(const ZnsWALManager&) = delete;

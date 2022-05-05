@@ -49,10 +49,10 @@ class LNZnsSSTable::Builder : public SSTableBuilder {
 
 LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
-                           const uint64_t min_zone_head,
-                           const uint64_t max_zone_head)
-    : ZnsSSTable(channel_factory, info, min_zone_head, max_zone_head),
-      log_(channel_factory_, info, min_zone_head_, max_zone_head_) {}
+                           const uint64_t min_zone_nr,
+                           const uint64_t max_zone_nr)
+    : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr) {}
 
 LNZnsSSTable::~LNZnsSSTable() = default;
 
@@ -70,8 +70,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
     return Status::IOError("Not enough space available for L0");
   }
   meta->lba = log_.GetWriteHead();
-  if (!FromStatus(
-           log_.Append(content.data(), content.size(), &meta->lba_count, false))
+  if (!FromStatus(log_.Append(content.ToString(false), &meta->lba_count, false))
            .ok()) {
     return Status::IOError("Error during appending\n");
   }
@@ -107,7 +106,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     uint64_t addr = meta.lba + step * stepsize;
     addr =
         addr > max_zone_head_ ? min_zone_head_ + (addr - max_zone_head_) : addr;
-    if (!FromStatus(log_.Read(&buffer_, addr, current_step_size_bytes, true))
+    if (!FromStatus(log_.Read(addr, &buffer_, current_step_size_bytes, true))
              .ok()) {
       delete[] slice_buffer;
       return Status::IOError("Error reading SSTable");

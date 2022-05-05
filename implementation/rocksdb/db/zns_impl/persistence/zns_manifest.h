@@ -13,8 +13,8 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsManifest : public RefCounter {
  public:
   ZnsManifest(SZD::SZDChannelFactory* channel_factory,
-              const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-              const uint64_t max_zone_head);
+              const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
+              const uint64_t max_zone_nr);
   ~ZnsManifest();
   Status NewManifest(const Slice& record);
   Status ReadManifest(std::string* manifest);

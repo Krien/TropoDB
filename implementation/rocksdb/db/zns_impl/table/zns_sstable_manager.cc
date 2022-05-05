@@ -21,11 +21,13 @@ ZNSSSTableManager::ZNSSSTableManager(
   channel_factory_->Ref();
   sstable_wal_level_[0] = new L0ZnsSSTable(channel_factory_, info,
                                            ranges[0].first, ranges[0].second);
-  ranges_[0] = ranges[0];
+  ranges_[0] = std::make_pair(ranges[0].first * info.zone_size,
+                              ranges[0].second * info.zone_size);
   for (size_t level = 1; level < ZnsConfig::level_count; level++) {
     sstable_wal_level_[level] = new LNZnsSSTable(
         channel_factory_, info, ranges[level].first, ranges[level].second);
-    ranges_[level] = ranges[level];
+    ranges_[level] = std::make_pair(ranges[level].first * info.zone_size,
+                                    ranges[level].second * info.zone_size);
   }
 }
 

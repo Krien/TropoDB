@@ -29,8 +29,8 @@ class SSTableBuilder {
 class ZnsSSTable {
  public:
   ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
-             const SZD::DeviceInfo& info, const uint64_t min_zone_head,
-             const uint64_t max_zone_head);
+             const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
+             const uint64_t max_zone_nr);
   virtual ~ZnsSSTable();
   virtual Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) = 0;
   virtual Status Get(const InternalKeyComparator& icmp, const Slice& key,

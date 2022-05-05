@@ -19,7 +19,7 @@ namespace ROCKSDB_NAMESPACE {
 class ZNSWAL : public RefCounter {
  public:
   ZNSWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
-         const uint64_t min_zone_head, const uint64_t max_zone_head);
+         const uint64_t min_zone_nr, const uint64_t max_zone_nr);
   // No copying or implicits
   ZNSWAL(const ZNSWAL&) = delete;
   ZNSWAL& operator=(const ZNSWAL&) = delete;

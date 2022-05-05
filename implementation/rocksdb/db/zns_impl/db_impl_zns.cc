@@ -165,7 +165,11 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   MutexLock l(&mutex_);
   // TODO: syncing
 
-  s = MakeRoomForWrite();
+  Slice log_entry;
+  if (updates != nullptr) {
+    log_entry = WriteBatchInternal::Contents(updates);
+    s = MakeRoomForWrite(log_entry);
+  }
   uint64_t last_sequence = versions_->LastSequence();
 
   // TODO make threadsafe for multiple writes and add writebatch
@@ -178,7 +182,6 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     {
       wal_->Ref();
       mutex_.Unlock();
-      Slice log_entry = WriteBatchInternal::Contents(updates);
       wal_->Append(log_entry);
       // write to memtable
       assert(this->mem_ != nullptr);
@@ -191,18 +194,17 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   return s;
 }
 
-Status DBImplZNS::MakeRoomForWrite() {
+Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
-  Slice stub;
   while (true) {
     if (allow_delay && versions_->NeedsFlushing()) {
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(stub)) {
+    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(log_entry)) {
       // space left in memory table
       break;
     } else if (imm_ != nullptr) {
@@ -395,14 +397,13 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   uint64_t zone_head = ZnsConfig::min_zone;
   uint64_t zone_step = 0;
 
-  zone_step = device_info.zone_size * ZnsConfig::manifest_zones;
+  zone_step = ZnsConfig::manifest_zones;
   manifest_ = new ZnsManifest(channel_factory_, device_info, zone_head,
                               zone_head + zone_step);
   manifest_->Ref();
   zone_head += zone_step;
 
-  zone_step = device_info.zone_size * ZnsConfig::wal_count *
-              ZnsConfig::zones_foreach_wal;
+  zone_step = ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal;
   wal_man_ = new ZnsWALManager(channel_factory_, device_info, zone_head,
                                zone_step + zone_head, ZnsConfig::wal_count);
   wal_man_->Ref();
@@ -416,23 +417,19 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
         ZnsConfig::ss_distribution,
         ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
     for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-      zone_step = (nzones / distr) * ZnsConfig::ss_distribution[i] *
-                  device_info.zone_size;
-      zone_step =
-          (zone_step / device_info.zone_size) < ZnsConfig::min_ss_zone_count
-              ? ZnsConfig::min_ss_zone_count * device_info.zone_size
-              : zone_step;
+      zone_step = (nzones / distr) * ZnsConfig::ss_distribution[i];
+      zone_step = zone_step < ZnsConfig::min_ss_zone_count
+                      ? ZnsConfig::min_ss_zone_count
+                      : zone_step;
       ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
       zone_head += zone_step;
-      printf("SS range  %lu %lu \n", ranges[i].first / device_info.zone_size,
-             ranges[i].second / device_info.zone_size);
+      printf("SS range  %lu %lu \n", ranges[i].first, ranges[i].second);
     }
-    zone_step = (nzones * device_info.zone_size) - zone_head;
+    zone_step = nzones - zone_head;
     ranges[ZnsConfig::level_count - 1] =
         std::make_pair(zone_head, zone_head + zone_step);
-    printf("SS range  %lu %lu \n",
-           ranges[ZnsConfig::level_count - 1].first / device_info.zone_size,
-           ranges[ZnsConfig::level_count - 1].second / device_info.zone_size);
+    printf("SS range  %lu %lu \n", ranges[ZnsConfig::level_count - 1].first,
+           ranges[ZnsConfig::level_count - 1].second);
   }
   ss_manager_ = new ZNSSSTableManager(channel_factory_, device_info, ranges);
   delete[] ranges;

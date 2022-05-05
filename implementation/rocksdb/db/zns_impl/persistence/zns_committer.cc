@@ -140,7 +140,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    log_->Read(&buffer_, 0, lba_size_, commit_ptr_, true);
+    log_->Read(commit_ptr_, &buffer_, 0, lba_size_, true);
     // parse header
     const char* header;
     buffer_.GetBuffer((void**)&header);
@@ -153,7 +153,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      log_->Read(&buffer_, lba_size_, to_read - lba_size_, commit_ptr_ + 1,
+      log_->Read(commit_ptr_ + 1, &buffer_, lba_size_, to_read - lba_size_,
                  false);
     }
     // TODO: we need better error handling at some point than setting to wrong

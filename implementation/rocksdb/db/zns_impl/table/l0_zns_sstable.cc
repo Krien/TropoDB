@@ -49,10 +49,10 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
 
 L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
-                           const uint64_t min_zone_head,
-                           const uint64_t max_zone_head)
-    : ZnsSSTable(channel_factory, info, min_zone_head, max_zone_head),
-      log_(channel_factory_, info, min_zone_head_, max_zone_head_) {}
+                           const uint64_t min_zone_nr,
+                           const uint64_t max_zone_nr)
+    : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr) {}
 
 L0ZnsSSTable::~L0ZnsSSTable() = default;
 
@@ -125,10 +125,9 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
   for (uint64_t step = 0; step < steps; ++step) {
     current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    uint64_t addr = meta.lba + step * stepsize;
-    addr =
-        addr > max_zone_head_ ? min_zone_head_ + (addr - max_zone_head_) : addr;
-    if (!FromStatus(log_.Read(&buffer_, addr, current_step_size_bytes, true))
+    uint64_t lba = meta.lba + step * stepsize;
+    lba = lba > max_zone_head_ ? min_zone_head_ + (lba - max_zone_head_) : lba;
+    if (!FromStatus(log_.Read(lba, &buffer_, current_step_size_bytes, true))
              .ok()) {
       delete[] slice_buffer;
       return Status::IOError("Error reading SSTable");

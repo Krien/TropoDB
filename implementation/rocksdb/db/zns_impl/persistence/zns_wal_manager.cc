@@ -16,20 +16,18 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsWALManager::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                              const SZD::DeviceInfo& info,
-                             const uint64_t min_zone_head,
-                             const uint64_t max_zone_head,
-                             const size_t wal_count)
+                             const uint64_t min_zone_nr,
+                             const uint64_t max_zone_nr, const size_t wal_count)
     : wal_head_(0), wal_tail_(wal_count - 1), wal_count_(wal_count) {
-  assert((max_zone_head - min_zone_head) % wal_count_ == 0);
-  uint64_t wal_range = (max_zone_head - min_zone_head) / wal_count_;
+  assert((max_zone_nr - min_zone_nr) % wal_count_ == 0);
+  uint64_t wal_range = (max_zone_nr - min_zone_nr) / wal_count_;
   assert(wal_range % info.zone_size == 0);
-  uint64_t wal_walker = min_zone_head;
+  uint64_t wal_walker = min_zone_nr;
 
   for (size_t i = 0; i < wal_count_; ++i) {
     ZNSWAL* newwal =
         new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range);
-    printf("WAL range %lu %lu\n", wal_walker / info.zone_size,
-           (wal_walker + wal_range) / info.zone_size);
+    printf("WAL range %lu %lu\n", wal_walker, wal_walker + wal_range);
     newwal->Ref();
     wals.push_back(newwal);
     wal_walker += wal_range;
