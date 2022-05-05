@@ -1066,7 +1066,7 @@ add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_V
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
   ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
 if ( ZNS_PLUGIN )
-  target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE szd)
+  target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE szd_extended)
 endif()
 
 if(ROCKSDB_BUILD_SHARED)
@@ -1075,9 +1075,9 @@ if(ROCKSDB_BUILD_SHARED)
     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
   set_property(TARGET ${ROCKSDB_SHARED_OBJ_LIB}  PROPERTY POSITION_INDEPENDENT_CODE ON)
     if ( ZNS_PLUGIN )
-      target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE szd)
+      target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE szd_extended)
       add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
-      target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE szd)
+      target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE szd_extended)
     else ( ZNS_PLUGIN )
       add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}>  ${BUILD_VERSION_CC})
     endif()
@@ -1157,7 +1157,7 @@ if(NOT WIN32 OR ROCKSDB_INSTALL_ON_WINDOWS)
   if (ZNS_PLUGIN)
     install(DIRECTORY "${ZNS_DEVICE_DIRECTORY}/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(
-      TARGETS szd
+      TARGETS szd_extended
       EXPORT RocksDBTargets
       COMPONENT runtime
       ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -1451,7 +1451,7 @@ if(WITH_TESTS)
       )
       target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
       if ( ZNS_PLUGIN )
-        target_link_libraries(${exename}${ARTIFACT_SUFFIX} szd)
+        target_link_libraries(${exename}${ARTIFACT_SUFFIX} szd_extended)
       endif()
       if(NOT "${exename}" MATCHES "db_sanity_test")
         gtest_discover_tests(${exename} DISCOVERY_TIMEOUT 120)
@@ -1487,7 +1487,7 @@ if(WITH_BENCHMARK_TOOLS)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
   if ( ZNS_PLUGIN )
-    target_link_libraries(db_bench${ARTIFACT_SUFFIX} szd)
+    target_link_libraries(db_bench${ARTIFACT_SUFFIX} szd_extended)
   endif()
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
@@ -1573,7 +1573,7 @@ if ( ZNS_PLUGIN  )
     target_link_libraries(${test}  PRIVATE
       ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
       testharness gtest
-      szd)
+      szd_extended)
     set_property(TARGET ${test} PROPERTY POSITION_INDEPENDENT_CODE ON)
   endforeach()
 
