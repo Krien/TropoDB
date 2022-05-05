@@ -4,13 +4,13 @@
 #ifdef ZNS_PLUGIN_ENABLED
 #ifndef ZNS_DEVICE
 #define ZNS_DEVICE
-#include <szd/cpp/datastructures/szd_buffer.h>
-#include <szd/cpp/datastructures/szd_circular_log.h>
-#include <szd/cpp/datastructures/szd_log.h>
-#include <szd/cpp/datastructures/szd_once_log.h>
-#include <szd/cpp/szd_channel.h>
-#include <szd/cpp/szd_channel_factory.h>
-#include <szd/cpp/szd_device.h>
+#include <szd/datastructures/szd_buffer.hpp>
+#include <szd/datastructures/szd_circular_log.hpp>
+#include <szd/datastructures/szd_log.hpp>
+#include <szd/datastructures/szd_once_log.hpp>
+#include <szd/szd_channel.hpp>
+#include <szd/szd_channel_factory.hpp>
+#include <szd/szd_device.hpp>
 
 #include "rocksdb/status.h"
 
