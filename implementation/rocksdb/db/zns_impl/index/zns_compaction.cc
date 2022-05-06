@@ -158,6 +158,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
       merger->SeekToFirst();
       if (!merger->Valid()) {
         delete merger;
+        printf("ok\n");
         return Status::Corruption("No valid merging iterator");
       }
       ParsedInternalKey ikey;
@@ -198,10 +199,13 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
           s = builder->Apply(key, value);
           if (builder->GetSize() / vset_->lba_size_ >= max_lba_count_) {
             s = FlushSSTable(&builder, edit, &meta);
+            if (!s.ok()) {
+              break;
+            }
           }
         }
       }
-      if (builder->GetSize() > 0) {
+      if (s.ok() && builder->GetSize() > 0) {
         s = FlushSSTable(&builder, edit, &meta);
       }
       delete merger;

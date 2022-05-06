@@ -8,6 +8,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 #ifdef ZNS_PLUGIN_ENABLED
+#ifndef DB_IMPL_ZNS_H
+#define DB_IMPL_ZNS_H
 
 #include <atomic>
 #include <deque>
@@ -72,12 +74,23 @@ class DBImplZNS : public DB {
 
   ~DBImplZNS() override;
 
+  static Status ValidateOptions(const DBOptions& db_options);
+
   static Status Open(const DBOptions& db_options, const std::string& name,
                      const std::vector<ColumnFamilyDescriptor>& column_families,
                      std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
                      const bool seq_per_batch, const bool batch_per_txn);
-  static Status ValidateOptions(const DBOptions& db_options);
+
+  static Status DestroyDB(const std::string& dbname, const Options& options);
+
+  Status OpenZNSDevice(const std::string dbname);
+  Status ResetZNSDevice();
+
+  Status InitDB(const DBOptions& options);
+  Status InitWAL();
+
   virtual Status Close() override;
+
   // Implementations of the DB interface
   using DB::Put;
   Status Put(const WriteOptions& options, const Slice& key,
@@ -104,31 +117,15 @@ class DBImplZNS : public DB {
   using DB::Merge;
   Status Merge(const WriteOptions& options, ColumnFamilyHandle* column_family,
                const Slice& key, const Slice& value) override;
+
   using DB::Write;
   Status Write(const WriteOptions& options, WriteBatch* updates) override;
-
-  Status OpenDevice();
-  Status ResetDevice();
-  Status InitDB(const DBOptions& options);
-  Status Recover();
-  Status InitWAL();
-
-  Status MakeRoomForWrite(Slice log_entry);
-  void MaybeScheduleCompaction(bool force);
-  static void BGWork(void* db);
-  void BackgroundCall();
-  void BackgroundCompaction();
-  Status CompactMemtable();
-  Status FlushL0SSTables(SSZoneMetaData* meta);
-  Status RemoveObsoleteZones();
 
   using DB::Get;
   Status Get(const ReadOptions& options, const Slice& key,
              std::string* value) override;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, PinnableSlice* value) override;
-
-  static Status DestroyDB(const std::string& dbname, const Options& options);
 
   Status GetMergeOperands(const ReadOptions& options,
                           ColumnFamilyHandle* column_family, const Slice& key,
@@ -147,6 +144,7 @@ class DBImplZNS : public DB {
       const std::vector<ColumnFamilyHandle*>& column_family,
       const std::vector<Slice>& keys, std::vector<std::string>* values,
       std::vector<std::string>* timestamps) override;
+
   using DB::NewIterator;
   virtual Iterator* NewIterator(const ReadOptions& options,
                                 ColumnFamilyHandle* column_family) override;
@@ -154,24 +152,30 @@ class DBImplZNS : public DB {
       const ReadOptions& options,
       const std::vector<ColumnFamilyHandle*>& column_families,
       std::vector<Iterator*>* iterators) override;
+
   using DB::GetProperty;
   virtual bool GetProperty(ColumnFamilyHandle* column_family,
                            const Slice& property, std::string* value) override;
+
   using DB::GetMapProperty;
   virtual bool GetMapProperty(
       ColumnFamilyHandle* column_family, const Slice& property,
       std::map<std::string, std::string>* value) override;
+
   using DB::GetIntProperty;
   virtual bool GetIntProperty(ColumnFamilyHandle* column_family,
                               const Slice& property, uint64_t* value) override;
+
   using DB::GetAggregatedIntProperty;
   virtual bool GetAggregatedIntProperty(const Slice& property,
                                         uint64_t* aggregated_value) override;
+
   using DB::GetApproximateSizes;
   virtual Status GetApproximateSizes(const SizeApproximationOptions& options,
                                      ColumnFamilyHandle* column_family,
                                      const Range* range, int n,
                                      uint64_t* sizes) override;
+
   using DB::GetApproximateMemTableStats;
   virtual void GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
                                            const Range& range,
@@ -183,6 +187,7 @@ class DBImplZNS : public DB {
                               const Slice* begin, const Slice* end) override;
   virtual Status SetDBOptions(
       const std::unordered_map<std::string, std::string>& options_map) override;
+
   using DB::CompactFiles;
   virtual Status CompactFiles(
       const CompactionOptions& compact_options,
@@ -191,23 +196,37 @@ class DBImplZNS : public DB {
       const int output_path_id = -1,
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override;
+
+  Status MakeRoomForWrite(Slice log_entry);
+  void MaybeScheduleCompaction(bool force);
+  static void BGWork(void* db);
+  void BackgroundCall();
+  void BackgroundCompaction();
+  Status CompactMemtable();
+  Status FlushL0SSTables(SSZoneMetaData* meta);
+
   virtual Status PauseBackgroundWork() override;
   virtual Status ContinueBackgroundWork() override;
   virtual Status EnableAutoCompaction(
       const std::vector<ColumnFamilyHandle*>& column_family_handles) override;
   virtual void EnableManualCompaction() override;
   virtual void DisableManualCompaction() override;
+
   using DB::NumberLevels;
   virtual int NumberLevels(ColumnFamilyHandle* column_family) override;
+
   using DB::MaxMemCompactionLevel;
   virtual int MaxMemCompactionLevel(ColumnFamilyHandle* column_family) override;
+
   using DB::Level0StopWriteTrigger;
   virtual int Level0StopWriteTrigger(
       ColumnFamilyHandle* column_family) override;
   virtual const std::string& GetName() const override;
   virtual Env* GetEnv() const override;
+
   using DB::GetOptions;
   virtual Options GetOptions(ColumnFamilyHandle* column_family) const override;
+
   using DB::GetDBOptions;
   virtual DBOptions GetDBOptions() const override;
 
@@ -288,33 +307,40 @@ class DBImplZNS : public DB {
       ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
       TablePropertiesCollection* props) override;
 
-  virtual bool SetPreserveDeletesSequenceNumber(SequenceNumber seqnum);
-
   const Snapshot* GetSnapshot() override;
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
  private:
-  Status NewDB();
+  Status Recover();
+  Status RemoveObsoleteZones();
 
-  // Constant after construction
+  // Should remain constant after construction
   const DBOptions options_;
+  const std::string name_;
+  const InternalKeyComparator internal_comparator_;
+  Env* const env_;
+
+  // Should be "constant" after SPDK is initialised.
   SZD::SZDDevice* zns_device_;
   SZD::SZDChannelFactory* channel_factory_;
-  ZNSWAL* wal_;
-  ZnsWALManager* wal_man_;
-  ZnsManifest* manifest_;
   ZNSSSTableManager* ss_manager_;
-  const std::string name_;
-  Env* const env_;
-  const InternalKeyComparator internal_comparator_;
+  ZnsManifest* manifest_;
+  ZnsTableCache* table_cache_;
+  ZnsWALManager* wal_man_;
+  ZnsVersionSet* versions_;
+
+  // Dynamic data objects, protected by mutex
+  ZNSWAL* wal_;
   ZNSMemTable* mem_;
   ZNSMemTable* imm_;
-  ZnsVersionSet* versions_;
+
+  // Threading variables
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;
+  Status bg_error_;
   bool forced_schedule_;
-  ZnsTableCache* table_cache_;
 };
 }  // namespace ROCKSDB_NAMESPACE
+#endif
 #endif
