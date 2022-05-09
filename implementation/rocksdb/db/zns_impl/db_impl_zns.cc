@@ -195,7 +195,7 @@ Status DBImplZNS::InitWAL() {
   mutex_.AssertHeld();
   Status s;
   // We must force flush all WALs if there is not enough space.
-  if (!wal_man_->WALAvailable() || !wal_man_->SafeToDiscard()) {
+  if (!wal_man_->WALAvailable()) {
     if (mem_->GetInternalSize() > 0) {
       imm_ = mem_;
       mem_ = new ZNSMemTable(options_, internal_comparator_);
@@ -206,7 +206,7 @@ Status DBImplZNS::InitWAL() {
       bg_work_finished_signal_.Wait();
     }
   }
-  s = wal_man_->NewWAL(&mutex_, &wal_);
+  wal_ = wal_man_->GetCurrentWAL(&mutex_);
   wal_->Ref();
   return s;
 }

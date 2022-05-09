@@ -25,17 +25,10 @@ class ZnsWALManager : public RefCounter {
   ~ZnsWALManager();
 
   bool WALAvailable();
+  ZNSWAL* GetCurrentWAL(port::Mutex* mutex_);
   Status NewWAL(port::Mutex* mutex_, ZNSWAL** wal);
-  Status MarkWALBacked(port::Mutex* mutex_);
   Status ResetOldWALs(port::Mutex* mutex_);
   Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
-  bool SafeToDiscard() {
-    if (wal_head_ >= wal_tail_) {
-      return (wal_head_ - wal_tail_) == 1;
-    } else {
-      return (wal_head_ == 0 && wal_tail_ == wal_count_ - 1);
-    }
-  }
 
  private:
   std::vector<ZNSWAL*> wals;

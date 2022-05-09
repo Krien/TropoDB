@@ -41,7 +41,6 @@ ZnsWALManager::~ZnsWALManager() {
 }
 
 bool ZnsWALManager::WALAvailable() {
-  // printf("Checking for WAL space %lu %lu\n", wal_head_, wal_tail_);
   // not allowed to happen
   if (wal_head_ == wal_tail_) {
     assert(false);
@@ -69,6 +68,17 @@ Status ZnsWALManager::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
     wal_head_ = 0;
   }
   return Status::OK();
+}
+
+ZNSWAL* ZnsWALManager::GetCurrentWAL(port::Mutex* mutex_) {
+  // no current
+  if ((wal_head_ == 0 && wal_tail_ == wal_count_ - 1) ||
+      (wal_head_ != 0 && wal_head_ - 1 == wal_tail_)) {
+    ZNSWAL* wal;
+    NewWAL(mutex_, &wal);
+    return wal;
+  }
+  return wals[wal_head_ == 0 ? wal_count_ - 1 : wal_head_ - 1];
 }
 
 Status ZnsWALManager::ResetOldWALs(port::Mutex* mutex_) {
@@ -108,24 +118,26 @@ Status ZnsWALManager::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
   bool first_non_empty = false;
   bool first_empty_after_non_empty = false;
   for (size_t i = 0; i < wals.size(); i++) {
+    // potential tail or head
     if (!wals[i]->Empty() && !first_non_empty) {
       first_non_empty = true;
       wal_head_ = i + 1;
       if (i > 0) {
         wal_tail_ = i;
       }
-      // potential tail or head
-    } else if (!wals[i]->Empty() && first_empty_after_non_empty) {
+
+    }  // a gap in the middle?
+    else if (!wals[i]->Empty() && first_empty_after_non_empty) {
       wal_tail_ = i;
       break;
-      // a gap in the middle?
-    } else if (!wals[i]->Empty() && first_non_empty) {
+
+    }  // the head is moving one further
+    else if (!wals[i]->Empty() && first_non_empty) {
       wal_head_ = i + 1;
-      // the head is moving one further
-    } else if (wals[i]->Empty() && !first_empty_after_non_empty &&
-               first_non_empty) {
+    }  // head can not move further
+    else if (wals[i]->Empty() && !first_empty_after_non_empty &&
+             first_non_empty) {
       first_empty_after_non_empty = true;
-      // head can not move further
     }
   }
   if (wal_head_ >= wal_count_) {
