@@ -107,7 +107,7 @@ void DBImplZNS::BackgroundCompaction() {
   }
   mutex_.Lock();
   if (!s.ok()) {
-    printf("ERROR during compaction!!!\n");
+    printf("ERROR during compaction A!!!\n");
     return;
   }
   s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
@@ -164,10 +164,11 @@ Status DBImplZNS::RemoveObsoleteZones() {
   // // table files
   std::vector<std::pair<uint64_t, uint64_t>> ranges;
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    versions_->GetLiveZoneRanges(i, &ranges);
-    s = ss_manager_->SetValidRangeAndReclaim(i, ranges.back().first,
-                                             ranges.back().second);
-    if (!s.ok()) return s;
+    s = versions_->ReclaimStaleSSTables();
+    if (!s.ok()) {
+      printf("error reclaiming \n");
+      return s;
+    }
   }
   return s;
 }

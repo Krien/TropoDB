@@ -18,6 +18,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 typedef std::set<std::pair<uint8_t, uint64_t>> DeletedZoneSet;
+typedef std::pair<uint8_t, std::pair<uint64_t, uint64_t>> DeletedZoneRange;
 /**
  * @brief Prepares the changes to the index structure to allow for CoW behaviour
  * for the index.
@@ -50,6 +51,10 @@ class ZnsVersionEdit {
     has_next_ss_number = true;
     ss_number = num;
   }
+  void AddDeletedRange(uint8_t level,
+                       const std::pair<uint64_t, uint64_t>& range) {
+    deleted_range_.push_back(std::make_pair(level, range));
+  }
 
  private:
   friend class ZnsVersionSet;
@@ -57,7 +62,7 @@ class ZnsVersionEdit {
 
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
-  std::vector<std::pair<uint8_t, SSZoneMetaData>> deleted_ss_seq_;
+  std::vector<DeletedZoneRange> deleted_range_;
   SequenceNumber last_sequence_;
   bool has_last_sequence_;
   std::string comparator_;

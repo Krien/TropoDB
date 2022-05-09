@@ -39,8 +39,9 @@ class ZnsVersionSet {
   void RecalculateScore();
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
-  void GetLiveZoneRanges(const uint8_t level,
-                         std::vector<std::pair<uint64_t, uint64_t>>* ranges);
+  void GetLiveZoneRange(const uint8_t level,
+                        std::pair<uint64_t, uint64_t>* range);
+  Status ReclaimStaleSSTables();
 
   inline ZnsVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
@@ -129,6 +130,7 @@ class ZnsVersionSet::Builder {
   typedef std::set<SSZoneMetaData*, BySmallestKey> ZoneSet;
   struct LevelState {
     std::set<uint64_t> deleted_ss;
+    std::pair<uint64_t, uint64_t> ss_d_;
     ZoneSet* added_ss;
   };
 

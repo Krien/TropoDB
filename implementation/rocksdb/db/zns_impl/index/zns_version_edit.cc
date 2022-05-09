@@ -16,7 +16,7 @@ void ZnsVersionEdit::Clear() {
   has_last_sequence_ = false;
   new_ss_.clear();
   deleted_ss_.clear();
-  deleted_ss_seq_.clear();
+  deleted_range_.clear();
   has_comparator_ = false;
   comparator_.clear();
   has_next_ss_number = false;
@@ -64,10 +64,11 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   // compaction pointers
 
   // deleted pointers
-  for (const auto& deleted_file_kvp : deleted_ss_) {
+  for (const auto& deleted_range : deleted_range_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedSSTable));
-    PutFixed8(dst, deleted_file_kvp.first);     // level
-    PutVarint64(dst, deleted_file_kvp.second);  // lba
+    PutFixed8(dst, deleted_range.first);            // level
+    PutVarint64(dst, deleted_range.second.first);   // range first
+    PutVarint64(dst, deleted_range.second.second);  // range last
   }
 
   // new files
@@ -112,6 +113,7 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
   Slice str;
   uint8_t level;
   uint64_t number;
+  uint64_t number_second;
   SSZoneMetaData m;
   while (msg == nullptr && GetVarint32(&input, &tag)) {
     versiontag = static_cast<ZnsVersionTag>(tag);
@@ -139,8 +141,10 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
       case ZnsVersionTag::kDeletedSSTable:
-        if (GetLevel(&input, &level) && GetVarint64(&input, &number)) {
-          deleted_ss_.insert(std::make_pair(level, number));
+        if (GetLevel(&input, &level) && GetVarint64(&input, &number) &&
+            GetVarint64(&input, &number_second)) {
+          deleted_range_.push_back(
+              std::make_pair(level, std::make_pair(number, number_second)));
         } else {
           msg = "deleted sstable entry";
         }

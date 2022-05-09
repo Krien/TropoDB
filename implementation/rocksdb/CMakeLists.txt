@@ -1040,6 +1040,8 @@ endif()
 
 set(ZNS_LSM_SOURCES
   db/zns_impl/db_impl_zns.cc
+  db/zns_impl/db_impl_zns_background.cc
+  db/zns_impl/db_impl_zns_not_supported.cc
   db/zns_impl/io/szd_port.cc
   db/zns_impl/memtable/zns_memtable.cc
   db/zns_impl/persistence/zns_committer.cc

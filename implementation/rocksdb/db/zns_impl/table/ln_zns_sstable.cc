@@ -67,7 +67,7 @@ bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
 Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    return Status::IOError("Not enough space available for L0");
+    return Status::IOError("Not enough space available for LN");
   }
   meta->lba = log_.GetWriteHead();
   if (!FromStatus(log_.Append(content.ToString(false), &meta->lba_count, false))

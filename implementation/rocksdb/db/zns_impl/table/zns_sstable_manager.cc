@@ -79,45 +79,37 @@ Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
   return sstable_wal_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
-                                                  const uint64_t tail,
-                                                  const uint64_t head) const {
+Status ZNSSSTableManager::SetValidRangeAndReclaim(
+    const uint8_t level, const uint64_t live_tail,
+    const uint64_t live_head) const {
   assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
-
-  uint64_t written_head = sstable_wal_level_[level]->GetHead();
   uint64_t written_tail = sstable_wal_level_[level]->GetTail();
-  uint64_t max_z = ranges_[level].second;
-  uint64_t min_z = ranges_[level].first;
 
-  // we completely looped around, meaning we can invalidate from tail up to end
-  // at least
-  if (head < written_head && tail <= head) {
+  if (live_tail == written_tail) {
+    return Status::OK();
+  } else if (live_tail < written_tail) {
     meta.lba = written_tail;
-    meta.lba_count = max_z - written_tail;
-    // printf("looped %lu %lu %lu %lu\n", meta.lba, meta.lba_count,
-    // written_head,
-    //       head);
-    Status s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    meta.lba_count = ranges_[level].second - written_tail;
+    printf("Invalidating data from %u %lu %lu \n", level, meta.lba,
+           meta.lba_count);
+    Status s = sstable_wal_level_[level]->InvalidateSSZone(meta);
     if (!s.ok()) return s;
-    // still the lagging tail
-    if (tail < head) {
-      meta.lba = min_z;
-      meta.lba_count = tail;
-      s = sstable_wal_level_[level]->InvalidateSSZone(&meta);
+    meta.lba = ranges_[level].first;
+    meta.lba_count = live_tail - meta.lba;
+    if (meta.lba_count == 0) {
+      return Status::OK();
     }
+    printf("Invalidating data from %u %lu %lu \n", level, meta.lba,
+           meta.lba_count);
     return s;
-  }
-  // lagging tail
-  else {
-    // printf("lagging tail %lu %lu\n", tail, written_tail);
+  } else {
     meta.lba = written_tail;
-    meta.lba_count = tail - written_tail;
-    if (meta.lba_count > 0) {
-      return sstable_wal_level_[level]->InvalidateSSZone(&meta);
-    }
+    meta.lba_count = live_tail - written_tail;
+    printf("Invalidating data from %u %lu %lu \n", level, meta.lba,
+           meta.lba_count);
+    return sstable_wal_level_[level]->InvalidateSSZone(meta);
   }
-  return Status::OK();
 }
 
 Status ZNSSSTableManager::Get(const uint8_t level,

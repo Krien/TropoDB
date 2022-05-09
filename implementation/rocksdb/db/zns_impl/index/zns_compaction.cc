@@ -99,11 +99,16 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     std::vector<SSZoneMetaData*>::const_iterator base_iter =
         targets_[i].begin();
     std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
+    if (base_iter == base_end) {
+      continue;
+    }
+    uint64_t first = (*base_iter)->lba;
+    uint64_t last = (*base_iter)->lba;
     for (; base_iter != base_end; ++base_iter) {
       edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
-      edit->deleted_ss_seq_.push_back(
-          std::make_pair(i + first_level_, *base_iter));
+      last = (*base_iter)->lba + (*base_iter)->lba_count;
     }
+    edit->AddDeletedRange(first_level_ + i, std::make_pair(first, last));
   }
 }
 
@@ -114,8 +119,8 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  // printf("adding... %u %lu %lu\n", first_level_ + 1, meta->lba,
-  //       meta->lba_count);
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->lba,
+         meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
   edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
                         meta->lba_count, meta->numbers, meta->smallest,
                         meta->largest);

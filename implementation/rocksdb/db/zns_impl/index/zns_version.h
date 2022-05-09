@@ -56,6 +56,7 @@ class ZnsVersion : public RefCounter {
   ~ZnsVersion();
 
   std::vector<SSZoneMetaData*> ss_[ZnsConfig::level_count];
+  std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count> ss_d_;
   ZnsVersionSet* vset_;
   ZnsVersion* next_;
   ZnsVersion* prev_;

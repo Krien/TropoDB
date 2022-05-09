@@ -12,6 +12,7 @@ ZnsVersionSet::Builder::Builder(ZnsVersionSet* vset, ZnsVersion* base)
   cmp.internal_comparator = &vset_->icmp_;
   for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     levels_[level].added_ss = new ZoneSet(cmp);
+    levels_[level].ss_d_ = vset->current_->ss_d_[level];
   }
 }
 
@@ -44,6 +45,16 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
     const uint8_t level = deleted_ss_set_kvp.first;
     const uint64_t number = deleted_ss_set_kvp.second;
     levels_[level].deleted_ss.insert(number);
+  }
+
+  for (const auto& deleted_range : edit->deleted_range_) {
+    const uint8_t level = deleted_range.first;
+    const std::pair<uint64_t, uint64_t> ran = deleted_range.second;
+    if (levels_[level].ss_d_.first != levels_[level].ss_d_.second) {
+      levels_[level].ss_d_.second = ran.second;
+    } else {
+      levels_[level].ss_d_ = ran;
+    }
   }
 
   // Add new files
@@ -83,6 +94,10 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
     for (; base_iter != base_end; ++base_iter) {
       MaybeAddZone(v, level, *base_iter);
     }
+
+    // Add ranges to delete.
+    const std::pair<uint64_t, uint64_t> deleted_range = levels_[level].ss_d_;
+    v->ss_d_[level] = deleted_range;
 
 #ifndef NDEBUG
     // Make sure there is no overlap in levels > 0

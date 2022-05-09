@@ -51,9 +51,9 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   v->next_->prev_ = v;
 }
 
-void ZnsVersionSet::GetLiveZoneRanges(
-    const uint8_t level, std::vector<std::pair<uint64_t, uint64_t>>* ranges) {
-  std::pair ran = std::make_pair<uint64_t, uint64_t>(0, 0);
+void ZnsVersionSet::GetLiveZoneRange(const uint8_t level,
+                                     std::pair<uint64_t, uint64_t>* range) {
+  *range = std::make_pair<uint64_t, uint64_t>(0, 0);
   bool ran_set = false;
   for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
@@ -61,14 +61,34 @@ void ZnsVersionSet::GetLiveZoneRanges(
     std::pair temp_ran = std::make_pair<uint64_t, uint64_t>(0, 0);
     znssstable_->GetRange(level, metas, &temp_ran);
     if (!ran_set) {
-      ran = temp_ran;
+      *range = temp_ran;
       ran_set = true;
       // printf("range %lu %lu \n", ran.first, ran.second);
     } else if (temp_ran.first != temp_ran.second) {
-      ran.first = temp_ran.first;
+      range->first = temp_ran.first;
     }
   }
-  ranges->push_back(ran);
+}
+
+Status ZnsVersionSet::ReclaimStaleSSTables() {
+  Status s = Status::OK();
+  std::pair<uint64_t, uint64_t> range;
+  ZnsVersionEdit edit;
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+    if (current_->ss_d_[i].first == current_->ss_d_[i].second) {
+      continue;
+    }
+    GetLiveZoneRange(i, &range);
+    s = znssstable_->SetValidRangeAndReclaim(i, current_->ss_d_[i].second,
+                                             range.second);
+    edit.AddDeletedRange(
+        i, std::make_pair(range.second, current_->ss_d_[i].second));
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  s = LogAndApply(&edit);
+  return s;
 }
 
 Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
@@ -121,7 +141,7 @@ void ZnsVersionSet::RecalculateScore() {
     if (score > best_score) {
       best_score = score;
       best_level = i;
-      // printf("Score %f from level %d\n", best_score, best_level);
+      printf("Score %f from level %d\n", best_score, best_level);
     }
   }
   v->compaction_level_ = best_level;
@@ -158,17 +178,17 @@ Status ZnsVersionSet::Compact(ZnsCompaction* c) {
 
 Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   Status s = Status::OK();
-  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>& base_ss =
-      edit->deleted_ss_seq_;
-  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
-      base_iter = base_ss.begin();
-  std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
-      base_end = base_ss.end();
-  for (; base_iter != base_end; ++base_iter) {
-    const uint8_t level = (*base_iter).first;
-    SSZoneMetaData m = (*base_iter).second;
-    table_cache_->Evict(m.number);
-  }
+  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>& base_ss =
+  //     edit->deleted_ss_seq_;
+  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
+  //     base_iter = base_ss.begin();
+  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
+  //     base_end = base_ss.end();
+  // for (; base_iter != base_end; ++base_iter) {
+  //   const uint8_t level = (*base_iter).first;
+  //   SSZoneMetaData m = (*base_iter).second;
+  //   table_cache_->Evict(m.number);
+  // }
   return s;
 }
 
@@ -259,3 +279,4 @@ std::string ZnsVersionSet::DebugString() {
 }
 
 }  // namespace ROCKSDB_NAMESPACE
+;
