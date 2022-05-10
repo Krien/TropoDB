@@ -311,8 +311,10 @@ class DBImplZNS : public DB {
   void ReleaseSnapshot(const Snapshot* snapshot) override;
 
  private:
+  struct Writer;
   Status Recover();
   Status RemoveObsoleteZones();
+  WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   // Should remain constant after construction
   const DBOptions options_;
@@ -333,6 +335,8 @@ class DBImplZNS : public DB {
   ZNSWAL* wal_;
   ZNSMemTable* mem_;
   ZNSMemTable* imm_;
+  std::deque<Writer*> writers_;
+  WriteBatch* tmp_batch_;
 
   // Threading variables
   port::Mutex mutex_;
