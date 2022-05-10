@@ -71,18 +71,18 @@ void ZnsVersionSet::GetLiveZoneRange(const uint8_t level,
 }
 
 Status ZnsVersionSet::ReclaimStaleSSTables() {
+  printf("reclaiming....\n");
   Status s = Status::OK();
   std::pair<uint64_t, uint64_t> range;
   ZnsVersionEdit edit;
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (current_->ss_d_[i].first == current_->ss_d_[i].second) {
+    if (current_->ss_d_[i].first == 0) {
       continue;
     }
     GetLiveZoneRange(i, &range);
     s = znssstable_->SetValidRangeAndReclaim(i, current_->ss_d_[i].second,
                                              range.second);
-    edit.AddDeletedRange(
-        i, std::make_pair(range.second, current_->ss_d_[i].second));
+    edit.AddDeletedRange(i, std::make_pair(0, 0));
     if (!s.ok()) {
       return s;
     }
@@ -141,7 +141,7 @@ void ZnsVersionSet::RecalculateScore() {
     if (score > best_score) {
       best_score = score;
       best_level = i;
-      printf("Score %f from level %d\n", best_score, best_level);
+      // printf("Score %f from level %d\n", best_score, best_level);
     }
   }
   v->compaction_level_ = best_level;
@@ -167,7 +167,10 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   if (s.ok()) {
     s = manifest_->SetCurrent(current_lba);
   }
-  return Status::OK();
+  if (!s.ok()) {
+    printf("Error commiting\n");
+  }
+  return s;
 }
 
 Status ZnsVersionSet::Compact(ZnsCompaction* c) {
@@ -178,17 +181,9 @@ Status ZnsVersionSet::Compact(ZnsCompaction* c) {
 
 Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   Status s = Status::OK();
-  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>& base_ss =
-  //     edit->deleted_ss_seq_;
-  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
-  //     base_iter = base_ss.begin();
-  // std::vector<std::pair<uint8_t, rocksdb::SSZoneMetaData>>::const_iterator
-  //     base_end = base_ss.end();
-  // for (; base_iter != base_end; ++base_iter) {
-  //   const uint8_t level = (*base_iter).first;
-  //   SSZoneMetaData m = (*base_iter).second;
-  //   table_cache_->Evict(m.number);
-  // }
+  for (const auto& deleted : edit->deleted_ss_) {
+    table_cache_->Evict(deleted.second);
+  }
   return s;
 }
 

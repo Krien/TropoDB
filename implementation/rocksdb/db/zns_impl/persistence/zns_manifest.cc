@@ -33,6 +33,7 @@ ZnsManifest::~ZnsManifest() { channel_factory_->Unref(); }
 
 Status ZnsManifest::NewManifest(const Slice& record) {
   if (!committer_.SpaceEnough(record)) {
+    printf("Not enough space in Manifest\n");
     return Status::NoSpace();
   }
   return committer_.SafeCommit(record);
@@ -53,7 +54,14 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   PutFixed64(&current_name, current);
   s = committer_.SafeCommit(Slice(current_name));
   if (!s.ok()) {
+    printf("error setting current\n");
     return s;
+  }
+  // Reclaim old space
+  uint64_t tail = log_.GetWriteTail();
+  uint64_t new_tail = current == 0 ? max_zone_head_ - 1 : current - 1;
+  if (tail != new_tail && manifest_start_ != manifest_end_) {
+    s = FromStatus(log_.ConsumeTail(tail, new_tail));
   }
   // Only install locally if succesful
   manifest_start_ = current_lba_ = tmp_manifest_start;

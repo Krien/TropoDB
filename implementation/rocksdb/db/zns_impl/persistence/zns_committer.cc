@@ -100,7 +100,7 @@ Status ZnsCommitter::Commit(const Slice& data) {
 }  // namespace ROCKSDB_NAMESPACE
 
 Status ZnsCommitter::SafeCommit(const Slice& data) {
-  if (!log_->SpaceLeft(data.size())) {
+  if (!SpaceEnough(data)) {
     return Status::IOError("No space left");
   }
   return Commit(data);

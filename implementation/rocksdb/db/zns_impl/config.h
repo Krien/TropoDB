@@ -35,7 +35,7 @@ constexpr static uint64_t max_bytes_sstable_ =
                 // scale up depending on lba_size!
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
 constexpr static uint64_t max_zone =
-    100; /**< Maximum zone to use for database*/
+    128; /**< Maximum zone to use for database*/
 
 // Configs are asking for trouble... As they say in security, never trust user
 // input! Even/especially your own.

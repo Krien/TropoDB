@@ -18,9 +18,10 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {
  public:
-  ZNSSSTableManager(
+  static ZNSSSTableManager* NewZNSSTableManager(
       SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
-      const std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count]);
+      const uint64_t min_zone, const uint64_t max_zone);
+
   ~ZNSSSTableManager();
 
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
@@ -57,11 +58,15 @@ class ZNSSSTableManager : public RefCounter {
                                  const Slice& key);
 
  private:
+  ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
+                    const SZD::DeviceInfo& info,
+                    const std::array<std::pair<uint64_t, uint64_t>,
+                                     ZnsConfig::level_count>& ranges);
   // wals
   ZnsSSTable* sstable_wal_level_[ZnsConfig::level_count];
   // references
   SZD::SZDChannelFactory* channel_factory_;
-  std::pair<uint64_t, uint64_t> ranges_[ZnsConfig::level_count];
+  std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count> ranges_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

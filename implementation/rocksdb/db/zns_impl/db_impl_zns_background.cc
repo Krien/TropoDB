@@ -99,7 +99,7 @@ void DBImplZNS::BackgroundCompaction() {
     ZnsCompaction compaction(versions_);
     versions_->Compact(&compaction);
     compaction.MarkStaleTargetsReusable(&edit);
-    if (compaction.IsTrivialMove()) {
+    if (false) {
       s = compaction.DoTrivialMove(&edit);
     } else {
       s = compaction.DoCompaction(&edit);
@@ -163,12 +163,10 @@ Status DBImplZNS::RemoveObsoleteZones() {
   Status s = Status::OK();
   // // table files
   std::vector<std::pair<uint64_t, uint64_t>> ranges;
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    s = versions_->ReclaimStaleSSTables();
-    if (!s.ok()) {
-      printf("error reclaiming \n");
-      return s;
-    }
+  s = versions_->ReclaimStaleSSTables();
+  if (!s.ok()) {
+    printf("error reclaiming \n");
+    return s;
   }
   return s;
 }

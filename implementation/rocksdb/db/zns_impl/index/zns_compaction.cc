@@ -20,7 +20,9 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset)
                      vset->lba_size_),
       vset_(vset) {
   first_level_ = vset->current_->compaction_level_;
-  printf("Compacting from <%d>\n", first_level_);
+  printf("Compacting from <%d because score is %f, from %f>\n", first_level_,
+         vset->current_->compaction_score_,
+         vset->znssstable_->GetFractionFilled(first_level_));
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
@@ -103,11 +105,12 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
       continue;
     }
     uint64_t first = (*base_iter)->lba;
-    uint64_t last = (*base_iter)->lba;
+    uint64_t last = (*base_iter)->lba + (*base_iter)->lba_count;
     for (; base_iter != base_end; ++base_iter) {
       edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
       last = (*base_iter)->lba + (*base_iter)->lba_count;
     }
+    printf("delete range %u %lu %lu \n", first_level_ + i, first, last);
     edit->AddDeletedRange(first_level_ + i, std::make_pair(first, last));
   }
 }
@@ -128,6 +131,9 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
 
   *builder = current_builder;
+  if (!s.ok()) {
+    printf("error flushing table\n");
+  }
   return s;
 }
 

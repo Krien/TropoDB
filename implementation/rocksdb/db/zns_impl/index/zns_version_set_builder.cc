@@ -50,11 +50,7 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
   for (const auto& deleted_range : edit->deleted_range_) {
     const uint8_t level = deleted_range.first;
     const std::pair<uint64_t, uint64_t> ran = deleted_range.second;
-    if (levels_[level].ss_d_.first != levels_[level].ss_d_.second) {
-      levels_[level].ss_d_.second = ran.second;
-    } else {
-      levels_[level].ss_d_ = ran;
-    }
+    levels_[level].ss_d_ = ran;
   }
 
   // Add new files

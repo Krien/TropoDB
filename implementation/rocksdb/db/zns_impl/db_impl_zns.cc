@@ -121,15 +121,14 @@ Status DBImplZNS::OpenZNSDevice(const std::string dbname) {
 
 Status DBImplZNS::ResetZNSDevice() {
   Status s;
-  SZD::SZDChannel* channel;
   channel_factory_->Ref();
   SZD::DeviceInfo info;
   s = FromStatus(zns_device_->GetInfo(&info));
   if (!s.ok()) {
     return s;
   }
-  channel_factory_->register_channel(&channel, ZnsConfig::min_zone,
-                                     ZnsConfig::max_zone);
+  SZD::SZDChannel* channel;
+  channel_factory_->register_channel(&channel);
   s = FromStatus(channel->ResetAllZones());
   channel_factory_->unregister_channel(channel);
   channel_factory_->Unref();
@@ -140,7 +139,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   assert(zns_device_ != nullptr);
   SZD::DeviceInfo device_info;
   zns_device_->GetInfo(&device_info);
-  uint64_t zone_head = ZnsConfig::min_zone;
+  uint64_t zone_head = device_info.min_lba / device_info.zone_size;
   uint64_t zone_step = 0;
 
   zone_step = ZnsConfig::manifest_zones;
@@ -155,28 +154,14 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   wal_man_->Ref();
   zone_head += zone_step;
 
-  std::pair<uint64_t, uint64_t>* ranges =
-      new std::pair<uint64_t, uint64_t>[ZnsConfig::level_count];
-  {
-    uint64_t nzones = device_info.lba_cap / device_info.zone_size;
-    uint64_t distr = std::accumulate(
-        ZnsConfig::ss_distribution,
-        ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
-    for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-      zone_step = (nzones / distr) * ZnsConfig::ss_distribution[i];
-      zone_step = zone_step < ZnsConfig::min_ss_zone_count
-                      ? ZnsConfig::min_ss_zone_count
-                      : zone_step;
-      ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
-      zone_head += zone_step;
-    }
-    zone_step = nzones - zone_head;
-    ranges[ZnsConfig::level_count - 1] =
-        std::make_pair(zone_head, zone_head + zone_step);
+  zone_step = device_info.max_lba / device_info.zone_size - zone_head;
+  ss_manager_ = ZNSSSTableManager::NewZNSSTableManager(
+      channel_factory_, device_info, zone_head, zone_head + zone_step);
+  if (ss_manager_ == nullptr) {
+    return Status::Corruption();
   }
-  ss_manager_ = new ZNSSSTableManager(channel_factory_, device_info, ranges);
-  delete[] ranges;
   ss_manager_->Ref();
+  zone_head = device_info.max_lba / device_info.zone_size;
 
   mem_ = new ZNSMemTable(options, this->internal_comparator_);
   mem_->Ref();
