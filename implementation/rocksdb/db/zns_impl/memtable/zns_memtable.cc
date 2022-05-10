@@ -8,16 +8,16 @@
 
 namespace ROCKSDB_NAMESPACE {
 ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
-                         const InternalKeyComparator& ikc) {
-  Options options(db_options, ColumnFamilyOptions());
-  ImmutableOptions ioptions(options);
-  wb_ = new WriteBufferManager(options.db_write_buffer_size);
+                         const InternalKeyComparator& ikc)
+    : options_(db_options, ColumnFamilyOptions()),
+      ioptions_(options_),
+      write_buffer_size_(options_.write_buffer_size),
+      wb_(options_.db_write_buffer_size),
+      arena_() {
   mem_ = new ColumnFamilyMemTablesDefault(
-      new MemTable(ikc, ioptions, MutableCFOptions(options), this->wb_,
+      new MemTable(ikc, ioptions_, MutableCFOptions(options_), &wb_,
                    kMaxSequenceNumber, 0 /* column_family_id */));
   mem_->GetMemTable()->Ref();
-  write_buffer_size_ = options.write_buffer_size;  // options.write_buffer_size;
-  arena_ = new Arena();
 }
 
 ZNSMemTable::~ZNSMemTable() {
@@ -25,8 +25,6 @@ ZNSMemTable::~ZNSMemTable() {
   mem_->GetMemTable()->Unref();
   delete mem_->GetMemTable();
   delete mem_;
-  delete wb_;
-  delete arena_;
 }
 
 Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
@@ -52,6 +50,6 @@ bool ZNSMemTable::ShouldScheduleFlush() {
 }
 
 InternalIterator* ZNSMemTable::NewIterator() {
-  return mem_->GetMemTable()->NewIterator(ReadOptions(), arena_);
+  return mem_->GetMemTable()->NewIterator(ReadOptions(), &arena_);
 }
 }  // namespace ROCKSDB_NAMESPACE

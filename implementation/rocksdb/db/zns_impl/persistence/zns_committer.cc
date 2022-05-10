@@ -10,8 +10,9 @@
 #include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
-static void InitTypeCrc(uint32_t* type_crc) {
-  for (uint32_t i = 0; i <= kZnsRecordTypeLast; i++) {
+static void InitTypeCrc(
+    std::array<uint32_t, kZnsRecordTypeLast + 1>& type_crc) {
+  for (uint32_t i = 0; i <= type_crc.size(); i++) {
     char t = static_cast<char>(i);
     type_crc[i] = crc32c::Value(&t, 1);
   }
@@ -25,7 +26,7 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
       zasl_(info.zasl),
       buffer_(0, info.lba_size),
       keep_buffer_(keep_buffer),
-      scratch_("deadbeef") {
+      scratch_("\xef\xbe\xad\xde") {
   InitTypeCrc(type_crc_);
 }
 

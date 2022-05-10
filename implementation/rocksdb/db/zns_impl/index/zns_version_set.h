@@ -136,7 +136,7 @@ class ZnsVersionSet::Builder {
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;
-  LevelState levels_[ZnsConfig::level_count];
+  std::array<LevelState,ZnsConfig::level_count> levels_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

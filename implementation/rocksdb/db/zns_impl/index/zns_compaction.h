@@ -39,13 +39,15 @@ class ZnsCompaction {
                       SSZoneMetaData* meta);
   bool IsBaseLevelForKey(const Slice& user_key);
 
+  // Meta
   uint8_t first_level_;
-  // arbitrary???
   uint64_t max_lba_count_;
+  // References
   ZnsVersionSet* vset_;
   ZnsVersion* version_;
   ZnsVersionEdit edit_;
-  std::vector<SSZoneMetaData*> targets_[2];
+  // Target
+  std::array<std::vector<SSZoneMetaData*>, 2U> targets_;
   size_t level_ptrs_[ZnsConfig::level_count];
 };
 }  // namespace ROCKSDB_NAMESPACE

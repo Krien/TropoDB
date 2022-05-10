@@ -28,10 +28,14 @@ class ZNSMemTable : public RefCounter {
   }
 
  private:
+  // Meta
+  const Options options_;
+  const ImmutableOptions ioptions_;
+  const size_t write_buffer_size_;
+  WriteBufferManager wb_;
+  // Actual in memory table
+  Arena arena_;
   ColumnFamilyMemTables* mem_;
-  Arena* arena_;
-  WriteBufferManager* wb_;
-  size_t write_buffer_size_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

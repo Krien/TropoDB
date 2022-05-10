@@ -63,7 +63,7 @@ class ZnsCommitter {
   SZD::SZDBuffer buffer_;
   bool keep_buffer_;
   // CRC
-  uint32_t type_crc_[kZnsRecordTypeLast + 1];
+  std::array<uint32_t, kZnsRecordTypeLast + 1> type_crc_;
   // Used for reading
   std::string scratch_;
   uint64_t commit_start_, commit_ptr_, commit_end_;

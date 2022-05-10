@@ -63,7 +63,7 @@ class ZNSSSTableManager : public RefCounter {
                     const std::array<std::pair<uint64_t, uint64_t>,
                                      ZnsConfig::level_count>& ranges);
   // wals
-  ZnsSSTable* sstable_wal_level_[ZnsConfig::level_count];
+  std::array<ZnsSSTable*, ZnsConfig::level_count> sstable_wal_level_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count> ranges_;
