@@ -117,7 +117,7 @@ void DBImplZNS::BackgroundCompaction() {
   if (!s.ok()) {
     printf("ERROR during compaction!!!\n");
   }
-  // printf("Compacted!!\n");
+  printf("Compacted!!\n");
 }
 
 Status DBImplZNS::CompactMemtable() {

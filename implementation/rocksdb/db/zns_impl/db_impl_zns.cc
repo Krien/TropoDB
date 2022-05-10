@@ -44,6 +44,14 @@ namespace ROCKSDB_NAMESPACE {
 
 const int kNumNonTableCacheFiles = 10;
 
+struct DBImplZNS::Writer {
+  explicit Writer(port::Mutex* mu) : batch(nullptr), done(false), cv(mu) {}
+  Status status;
+  WriteBatch* batch;
+  bool done;
+  port::CondVar cv;
+};
+
 DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
                      const bool seq_per_batch, const bool batch_per_txn,
                      bool read_only)
@@ -63,6 +71,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       wal_(nullptr),
       mem_(nullptr),
       imm_(nullptr),
+      tmp_batch_(new WriteBatch),
       // State
       bg_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false),
@@ -81,6 +90,7 @@ DBImplZNS::~DBImplZNS() {
   delete versions_;
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
+  if (tmp_batch_ != nullptr) delete tmp_batch_;
   if (wal_man_ != nullptr) wal_man_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
@@ -331,39 +341,106 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
   return Status::OK();
 }
 
+WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
+  mutex_.AssertHeld();
+  assert(!writers_.empty());
+  Writer* first = writers_.front();
+  WriteBatch* result = first->batch;
+  assert(result != nullptr);
+
+  size_t size = WriteBatchInternal::ByteSize(first->batch);
+
+  // Allow the group to grow up to a maximum size, but if the
+  // original write is small, limit the growth so we do not slow
+  // down the small write too much.
+  size_t max_size = 1 << 20;
+  if (size <= (128 << 10)) {
+    max_size = size + (128 << 10);
+  }
+
+  *last_writer = first;
+  std::deque<Writer*>::iterator iter = writers_.begin();
+  ++iter;  // Advance past "first"
+  for (; iter != writers_.end(); ++iter) {
+    Writer* w = *iter;
+    if (w->batch != nullptr) {
+      size += WriteBatchInternal::ByteSize(w->batch);
+      if (size > max_size) {
+        // Do not make batch too big
+        break;
+      }
+
+      // Append to *result
+      if (result == first->batch) {
+        // Switch to temporary batch instead of disturbing caller's batch
+        result = tmp_batch_;
+        assert(WriteBatchInternal::Count(result) == 0);
+        WriteBatchInternal::Append(result, first->batch);
+      }
+      WriteBatchInternal::Append(result, w->batch);
+    }
+    *last_writer = w;
+  }
+  return result;
+}
+
 Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s;
+
+  Writer w(&mutex_);
+  w.batch = updates;
+  w.done = false;
+
   MutexLock l(&mutex_);
-  // TODO: syncing
-
-  Slice log_entry;
-  if (updates != nullptr) {
-    log_entry = WriteBatchInternal::Contents(updates);
-    s = MakeRoomForWrite(log_entry);
+  writers_.push_back(&w);
+  while (!w.done && &w != writers_.front()) {
+    w.cv.Wait();
   }
+  if (w.done) {
+    return w.status;
+  }
+
+  s = MakeRoomForWrite(
+      updates == nullptr ? Slice("") : WriteBatchInternal::Contents(updates));
   uint64_t last_sequence = versions_->LastSequence();
-
-  // TODO make threadsafe for multiple writes and add writebatch
-  // optimisations...
-
+  Writer* last_writer = &w;
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
-    WriteBatchInternal::SetSequence(updates, last_sequence + 1);
-    last_sequence += WriteBatchInternal::Count(updates);
+    WriteBatch* write_batch = BuildBatchGroup(&last_writer);
+    WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
+    last_sequence += WriteBatchInternal::Count(write_batch);
     {
       wal_->Ref();
       mutex_.Unlock();
-      s = wal_->Append(log_entry);
+      s = wal_->Append(WriteBatchInternal::Contents(write_batch));
       // write to memtable
       assert(this->mem_ != nullptr);
       if (s.ok()) {
-        s = mem_->Write(options, updates);
+        s = mem_->Write(options, write_batch);
       }
       mutex_.Lock();
       wal_->Unref();
     }
+    if (write_batch == tmp_batch_) tmp_batch_->Clear();
+
     versions_->SetLastSequence(last_sequence);
   }
+
+  while (true) {
+    Writer* ready = writers_.front();
+    writers_.pop_front();
+    if (ready != &w) {
+      ready->status = s;
+      ready->done = true;
+      ready->cv.Signal();
+    }
+    if (ready == last_writer) break;
+  }
+
+  if (!writers_.empty()) {
+    writers_.front()->cv.Signal();
+  }
+
   return s;
 }
 
