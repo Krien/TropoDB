@@ -1039,14 +1039,10 @@ else()
 endif()
 
 set(ZNS_LSM_SOURCES
-  db/zns_impl/db_impl_zns.cc
-  db/zns_impl/db_impl_zns_background.cc
-  db/zns_impl/db_impl_zns_not_supported.cc
   db/zns_impl/io/szd_port.cc
   db/zns_impl/memtable/zns_memtable.cc
   db/zns_impl/persistence/zns_committer.cc
   db/zns_impl/persistence/zns_wal.cc
-  db/zns_impl/persistence/zns_wal_manager.cc
   db/zns_impl/persistence/zns_manifest.cc
   db/zns_impl/table/zns_sstable_coding.cc
   db/zns_impl/table/zns_sstable.cc
@@ -1062,6 +1058,9 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/index/zns_version_set_builder.cc
   db/zns_impl/index/zns_version_set.cc
   db/zns_impl/index/zns_compaction.cc
+  db/zns_impl/db_impl_zns.cc
+  db/zns_impl/db_impl_zns_background.cc
+  db/zns_impl/db_impl_zns_not_supported.cc
 )
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})

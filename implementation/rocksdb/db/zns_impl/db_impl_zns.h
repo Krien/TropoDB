@@ -328,7 +328,7 @@ class DBImplZNS : public DB {
   ZNSSSTableManager* ss_manager_;
   ZnsManifest* manifest_;
   ZnsTableCache* table_cache_;
-  ZnsWALManager* wal_man_;
+  ZnsWALManager<ZnsConfig::wal_count>* wal_man_;
   ZnsVersionSet* versions_;
 
   // Dynamic data objects, protected by mutex

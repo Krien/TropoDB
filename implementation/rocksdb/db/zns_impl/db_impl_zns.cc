@@ -159,8 +159,8 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   zone_head += zone_step;
 
   zone_step = ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal;
-  wal_man_ = new ZnsWALManager(channel_factory_, device_info, zone_head,
-                               zone_step + zone_head, ZnsConfig::wal_count);
+  wal_man_ = new ZnsWALManager<ZnsConfig::wal_count>(
+      channel_factory_, device_info, zone_head, zone_step + zone_head);
   wal_man_->Ref();
   zone_head += zone_step;
 
@@ -218,7 +218,6 @@ Status DBImplZNS::Open(
   }
   // We do not support column families, so we just clear them
   handles->clear();
-
   DBImplZNS* impl = new DBImplZNS(db_options, name);
   s = impl->OpenZNSDevice("ZNSLSM");
   if (!s.ok()) return s;
@@ -246,6 +245,7 @@ Status DBImplZNS::Open(
 Status DBImplZNS::Close() { return Status::OK(); }
 
 Status DBImplZNS::Recover() {
+  printf("recovering\n");
   Status s;
   // Recover index structure
   s = versions_->Recover();
@@ -278,7 +278,7 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   if (!s.ok()) return s;
   s = impl->ResetZNSDevice();
   if (!s.ok()) return s;
-  // printf("Reset device\n");
+  printf("Reset device\n");
   delete impl;
   return s;
 }

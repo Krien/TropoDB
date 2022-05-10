@@ -32,7 +32,7 @@ static_assert(kZnsRecordTypeLast == 5);
  */
 class ZnsCommitter {
  public:
-  ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info);
+  ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info, bool keep_buffer);
   // No copying or implicits
   ZnsCommitter(const ZnsCommitter&) = delete;
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
@@ -49,6 +49,11 @@ class ZnsCommitter {
   // Can not be called without first getting the commit
   bool CloseCommit();
 
+  // Clears buffer if it is filled.
+  void ClearBuffer() {
+    // buffer_.FreeBuffer();
+  }
+
  private:
   SZD::SZDLog* log_;
   uint64_t zone_size_;
@@ -56,10 +61,11 @@ class ZnsCommitter {
   uint64_t zasl_;
   // amortise copying
   SZD::SZDBuffer buffer_;
+  bool keep_buffer_;
   // CRC
-  uint32_t type_crc_[5];
+  uint32_t type_crc_[kZnsRecordTypeLast + 1];
   // Used for reading
-  std::string* scratch_;
+  std::string scratch_;
   uint64_t commit_start_, commit_ptr_, commit_end_;
   bool has_commit_;
 };

@@ -17,22 +17,19 @@ static void InitTypeCrc(uint32_t* type_crc) {
   }
 }
 
-ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info)
+ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
+                           bool keep_buffer)
     : log_(log),
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
       buffer_(0, info.lba_size),
-      scratch_(nullptr) {
+      keep_buffer_(keep_buffer),
+      scratch_("deadbeef") {
   InitTypeCrc(type_crc_);
 }
 
-ZnsCommitter::~ZnsCommitter() {
-  if (scratch_ != nullptr) {
-    delete scratch_;
-    scratch_ = nullptr;
-  }
-}
+ZnsCommitter::~ZnsCommitter() {}
 
 bool ZnsCommitter::SpaceEnough(const Slice& data) {
   size_t fragcount = data.size() / zasl_ + 1;
@@ -42,7 +39,7 @@ bool ZnsCommitter::SpaceEnough(const Slice& data) {
 }
 
 Status ZnsCommitter::Commit(const Slice& data) {
-  Status s;
+  Status s = Status::OK();
   const char* ptr = data.data();
   size_t left = data.size();
 
@@ -95,7 +92,9 @@ Status ZnsCommitter::Commit(const Slice& data) {
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-  s = FromStatus(buffer_.FreeBuffer());
+  if (!keep_buffer_) {
+    s = FromStatus(buffer_.FreeBuffer());
+  }
   return s;
 }  // namespace ROCKSDB_NAMESPACE
 
@@ -114,9 +113,6 @@ bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
   commit_start_ = begin;
   commit_end_ = end;
   commit_ptr_ = commit_start_;
-  if (scratch_ == nullptr) {
-    scratch_ = new std::string;
-  }
   if (!FromStatus(buffer_.ReallocBuffer(zasl_)).ok()) {
     return false;
   }
@@ -131,7 +127,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
   if (commit_ptr_ >= commit_end_) {
     return false;
   }
-  scratch_->clear();
+  scratch_.clear();
   record->clear();
   bool in_fragmented_record = false;
 
@@ -172,30 +168,30 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     commit_ptr_ += (length + lba_size_ - 1) / lba_size_;
     switch (type) {
       case ZnsRecordType::kFullType:
-        scratch_->assign(header + kZnsHeaderSize, length);
-        *record = Slice(*scratch_);
+        scratch_.assign(header + kZnsHeaderSize, length);
+        *record = Slice(scratch_);
         return true;
       case ZnsRecordType::kFirstType:
-        scratch_->assign(header + kZnsHeaderSize, length);
+        scratch_.assign(header + kZnsHeaderSize, length);
         in_fragmented_record = true;
         break;
       case ZnsRecordType::kMiddleType:
         if (!in_fragmented_record) {
         } else {
-          scratch_->append(header + kZnsHeaderSize, length);
+          scratch_.append(header + kZnsHeaderSize, length);
         }
         break;
       case ZnsRecordType::kLastType:
         if (!in_fragmented_record) {
         } else {
-          scratch_->append(header + kZnsHeaderSize, length);
-          *record = Slice(*scratch_);
+          scratch_.append(header + kZnsHeaderSize, length);
+          *record = Slice(scratch_);
           return true;
         }
         break;
       default:
         in_fragmented_record = false;
-        scratch_->clear();
+        scratch_.clear();
         return false;
         break;
     }
@@ -207,11 +203,10 @@ bool ZnsCommitter::CloseCommit() {
     return false;
   }
   has_commit_ = false;
-  buffer_.FreeBuffer();
-  if (scratch_ != nullptr) {
-    delete scratch_;
-    scratch_ = nullptr;
+  if (!keep_buffer_) {
+    buffer_.FreeBuffer();
   }
+  scratch_.clear();
   return true;
 }
 }  // namespace ROCKSDB_NAMESPACE

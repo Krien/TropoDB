@@ -14,11 +14,12 @@
 #include "rocksdb/types.h"
 
 namespace ROCKSDB_NAMESPACE {
+template <std::size_t N>
 class ZnsWALManager : public RefCounter {
  public:
   ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                 const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
-                const uint64_t max_zone_nr, const size_t wal_count);
+                const uint64_t max_zone_nr);
   // No copying or implicits
   ZnsWALManager(const ZnsWALManager&) = delete;
   ZnsWALManager& operator=(const ZnsWALManager&) = delete;
@@ -31,11 +32,12 @@ class ZnsWALManager : public RefCounter {
   Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
 
  private:
-  std::vector<ZNSWAL*> wals;
+  std::array<ZNSWAL*, N> wals_;
   size_t wal_head_;
   size_t wal_tail_;
-  const size_t wal_count_;
+  ZNSWAL* current_wal_;
 };
 }  // namespace ROCKSDB_NAMESPACE
+#include "db/zns_impl/persistence/zns_wal_manager.ipp"
 #endif
 #endif

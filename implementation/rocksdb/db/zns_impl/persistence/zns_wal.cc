@@ -21,7 +21,7 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
       lba_size_(info.lba_size),
       channel_factory_(channel_factory),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr),
-      committer_(&log_, info) {
+      committer_(&log_, info, true) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
 }

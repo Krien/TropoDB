@@ -35,6 +35,7 @@ class ZNSWAL : public RefCounter {
   }
 
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
+  void MarkInactive() { committer_.ClearBuffer();}
 
  private:
   // const after initialisation

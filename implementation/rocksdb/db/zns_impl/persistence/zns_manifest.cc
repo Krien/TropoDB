@@ -17,7 +17,7 @@ ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
       manifest_start_(max_zone_nr * info.zone_size),  // enforce corruption
       manifest_end_(min_zone_nr * info.zone_size),    // enforce corruption
       log_(channel_factory, info, min_zone_nr, max_zone_nr),
-      committer_(&log_, info),
+      committer_(&log_, info, true),
       min_zone_head_(min_zone_nr * info.zone_size),
       max_zone_head_(max_zone_nr * info.zone_size),
       zone_size_(info.zone_size),
@@ -62,6 +62,9 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   uint64_t new_tail = current == 0 ? max_zone_head_ - 1 : current - 1;
   if (tail != new_tail && manifest_start_ != manifest_end_) {
     s = FromStatus(log_.ConsumeTail(tail, new_tail));
+    if (!s.ok()) {
+      printf("log eagain %lu %lu %lu\n", tail, new_tail, log_.GetWriteHead());
+    }
   }
   // Only install locally if succesful
   manifest_start_ = current_lba_ = tmp_manifest_start;
