@@ -365,6 +365,9 @@ int main(int argc, char **argv) {
 
     int i = deletes;
     for (auto it = testdata.begin(); it != testdata.end(); ++it) {
+      if (i <= 0) {
+        break;
+      }
       s = ctx_test->db->Delete(wo, (*it).first);
       assert(s.ok());
       if (!single) {
@@ -372,9 +375,6 @@ int main(int argc, char **argv) {
         assert(s.ok());
       }
       i--;
-      if (i == 0) {
-        break;
-      }
     }
   }
   // shadow DB must be a posix db so we know it works
@@ -395,7 +395,8 @@ int main(int argc, char **argv) {
       }
       s = ctx_test->db->Get(ro, it->key().ToString(), &test_value);
       if (!s.ok()) {
-        cout << "reading of test DB failed with " << s.ToString()
+        cout << "reading of test DB failed with " << s.ToString() << " at "
+             << ent_total << " "
              << " for the key (read from the shadowdb): "
              << it->key().ToString();
         auto x = testdata.find(it->key().ToString());

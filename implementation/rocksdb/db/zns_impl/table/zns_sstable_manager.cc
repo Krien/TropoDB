@@ -140,11 +140,11 @@ L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
   return dynamic_cast<L0ZnsSSTable*>(sstable_level_[0]);
 }
 
-Iterator* ZNSSSTableManager::NewIterator(
-    const uint8_t level, const SSZoneMetaData& meta,
-    const InternalKeyComparator& icmp) const {
+Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
+                                         const SSZoneMetaData& meta,
+                                         const Comparator* cmp) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->NewIterator(meta, icmp);
+  return sstable_level_[level]->NewIterator(meta, cmp);
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
@@ -218,7 +218,7 @@ void ZNSSSTableManager::GetRange(const uint8_t level,
 }
 
 size_t ZNSSSTableManager::FindSSTableIndex(
-    const InternalKeyComparator& icmp, const std::vector<SSZoneMetaData*>& ss,
+    const Comparator* cmp, const std::vector<SSZoneMetaData*>& ss,
     const Slice& key) {
   size_t left = 0;
   size_t right = ss.size();
@@ -226,7 +226,7 @@ size_t ZNSSSTableManager::FindSSTableIndex(
   while (left < right) {
     size_t mid = (left + right) / 2;
     const SSZoneMetaData* m = ss[mid];
-    if (icmp.InternalKeyComparator::Compare(m->largest.Encode(), key) < 0) {
+    if (cmp->Compare(m->largest.user_key(), ExtractUserKey(key)) < 0) {
       left = mid + 1;
     } else {
       right = mid;

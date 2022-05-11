@@ -21,7 +21,7 @@ typedef void (*NextPair)(char** src, Slice* key, Slice* value);
 class SSTableIterator : public Iterator {
  public:
   SSTableIterator(char* data, const size_t data_size, const size_t count,
-                  NextPair nextf, const InternalKeyComparator& icmp);
+                  NextPair nextf, const Comparator* cmp);
   ~SSTableIterator();
   bool Valid() const override { return index_ <= count_ && count_ > 0; }
   Slice key() const override {
@@ -49,12 +49,12 @@ class SSTableIterator : public Iterator {
   }
 
   // Fixed after init
-  char* data_;                        // all data of sstable (will be freed)
-  const size_t data_size_;            // Size in bytes of data_
-  const uint32_t kv_pairs_offset_;    // offset in data where kv_pairs start
-  const size_t count_;                // Number of kv_pairs
-  const InternalKeyComparator icmp_;  // Comparator used for searching value
-  const NextPair nextf_;              // Decoding function to retrieve kvpairs
+  char* data_;                      // all data of sstable (will be freed)
+  const size_t data_size_;          // Size in bytes of data_
+  const uint32_t kv_pairs_offset_;  // offset in data where kv_pairs start
+  const size_t count_;              // Number of kv_pairs
+  const Comparator* cmp_;           // Comparator used for searching value
+  const NextPair nextf_;            // Decoding function to retrieve kvpairs
   // Iterator variables
   size_t index_;          // index of current kv_pair
   char* walker_;          // pointer to current data element

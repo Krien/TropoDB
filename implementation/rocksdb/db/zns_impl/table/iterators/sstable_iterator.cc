@@ -5,12 +5,12 @@
 namespace ROCKSDB_NAMESPACE {
 SSTableIterator::SSTableIterator(char* data, const size_t data_size,
                                  const size_t count, NextPair nextf,
-                                 const InternalKeyComparator& icmp)
+                                 const Comparator* cmp)
     : data_(data),
       data_size_(data_size),
       kv_pairs_offset_(sizeof(uint32_t) * (count + 1)),
       count_(count),
-      icmp_(icmp),
+      cmp_(cmp),
       nextf_(nextf),
       index_(count + 1),
       walker_(data_ + kv_pairs_offset_),
@@ -33,7 +33,7 @@ void SSTableIterator::Seek(const Slice& target) {
       printf("corrupt key %lu %lu\n", index_, count_);
     }
     current_key_compare =
-        icmp_.Compare(parsed_key.user_key, target_ptr_stripped);
+        cmp_->Compare(parsed_key.user_key, target_ptr_stripped);
     if (current_key_compare < 0) {
       left = restart_index_;  // index_ > 2 ? index_ - 2 : 0;
     } else if (current_key_compare > 0) {
@@ -52,7 +52,7 @@ void SSTableIterator::Seek(const Slice& target) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
       printf("corrupt key %lu %lu\n", index_, count_);
     }
-    if (icmp_.Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
+    if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
       left = mid;
     } else {
       right = mid - 1;
@@ -64,7 +64,7 @@ void SSTableIterator::Seek(const Slice& target) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
       printf("corrupt key %lu %lu\n", index_, count_);
     }
-    if (icmp_.Compare(parsed_key.user_key, target_ptr_stripped) == 0) {
+    if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) == 0) {
       restart_index_ = left;
       break;
     }

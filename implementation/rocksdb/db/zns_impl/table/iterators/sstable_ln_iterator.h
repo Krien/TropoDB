@@ -23,7 +23,7 @@ namespace ROCKSDB_NAMESPACE {
  */
 class LNZoneIterator : public Iterator {
  public:
-  LNZoneIterator(const InternalKeyComparator& icmp,
+  LNZoneIterator(const Comparator* cmp,
                  const std::vector<SSZoneMetaData*>* slist,
                  const uint8_t level);
   ~LNZoneIterator();
@@ -48,7 +48,7 @@ class LNZoneIterator : public Iterator {
   void Prev() override;
 
  private:
-  const InternalKeyComparator icmp_;
+  const Comparator* cmp_;
   const uint8_t level_;
   const std::vector<SSZoneMetaData*>* const slist_;
   // Iterator
@@ -58,11 +58,11 @@ class LNZoneIterator : public Iterator {
 };
 
 typedef Iterator* (*NewZoneIteratorFunction)(void*, const Slice&,
-                                             const InternalKeyComparator&);
+                                             const Comparator*);
 class LNIterator : public Iterator {
  public:
   LNIterator(Iterator* ln_iterator, NewZoneIteratorFunction zone_function,
-             void* arg, const InternalKeyComparator& icmp);
+             void* arg, const Comparator* cmp);
   ~LNIterator() override;
   bool Valid() const override { return data_iter_.Valid(); }
   Slice key() const override {
@@ -92,7 +92,7 @@ class LNIterator : public Iterator {
   IteratorWrapper index_iter_;
   IteratorWrapper data_iter_;
   std::string data_zone_handle_;
-  const InternalKeyComparator icmp_;
+  const Comparator* cmp_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

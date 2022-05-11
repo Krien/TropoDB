@@ -41,7 +41,8 @@ Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta,
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == nullptr) {
-    Iterator* it = ssmanager_->NewIterator(level, meta, icmp_);
+    Iterator* it =
+        ssmanager_->NewIterator(level, meta, icmp_.user_comparator());
     s = cache_->Insert(key, it, 1, &DeleteEntry, handle);
   }
   return s;

@@ -52,6 +52,8 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   Slice internal_key = lkey.internal_key();
   znssstable->Ref();
 
+  int in_range = -1;
+
   // L0 (no sorting of L0 yet, because it is an append-only log. Earlier zones
   // are guaranteed to be older). So start from end to begin.
   std::vector<SSZoneMetaData*> tmp;
@@ -64,6 +66,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
     }
   }
   if (!tmp.empty()) {
+    in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
       return a->number > b->number;
     });
@@ -86,13 +89,14 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
     size_t num_ss = ss_[level].size();
     if (num_ss == 0) continue;
     uint32_t index = ZNSSSTableManager::FindSSTableIndex(
-        vset_->icmp_, ss_[level], internal_key);
+        vset_->icmp_.user_comparator(), ss_[level], internal_key);
     if (index >= num_ss) {
       continue;
     }
     SSZoneMetaData* m = ss_[level][index];
     if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
         ucmp->Compare(key, m->largest.user_key()) <= 0) {
+      in_range = level;
       s = vset_->table_cache_->Get(options, m, level, internal_key, value,
                                    &status);
       // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
@@ -107,7 +111,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
       }
     }
   }
-
+  printf("not found, but was in range %d\n", in_range);
   znssstable->Unref();
   return Status::NotFound("No matching table");
 }

@@ -54,7 +54,7 @@ class ZnsSSTable {
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(const SSZoneMetaData& meta,
-                                const InternalKeyComparator& icmp) = 0;
+                                const Comparator* cmp) = 0;
   virtual Status Recover() = 0;
   virtual uint64_t GetTail() const = 0;
   virtual uint64_t GetHead() const = 0;

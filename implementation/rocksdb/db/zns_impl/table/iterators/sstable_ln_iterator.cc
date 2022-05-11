@@ -7,15 +7,15 @@
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-LNZoneIterator::LNZoneIterator(const InternalKeyComparator& icmp,
+LNZoneIterator::LNZoneIterator(const Comparator* cmp,
                                const std::vector<SSZoneMetaData*>* slist,
                                const uint8_t level)
-    : icmp_(icmp), level_(level), slist_(slist), index_(slist->size()) {}
+    : cmp_(cmp), level_(level), slist_(slist), index_(slist->size()) {}
 
 LNZoneIterator::~LNZoneIterator() = default;
 
 void LNZoneIterator::Seek(const Slice& target) {
-  index_ = ZNSSSTableManager::FindSSTableIndex(icmp_, *slist_, target);
+  index_ = ZNSSSTableManager::FindSSTableIndex(cmp_, *slist_, target);
 }
 
 void LNZoneIterator::SeekForPrev(const Slice& target) {
@@ -41,12 +41,12 @@ void LNZoneIterator::Prev() {
 
 LNIterator::LNIterator(Iterator* ln_iterator,
                        NewZoneIteratorFunction zone_function, void* arg,
-                       const InternalKeyComparator& icmp)
+                       const Comparator* cmp)
     : zone_function_(zone_function),
       arg_(arg),
       index_iter_(ln_iterator),
       data_iter_(nullptr),
-      icmp_(icmp) {}
+      cmp_(cmp) {}
 
 LNIterator::~LNIterator() = default;
 
@@ -125,7 +125,7 @@ void LNIterator::InitDataZone() {
   if (data_iter_.iter() != nullptr && handle.compare(data_zone_handle_) == 0) {
     return;
   }
-  Iterator* iter = (*zone_function_)(arg_, handle, icmp_);
+  Iterator* iter = (*zone_function_)(arg_, handle, cmp_);
   data_zone_handle_.assign(handle.data(), handle.size());
   SetDataIterator(iter);
 }

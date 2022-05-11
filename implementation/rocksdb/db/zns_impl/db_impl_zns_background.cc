@@ -83,6 +83,9 @@ void DBImplZNS::BackgroundCompaction() {
   if (imm_ != nullptr) {
     // printf("  Compact memtable...\n");
     s = CompactMemtable();
+    if (!s.ok()) {
+      printf("error during flushing\n");
+    }
     return;
   }
   if (!wal_man_->WALAvailable()) {
@@ -100,9 +103,10 @@ void DBImplZNS::BackgroundCompaction() {
     c->MarkStaleTargetsReusable(&edit);
     if (c->IsTrivialMove()) {
       s = c->DoTrivialMove(&edit);
-      printf("trivial move\n");
+      printf("\t\ttrivial move\n");
     } else {
       s = c->DoCompaction(&edit);
+      printf("\t\tnormal compaction\n");
     }
   }
   mutex_.Lock();

@@ -42,7 +42,7 @@ class ZNSSSTableManager : public RefCounter {
                                  const uint64_t head) const;
   L0ZnsSSTable* GetL0SSTableLog() const;
   Iterator* NewIterator(const uint8_t level, const SSZoneMetaData& meta,
-                        const InternalKeyComparator& icmp) const;
+                        const Comparator* cmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
   Status Recover();
@@ -54,7 +54,7 @@ class ZNSSSTableManager : public RefCounter {
   void GetRange(const uint8_t level, const std::vector<SSZoneMetaData*>& metas,
                 std::pair<uint64_t, uint64_t>* range) const;
   // Utils
-  static size_t FindSSTableIndex(const InternalKeyComparator& icmp,
+  static size_t FindSSTableIndex(const Comparator* icmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
 
