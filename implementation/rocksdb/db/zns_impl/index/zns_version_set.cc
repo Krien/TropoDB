@@ -270,6 +270,19 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
   }
 }
 
+static int64_t TotalLbas(const std::vector<SSZoneMetaData*>& ss) {
+  int64_t sum = 0;
+  for (size_t i = 0; i < ss.size(); i++) {
+    sum += ss[i]->lba_count;
+  }
+  return sum;
+}
+
+static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
+  return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+               lba_size);
+}
+
 void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
   const uint8_t level = c->first_level_;
   InternalKey smallest, largest;
@@ -284,6 +297,34 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
   // Get entire range covered by compaction
   InternalKey all_start, all_limit;
   GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
+
+  // See if we can grow the number of inputs in "level" without
+  // changing the number of "level+1" files we pick up.
+  if (!c->targets_[1].empty()) {
+    std::vector<SSZoneMetaData*> expanded0;
+    current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
+    AddBoundaryInputs(icmp_, current_->ss_[level], &expanded0);
+    const int64_t inputs0_size = TotalLbas(c->targets_[0]);
+    const int64_t inputs1_size = TotalLbas(c->targets_[1]);
+    const int64_t expanded0_size = TotalLbas(expanded0);
+    if (expanded0.size() > c->targets_[0].size() &&
+        inputs1_size + expanded0_size <
+            ExpandedCompactionLbaSizeLimit(lba_size_)) {
+      InternalKey new_start, new_limit;
+      GetRange(expanded0, &new_start, &new_limit);
+      std::vector<SSZoneMetaData*> expanded1;
+      current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
+                                     &expanded1);
+      AddBoundaryInputs(icmp_, current_->ss_[level + 1], &expanded1);
+      if (expanded1.size() == c->targets_[1].size()) {
+        smallest = new_start;
+        largest = new_limit;
+        c->targets_[0] = expanded0;
+        c->targets_[1] = expanded1;
+        GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
+      }
+    }
+  }
 
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);

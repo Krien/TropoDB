@@ -55,15 +55,16 @@ Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
 
 Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
                                       const uint8_t level2,
-                                      SSZoneMetaData* meta) const {
+                                      const SSZoneMetaData& meta,
+                                      SSZoneMetaData* new_meta) const {
   Status s;
   Slice original;
-  SSZoneMetaData tmp(*meta);
-  s = ReadSSTable(level1, &original, &tmp);
+  s = ReadSSTable(level1, &original, meta);
   if (!s.ok()) {
     return s;
   }
-  s = sstable_level_[level2]->WriteSSTable(original, meta);
+  *new_meta = SSZoneMetaData(meta);
+  s = sstable_level_[level2]->WriteSSTable(original, new_meta);
   delete[] original.data();
   return s;
 }

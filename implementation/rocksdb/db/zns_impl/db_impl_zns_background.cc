@@ -98,8 +98,9 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("  Compact LN...\n");
     ZnsCompaction* c = versions_->PickCompaction();
     c->MarkStaleTargetsReusable(&edit);
-    if (false) {
+    if (c->IsTrivialMove()) {
       s = c->DoTrivialMove(&edit);
+      printf("trivial move\n");
     } else {
       s = c->DoCompaction(&edit);
     }

@@ -27,7 +27,8 @@ class ZNSSSTableManager : public RefCounter {
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) const;
   Status CopySSTable(const uint8_t level1, const uint8_t level2,
-                     SSZoneMetaData* meta) const;
+                     const SSZoneMetaData& meta,
+                     SSZoneMetaData* new_meta) const;
   Status WriteSSTable(const uint8_t level, const Slice& content,
                       SSZoneMetaData* meta) const;
   Status ReadSSTable(const uint8_t level, Slice* sstable,

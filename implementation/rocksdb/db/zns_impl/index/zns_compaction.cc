@@ -52,16 +52,18 @@ bool ZnsCompaction::IsTrivialMove() const {
 
 Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   Status s = Status::OK();
-  SSZoneMetaData new_meta(targets_[0][0]);
-  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1,
-                                      &new_meta);
+  SSZoneMetaData* old_meta = targets_[0][0];
+  SSZoneMetaData meta;
+  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, old_meta,
+                                      &meta);
   if (!s.ok()) {
     return s;
   }
-  new_meta.number = vset_->NewSSNumber();
-  edit->AddSSDefinition(first_level_ + 1, new_meta.number, new_meta.lba,
-                        new_meta.lba_count, new_meta.numbers, new_meta.smallest,
-                        new_meta.largest);
+  meta.number = vset_->NewSSNumber();
+  edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba, meta.lba_count,
+                        meta.numbers, meta.smallest, meta.largest);
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta.lba,
+         meta.lba_count, s.getState(), s.ok() ? "OK" : "NOK");
   return s;
 }
 

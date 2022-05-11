@@ -459,7 +459,6 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
                       std::string* value) {
   MutexLock l(&mutex_);
   Status s;
-
   // This is absolutely necessary for locking logic because private pointers can
   // be changed in background work.
   ZNSMemTable* mem = mem_;
