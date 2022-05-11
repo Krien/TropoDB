@@ -326,6 +326,11 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
     }
   }
 
+  if (level + 2 < ZnsConfig::level_count) {
+    current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
+                                   &c->grandparents_);
+  }
+
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
 }

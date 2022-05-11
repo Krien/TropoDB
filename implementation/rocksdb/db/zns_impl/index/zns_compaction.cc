@@ -45,9 +45,24 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
   return iterator;
 }
 
+static int64_t TotalLbas(const std::vector<SSZoneMetaData*>& ss) {
+  int64_t sum = 0;
+  for (size_t i = 0; i < ss.size(); i++) {
+    sum += ss[i]->lba_count;
+  }
+  return sum;
+}
+
+static int64_t MaxGrandParentOverlapBytes(uint64_t lba_size) {
+  return 10 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+               lba_size);
+}
+
 bool ZnsCompaction::IsTrivialMove() const {
   // add grandparent stuff level + 2
-  return targets_[1].size() == 0 && targets_[0].size() == 1;
+  return targets_[0].size() == 1 && targets_[1].size() == 0 &&
+         TotalLbas(grandparents_) <=
+             MaxGrandParentOverlapBytes(vset_->lba_size_);
 }
 
 Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
@@ -63,7 +78,7 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba, meta.lba_count,
                         meta.numbers, meta.smallest, meta.largest);
   printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta.lba,
-         meta.lba_count, s.getState(), s.ok() ? "OK" : "NOK");
+         meta.lba_count, s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
   return s;
 }
 
@@ -123,9 +138,11 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   s = current_builder->Flush();
   printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->lba,
          meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
-  edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
-                        meta->lba_count, meta->numbers, meta->smallest,
-                        meta->largest);
+  if (s.ok()) {
+    edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
+                          meta->lba_count, meta->numbers, meta->smallest,
+                          meta->largest);
+  }
   delete current_builder;
   current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
 

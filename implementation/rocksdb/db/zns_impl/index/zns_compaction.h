@@ -48,6 +48,8 @@ class ZnsCompaction {
   // Target
   std::array<std::vector<SSZoneMetaData*>, 2U> targets_;
   size_t level_ptrs_[ZnsConfig::level_count];
+
+  std::vector<SSZoneMetaData*> grandparents_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 
