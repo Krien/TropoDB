@@ -1,32 +1,9 @@
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
 
-#include <iostream>
-
+#include "db/zns_impl/table/zns_sstable_reader.h"
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-static const char* DecodeEntry(const char* p, const char* limit,
-                               uint32_t* shared, uint32_t* non_shared,
-                               uint32_t* value_length) {
-  if (limit - p < 3) return nullptr;
-  *shared = reinterpret_cast<const uint8_t*>(p)[0];
-  *non_shared = reinterpret_cast<const uint8_t*>(p)[1];
-  *value_length = reinterpret_cast<const uint8_t*>(p)[2];
-  if ((*shared | *non_shared | *value_length) < 128) {
-    // Fast path: all three values are encoded in one byte each
-    p += 3;
-  } else {
-    if ((p = GetVarint32Ptr(p, limit, shared)) == nullptr) return nullptr;
-    if ((p = GetVarint32Ptr(p, limit, non_shared)) == nullptr) return nullptr;
-    if ((p = GetVarint32Ptr(p, limit, value_length)) == nullptr) return nullptr;
-  }
-
-  if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_length)) {
-    return nullptr;
-  }
-  return p;
-}
 
 SSTableIteratorCompressed::SSTableIteratorCompressed(
     const Comparator* comparator, char* data, uint32_t data_size,
@@ -42,6 +19,22 @@ SSTableIteratorCompressed::SSTableIteratorCompressed(
 }
 
 SSTableIteratorCompressed::~SSTableIteratorCompressed() { free(data_); }
+
+uint32_t SSTableIteratorCompressed::GetRestartPoint(uint32_t index) {
+  assert(index < num_restarts_);
+  return DecodeFixed32(data_ + (index + 2) * sizeof(uint32_t)) +
+         kv_pairs_offset_;
+}
+
+void SSTableIteratorCompressed::SeekToRestartPoint(uint32_t index) {
+  key_.clear();
+  restart_index_ = index;
+  // current_ will be fixed by ParseNextKey();
+
+  // ParseNextKey() starts at the end of value_, so set value_ accordingly
+  uint32_t offset = GetRestartPoint(index);
+  value_ = Slice(data_ + offset, 0);
+}
 
 void SSTableIteratorCompressed::Prev() {
   assert(Valid());
@@ -62,6 +55,27 @@ void SSTableIteratorCompressed::Prev() {
   do {
     // Loop until end of current entry hits the start of original entry
   } while (ParseNextKey() && NextEntryOffset() < original);
+}
+
+void SSTableIteratorCompressed::Next() {
+  assert(Valid());
+  ParseNextKey();
+}
+
+void SSTableIteratorCompressed::SeekToFirst() {
+  SeekToRestartPoint(0);
+  ParseNextKey();
+}
+
+void SSTableIteratorCompressed::SeekToLast() {
+  SeekToRestartPoint(num_restarts_ - 1);
+  while (ParseNextKey() && NextEntryOffset() <= data_size_) {
+    // Keep skipping
+  }
+}
+void SSTableIteratorCompressed::SeekForPrev(const Slice& target) {
+  Seek(target);
+  Prev();
 }
 
 void SSTableIteratorCompressed::Seek(const Slice& target) {
@@ -93,8 +107,9 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
     uint32_t mid = (left + right + 1) / 2;
     uint32_t region_offset = GetRestartPoint(mid);
     uint32_t shared, non_shared, value_length;
-    const char* key_ptr = DecodeEntry(data_ + region_offset, data_ + data_size_,
-                                      &shared, &non_shared, &value_length);
+    const char* key_ptr = ZNSEncoding::DecodeEncodedEntry(
+        data_ + region_offset, data_ + data_size_, &shared, &non_shared,
+        &value_length);
     if (key_ptr == nullptr || (shared != 0)) {
       CorruptionError();
       return;
@@ -161,7 +176,8 @@ bool SSTableIteratorCompressed::ParseNextKey() {
 
   // Decode next entry
   uint32_t shared, non_shared, value_length;
-  p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
+  p = ZNSEncoding::DecodeEncodedEntry(p, limit, &shared, &non_shared,
+                                      &value_length);
   if (p == nullptr || key_.size() < shared) {
     CorruptionError();
     return false;

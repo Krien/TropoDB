@@ -6,6 +6,7 @@
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
+#include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
@@ -15,16 +16,7 @@ namespace ROCKSDB_NAMESPACE {
 enum class EntryStatus { found, deleted, notfound };
 
 class ZNSSSTableManager;
-
-class SSTableBuilder {
- public:
-  SSTableBuilder(){};
-  virtual ~SSTableBuilder(){};
-  virtual Status Apply(const Slice& key, const Slice& value) = 0;
-  virtual Status Finalise() = 0;
-  virtual Status Flush() = 0;
-  virtual uint64_t GetSize() const = 0;
-};
+class SSTableBuilder;
 
 class ZnsSSTable {
  public:
@@ -60,8 +52,6 @@ class ZnsSSTable {
   virtual uint64_t GetHead() const = 0;
 
  protected:
-  friend class SSTableBuilder;
-
   // const after init
   const uint64_t min_zone_head_;
   const uint64_t max_zone_head_;

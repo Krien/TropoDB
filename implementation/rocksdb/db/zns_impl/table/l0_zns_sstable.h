@@ -5,6 +5,7 @@
 
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
@@ -35,10 +36,6 @@ class L0ZnsSSTable : public ZnsSSTable {
 
  private:
   friend class ZnsSSTableManagerInternal;
-
-  class Builder;
-
-  static void ParseNext(char** src, Slice* key, Slice* value);
 
   SZD::SZDCircularLog log_;
 };

@@ -5,95 +5,10 @@
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
 #include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable_coding.h"
+#include "db/zns_impl/table/zns_sstable_builder.h"
+#include "db/zns_impl/table/zns_sstable_reader.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-class LNZnsSSTable::Builder : public SSTableBuilder {
- public:
-  Builder(LNZnsSSTable* table, SSZoneMetaData* meta)
-      : table_(table),
-        meta_(meta),
-        buffer_(""),
-        kv_numbers_(0),
-        started_(false),
-        counter_(0) {
-    meta_->lba_count = 0;
-    buffer_.clear();
-    kv_pair_offsets_.clear();
-    if (ZnsConfig::use_sstable_encoding) {
-      kv_pair_offsets_.push_back(0);
-      last_key_.clear();
-    }
-  }
-  ~Builder() {}
-
-  Status Apply(const Slice& key, const Slice& value) override {
-    if (!started_) {
-      meta_->smallest.DecodeFrom(key);
-      started_ = true;
-    }
-
-    if (ZnsConfig::use_sstable_encoding) {
-      Slice last_key_piece(last_key_);
-      size_t shared = 0;
-      if (counter_ < ZnsConfig::max_sstable_encoding) {
-        const size_t min_length = std::min(last_key_piece.size(), key.size());
-        while ((shared < min_length) &&
-               (last_key_piece[shared] == key[shared])) {
-          shared++;
-        }
-      } else {
-        // Restart compression
-        kv_pair_offsets_.push_back(buffer_.size());
-        counter_ = 0;
-      }
-      const size_t non_shared = key.size() - shared;
-      // Add "<shared><non_shared><value_size>" to buffer_
-      PutVarint32(&buffer_, shared);
-      PutVarint32(&buffer_, non_shared);
-      PutVarint32(&buffer_, value.size());
-
-      // Add string delta to buffer_ followed by value
-      buffer_.append(key.data() + shared, non_shared);
-      buffer_.append(value.data(), value.size());
-
-      // Update state
-      last_key_.resize(shared);
-      last_key_.append(key.data() + shared, non_shared);
-      assert(Slice(last_key_) == key);
-      counter_++;
-    } else {
-      EncodeKVPair(&buffer_, key, value);
-      kv_pair_offsets_.push_back(buffer_.size());
-    }
-    meta_->largest.DecodeFrom(key);
-    kv_numbers_++;
-    return Status::OK();
-  }
-
-  Status Finalise() override {
-    meta_->numbers = kv_numbers_;
-    EncodeSSTablePreamble(&buffer_, kv_pair_offsets_);
-    return Status::OK();
-  }
-
-  Status Flush() override {
-    return table_->WriteSSTable(Slice(buffer_), meta_);
-  }
-
-  uint64_t GetSize() const override { return (uint64_t)buffer_.size(); }
-
- private:
-  LNZnsSSTable* table_;
-  SSZoneMetaData* meta_;
-  std::string buffer_;
-  std::vector<uint32_t> kv_pair_offsets_;
-  uint32_t kv_numbers_;
-  bool started_;
-  uint32_t counter_;
-  std::string last_key_;
-};
 
 LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
@@ -104,8 +19,10 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
 
 LNZnsSSTable::~LNZnsSSTable() = default;
 
+Status LNZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
+
 SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new LNZnsSSTable::Builder(this, meta);
+  return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
 }
 
 bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
@@ -167,58 +84,6 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   return s;
 }
 
-void LNZnsSSTable::ParseNext(char** src, Slice* key, Slice* value) {
-  uint32_t keysize, valuesize;
-  *src = (char*)GetVarint32Ptr(*src, *src + 5, &keysize);
-  *src = (char*)GetVarint32Ptr(*src, *src + 5, &valuesize);
-  *key = Slice(*src, keysize);
-  *src += keysize;
-  *value = Slice(*src, valuesize);
-  *src += valuesize;
-}
-
-Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
-                         const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta, EntryStatus* status) {
-  Slice sstable;
-  Status s;
-  s = ReadSSTable(&sstable, meta);
-  if (!s.ok()) {
-    return s;
-  }
-  char* walker = (char*)sstable.data();
-  uint32_t keysize, valuesize;
-  Slice key, value;
-  uint32_t count, counter;
-  counter = 0;
-  count = DecodeFixed32(walker);
-  walker += sizeof(uint32_t) + count * sizeof(uint32_t);
-  const Comparator* user_comparator = icmp.user_comparator();
-  Slice key_ptr_stripped = ExtractUserKey(key_ptr);
-  while (counter < count) {
-    ParseNext(&walker, &key, &value);
-    ParsedInternalKey parsed_key;
-    if (!(s = ParseInternalKey(key, &parsed_key, false)).ok()) {
-      printf("corrupt key LN %s\n", s.getState());
-      continue;
-    }
-    if (user_comparator->Compare(parsed_key.user_key, key_ptr_stripped) == 0) {
-      if (parsed_key.type == kTypeDeletion) {
-        value_ptr->clear();
-      } else {
-        *status = EntryStatus::found;
-        value_ptr->assign(value.data(), value.size());
-      }
-      delete[] sstable.data();
-      return Status::OK();
-    }
-    counter++;
-  }
-  *status = EntryStatus::notfound;
-  delete[] sstable.data();
-  return Status::OK();
-}
-
 Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
   return FromStatus(log_.ConsumeTail(meta.lba, meta.lba + meta.lba_count));
 }
@@ -238,11 +103,35 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);
-    return new SSTableIterator(data, sstable.size(), (size_t)count, &ParseNext,
-                               cmp);
+    return new SSTableIterator(data, sstable.size(), (size_t)count,
+                               &ZNSEncoding::ParseNextNonEncoded, cmp);
   }
 }
 
-Status LNZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
+Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
+                         const Slice& key_ptr, std::string* value_ptr,
+                         const SSZoneMetaData& meta, EntryStatus* status) {
+  Iterator* it = NewIterator(meta, icmp.user_comparator());
+  if (it == nullptr) {
+    return Status::Corruption();
+  }
+  it->Seek(key_ptr);
+  if (it->Valid()) {
+    ParsedInternalKey parsed_key;
+    if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
+      printf("corrupt key in cache\n");
+    }
+    if (parsed_key.type == kTypeDeletion) {
+      *status = EntryStatus::deleted;
+      value_ptr->clear();
+    } else {
+      *status = EntryStatus::found;
+      *value_ptr = it->value().ToString();
+    }
+  } else {
+    *status = EntryStatus::notfound;
+  }
+  return Status::OK();
+}
 
 }  // namespace ROCKSDB_NAMESPACE

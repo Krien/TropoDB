@@ -31,28 +31,10 @@ class SSTableIteratorCompressed : public Iterator {
     assert(Valid());
     return value_;
   }
-
-  void Next() override {
-    assert(Valid());
-    ParseNextKey();
-  }
-
-  void SeekToFirst() override {
-    SeekToRestartPoint(0);
-    ParseNextKey();
-  }
-
-  void SeekToLast() override {
-    SeekToRestartPoint(num_restarts_ - 1);
-    while (ParseNextKey() && NextEntryOffset() <= data_size_) {
-      // Keep skipping
-    }
-  }
-  void SeekForPrev(const Slice& target) {
-    Seek(target);
-    Prev();
-  }
-
+  void Next() override;
+  void SeekToFirst() override;
+  void SeekToLast() override;
+  void SeekForPrev(const Slice& target) override;
   void Prev() override;
   void Seek(const Slice& target) override;
 
@@ -66,20 +48,8 @@ class SSTableIteratorCompressed : public Iterator {
   inline uint32_t NextEntryOffset() const {
     return (value_.data() + value_.size()) - data_;
   }
-  uint32_t GetRestartPoint(uint32_t index) {
-    assert(index < num_restarts_);
-    return DecodeFixed32(data_ + (index + 2) * sizeof(uint32_t)) +
-           kv_pairs_offset_;
-  }
-  void SeekToRestartPoint(uint32_t index) {
-    key_.clear();
-    restart_index_ = index;
-    // current_ will be fixed by ParseNextKey();
-
-    // ParseNextKey() starts at the end of value_, so set value_ accordingly
-    uint32_t offset = GetRestartPoint(index);
-    value_ = Slice(data_ + offset, 0);
-  }
+  uint32_t GetRestartPoint(uint32_t index);
+  void SeekToRestartPoint(uint32_t index);
 
   const Comparator* const comparator_;
   char* data_;                   // underlying block contents
