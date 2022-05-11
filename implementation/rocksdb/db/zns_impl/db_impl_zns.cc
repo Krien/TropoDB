@@ -87,7 +87,7 @@ DBImplZNS::~DBImplZNS() {
   mutex_.Unlock();
   std::cout << versions_->DebugString();
 
-  delete versions_;
+  if (versions_ != nullptr) delete versions_;
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
   if (tmp_batch_ != nullptr) delete tmp_batch_;
@@ -123,8 +123,8 @@ Status DBImplZNS::OpenZNSDevice(const std::string dbname) {
   if (!s.ok()) {
     return Status::IOError("Error opening ZNS device");
   }
-  channel_factory_ =
-      new SZD::SZDChannelFactory(zns_device_->GetDeviceManager(), 0x100);
+  channel_factory_ = new SZD::SZDChannelFactory(zns_device_->GetDeviceManager(),
+                                                ZnsConfig::max_channels);
   channel_factory_->Ref();
   return Status::OK();
 }
@@ -132,15 +132,14 @@ Status DBImplZNS::OpenZNSDevice(const std::string dbname) {
 Status DBImplZNS::ResetZNSDevice() {
   Status s;
   channel_factory_->Ref();
-  SZD::DeviceInfo info;
-  s = FromStatus(zns_device_->GetInfo(&info));
-  if (!s.ok()) {
-    return s;
-  }
   SZD::SZDChannel* channel;
-  channel_factory_->register_channel(&channel);
-  s = FromStatus(channel->ResetAllZones());
-  channel_factory_->unregister_channel(channel);
+  s = FromStatus(channel_factory_->register_channel(&channel));
+  if (s.ok()) {
+    s = FromStatus(channel->ResetAllZones());
+  }
+  if (s.ok()) {
+    s = FromStatus(channel_factory_->unregister_channel(channel));
+  }
   channel_factory_->Unref();
   return s.ok() ? Status::OK() : Status::IOError("Error resetting device");
 }
@@ -165,8 +164,11 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   zone_head += zone_step;
 
   zone_step = device_info.max_lba / device_info.zone_size - zone_head;
-  ss_manager_ = ZNSSSTableManager::NewZNSSTableManager(
-      channel_factory_, device_info, zone_head, zone_head + zone_step);
+  // If only we had access to C++23.
+  ss_manager_ =
+      ZNSSSTableManager::NewZNSSTableManager(channel_factory_, device_info,
+                                             zone_head, zone_head + zone_step)
+          .value_or(nullptr);
   if (ss_manager_ == nullptr) {
     return Status::Corruption();
   }
@@ -242,7 +244,16 @@ Status DBImplZNS::Open(
   return s;
 }
 
-Status DBImplZNS::Close() { return Status::OK(); }
+Status DBImplZNS::Close() {
+  mutex_.Lock();
+  while (bg_compaction_scheduled_) {
+    // printf("busy, wait before closing\n");
+    bg_work_finished_signal_.Wait();
+  }
+  mutex_.Unlock();
+  // TODO: close device.
+  return Status::OK();
+}
 
 Status DBImplZNS::Recover() {
   printf("recovering\n");

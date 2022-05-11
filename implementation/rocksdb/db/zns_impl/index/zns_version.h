@@ -47,6 +47,10 @@ class ZnsVersion : public RefCounter {
   Status Get(const ReadOptions& options, const LookupKey& key,
              std::string* value);
 
+  void GetOverlappingInputs(uint8_t level, const InternalKey* begin,
+                            const InternalKey* end,
+                            std::vector<SSZoneMetaData*>* inputs);
+
  private:
   friend class ZnsVersionSet;
   friend class ZnsCompaction;

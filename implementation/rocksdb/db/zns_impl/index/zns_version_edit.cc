@@ -17,6 +17,7 @@ void ZnsVersionEdit::Clear() {
   new_ss_.clear();
   deleted_ss_.clear();
   deleted_range_.clear();
+  compact_pointers_.clear();
   has_comparator_ = false;
   comparator_.clear();
   has_next_ss_number = false;
@@ -62,6 +63,11 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   }
 
   // compaction pointers
+  for (size_t i = 0; i < compact_pointers_.size(); i++) {
+    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kCompactPointer));
+    PutFixed8(dst, compact_pointers_[i].first);  // level
+    PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
+  }
 
   // deleted pointers
   for (const auto& deleted_range : deleted_range_) {
@@ -115,6 +121,8 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
   uint64_t number;
   uint64_t number_second;
   SSZoneMetaData m;
+  InternalKey key;
+
   while (msg == nullptr && GetVarint32(&input, &tag)) {
     versiontag = static_cast<ZnsVersionTag>(tag);
     switch (versiontag) {
@@ -158,6 +166,13 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
           new_ss_.push_back(std::make_pair(level, m));
         } else {
           msg = "new sstable entry";
+        }
+        break;
+      case ZnsVersionTag::kCompactPointer:
+        if (GetLevel(&input, &level) && GetInternalKey(&input, &key)) {
+          compact_pointers_.push_back(std::make_pair(level, key));
+        } else {
+          msg = "compaction pointer";
         }
         break;
       default:

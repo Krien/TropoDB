@@ -1045,7 +1045,6 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/persistence/zns_wal.cc
   db/zns_impl/persistence/zns_manifest.cc
   db/zns_impl/table/zns_sstable_coding.cc
-  db/zns_impl/table/zns_sstable.cc
   db/zns_impl/table/l0_zns_sstable.cc
   db/zns_impl/table/ln_zns_sstable.cc
   db/zns_impl/table/zns_table_cache.cc

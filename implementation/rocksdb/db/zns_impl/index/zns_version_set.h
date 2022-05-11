@@ -75,7 +75,13 @@ class ZnsVersionSet {
            1;
   }
 
-  Status Compact(ZnsCompaction* c);
+  void GetRange(const std::vector<SSZoneMetaData*>& inputs,
+                InternalKey* smallest, InternalKey* largest);
+  void GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
+                 const std::vector<SSZoneMetaData*>& inputs2,
+                 InternalKey* smallest, InternalKey* largest);
+  void SetupOtherInputs(ZnsCompaction* c);
+  ZnsCompaction* PickCompaction();
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
   Status Recover();
@@ -101,6 +107,10 @@ class ZnsVersionSet {
   uint64_t ss_number_;
   bool logged_;
   ZnsTableCache* table_cache_;
+
+  // Per-level key at which the next compaction at that level should start.
+  // Either an empty string, or a valid InternalKey.
+  std::array<std::string, ZnsConfig::level_count> compact_pointer_;
 };
 
 class ZnsVersionSet::Builder {
@@ -136,7 +146,7 @@ class ZnsVersionSet::Builder {
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;
-  std::array<LevelState,ZnsConfig::level_count> levels_;
+  std::array<LevelState, ZnsConfig::level_count> levels_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

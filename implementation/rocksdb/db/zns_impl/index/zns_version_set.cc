@@ -36,7 +36,7 @@ ZnsVersionSet::~ZnsVersionSet() {
 }
 
 void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
-  assert(v->refs_ == 0);
+  assert(v->Getref() == 0);
   assert(v != current_);
   if (current_ != nullptr) {
     current_->Unref();
@@ -173,10 +173,162 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   return s;
 }
 
-Status ZnsVersionSet::Compact(ZnsCompaction* c) {
-  c->SetupTargets(current_->ss_[current_->compaction_level_],
-                  current_->ss_[current_->compaction_level_ + 1]);
-  return Status::OK();
+// Stores the minimal range that covers all entries in inputs in
+// *smallest, *largest.
+// REQUIRES: inputs is not empty
+void ZnsVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
+                             InternalKey* smallest, InternalKey* largest) {
+  assert(!inputs.empty());
+  smallest->Clear();
+  largest->Clear();
+  for (size_t i = 0; i < inputs.size(); i++) {
+    SSZoneMetaData* m = inputs[i];
+    if (i == 0) {
+      *smallest = m->smallest;
+      *largest = m->largest;
+    } else {
+      if (icmp_.Compare(m->smallest, *smallest) < 0) {
+        *smallest = m->smallest;
+      }
+      if (icmp_.Compare(m->largest, *largest) > 0) {
+        *largest = m->largest;
+      }
+    }
+  }
+}
+
+void ZnsVersionSet::GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
+                              const std::vector<SSZoneMetaData*>& inputs2,
+                              InternalKey* smallest, InternalKey* largest) {
+  std::vector<SSZoneMetaData*> all = inputs1;
+  all.insert(all.end(), inputs2.begin(), inputs2.end());
+  GetRange(all, smallest, largest);
+}
+
+// Finds the largest key in a vector of files. Returns true if files is not
+// empty.
+bool FindLargestKey(const InternalKeyComparator& icmp,
+                    const std::vector<SSZoneMetaData*>& ss,
+                    InternalKey* largest_key) {
+  if (ss.empty()) {
+    return false;
+  }
+  *largest_key = ss[0]->largest;
+  for (size_t i = 1; i < ss.size(); ++i) {
+    SSZoneMetaData* m = ss[i];
+    if (icmp.Compare(m->largest, *largest_key) > 0) {
+      *largest_key = m->largest;
+    }
+  }
+  return true;
+}
+
+// Finds minimum file b2=(l2, u2) in level file for which l2 > u1 and
+// user_key(l2) = user_key(u1)
+SSZoneMetaData* FindSmallestBoundarySS(
+    const InternalKeyComparator& icmp,
+    const std::vector<SSZoneMetaData*>& level_ss,
+    const InternalKey& largest_key) {
+  const Comparator* user_cmp = icmp.user_comparator();
+  SSZoneMetaData* smallest_boundary_ss = nullptr;
+  for (size_t i = 0; i < level_ss.size(); ++i) {
+    SSZoneMetaData* m = level_ss[i];
+    if (icmp.Compare(m->smallest, largest_key) > 0 &&
+        user_cmp->Compare(m->smallest.user_key(), largest_key.user_key()) ==
+            0) {
+      if (smallest_boundary_ss == nullptr ||
+          icmp.Compare(m->smallest, smallest_boundary_ss->smallest) < 0) {
+        smallest_boundary_ss = m;
+      }
+    }
+  }
+  return smallest_boundary_ss;
+}
+
+void AddBoundaryInputs(const InternalKeyComparator& icmp,
+                       const std::vector<SSZoneMetaData*>& level_ss,
+                       std::vector<SSZoneMetaData*>* compaction_ss) {
+  InternalKey largest_key;
+
+  // Quick return if compaction_files is empty.
+  if (!FindLargestKey(icmp, *compaction_ss, &largest_key)) {
+    return;
+  }
+
+  bool continue_searching = true;
+  while (continue_searching) {
+    SSZoneMetaData* smallest_boundary_ss =
+        FindSmallestBoundarySS(icmp, level_ss, largest_key);
+
+    // If a boundary file was found advance largest_key, otherwise we're done.
+    if (smallest_boundary_ss != NULL) {
+      compaction_ss->push_back(smallest_boundary_ss);
+      largest_key = smallest_boundary_ss->largest;
+    } else {
+      continue_searching = false;
+    }
+  }
+}
+
+void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
+  const uint8_t level = c->first_level_;
+  InternalKey smallest, largest;
+
+  AddBoundaryInputs(icmp_, current_->ss_[level], &c->targets_[0]);
+  GetRange(c->targets_[0], &smallest, &largest);
+
+  current_->GetOverlappingInputs(level + 1, &smallest, &largest,
+                                 &c->targets_[1]);
+  AddBoundaryInputs(icmp_, current_->ss_[level + 1], &c->targets_[1]);
+
+  // Get entire range covered by compaction
+  InternalKey all_start, all_limit;
+  GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
+
+  compact_pointer_[level] = largest.Encode().ToString();
+  c->edit_.SetCompactPointer(level, largest);
+}
+
+ZnsCompaction* ZnsVersionSet::PickCompaction() {
+  ZnsCompaction* c;
+  uint8_t level;
+
+  level = current_->compaction_level_;
+  c = new ZnsCompaction(this, level);
+
+  printf("Compacting from <%d because score is %f, from %f>\n", level,
+         current_->compaction_score_, znssstable_->GetFractionFilled(level));
+
+  // Pick the first file that comes after compact_pointer_[level]
+  for (size_t i = 0; i < current_->ss_[level].size(); i++) {
+    SSZoneMetaData* m = current_->ss_[level][i];
+    if (compact_pointer_[level].empty() ||
+        icmp_.Compare(m->largest.Encode(), compact_pointer_[level]) > 0) {
+      c->targets_[0].push_back(m);
+      break;
+    }
+  }
+  if (c->targets_[0].empty()) {
+    // Wrap-around to the beginning of the key space
+    c->targets_[0].push_back(current_->ss_[level][0]);
+  }
+  c->version_ = current_;
+  c->version_->Ref();
+
+  // Files in level 0 may overlap each other, so pick up all overlapping ones
+  if (level == 0) {
+    InternalKey smallest, largest;
+    GetRange(c->targets_[0], &smallest, &largest);
+    // Note that the next call will discard the file we placed in
+    // c->inputs_[0] earlier and replace it with an overlapping set
+    // which will include the picked file.
+    current_->GetOverlappingInputs(0, &smallest, &largest, &c->targets_[0]);
+    assert(!c->targets_[0].empty());
+  }
+
+  SetupOtherInputs(c);
+
+  return c;
 }
 
 Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
@@ -274,4 +426,3 @@ std::string ZnsVersionSet::DebugString() {
 }
 
 }  // namespace ROCKSDB_NAMESPACE
-;

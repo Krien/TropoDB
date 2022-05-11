@@ -14,26 +14,22 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset)
-    : max_lba_count_(((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
+    : first_level_(first_level),
+      max_lba_count_(((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
                       vset->lba_size_) *
                      vset->lba_size_),
-      vset_(vset) {
-  first_level_ = vset->current_->compaction_level_;
-  printf("Compacting from <%d because score is %f, from %f>\n", first_level_,
-         vset->current_->compaction_score_,
-         vset->znssstable_->GetFractionFilled(first_level_));
+      vset_(vset),
+      version_(nullptr) {
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
 }
 
-ZnsCompaction::~ZnsCompaction() {}
-
-void ZnsCompaction::SetupTargets(const std::vector<SSZoneMetaData*>& t1,
-                                 const std::vector<SSZoneMetaData*>& t2) {
-  targets_[0] = t1;
-  targets_[1] = t2;
+ZnsCompaction::~ZnsCompaction() {
+  if (version_ != nullptr) {
+    version_->Unref();
+  }
 }
 
 Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
@@ -91,7 +87,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
     iterators[iterator_index++] = new LNIterator(
         new LNZoneIterator(vset_->icmp_, &targets_[i], first_level_ + i),
         &GetLNIterator, vset_->znssstable_, vset_->icmp_);
-    // printf("Iterators... %d %lu\n", i, iterators_needed);
+    printf("Iterators... %d %lu\n", first_level_ + i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }

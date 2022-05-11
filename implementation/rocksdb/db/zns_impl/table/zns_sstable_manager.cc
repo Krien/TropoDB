@@ -12,52 +12,17 @@
 #include "table/internal_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-ZNSSSTableManager* ZNSSSTableManager::NewZNSSTableManager(
-    SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
-    const uint64_t min_zone, const uint64_t max_zone) {
-  uint64_t zone_head = min_zone;
-  uint64_t zone_step;
-  uint64_t num_zones = max_zone - min_zone;
-  std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count> ranges;
-  // Validate
-  if (min_zone > max_zone || num_zones < ZnsConfig::level_count * 2) {
-    return nullptr;
-  }
-  // Distribute
-  uint64_t distr =
-      std::accumulate(ZnsConfig::ss_distribution,
-                      ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
-  for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-    zone_step = (num_zones / distr) * ZnsConfig::ss_distribution[i];
-    zone_step = zone_step < ZnsConfig::min_ss_zone_count
-                    ? ZnsConfig::min_ss_zone_count
-                    : zone_step;
-    ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
-    printf("ranges %lu %lu \n", ranges[i].first, ranges[i].second);
-    zone_head += zone_step;
-  }
-  zone_step = info.max_lba / info.zone_size - zone_head;
-  ranges[ZnsConfig::level_count - 1] =
-      std::make_pair(zone_head, zone_head + zone_step);
-  printf("ranges %lu %lu \n", ranges[ZnsConfig::level_count - 1].first,
-         ranges[ZnsConfig::level_count - 1].second);
-  // Create
-  return new ZNSSSTableManager(channel_factory, info, ranges);
-}
-
-ZNSSSTableManager::ZNSSSTableManager(
-    SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
-    const std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count>&
-        ranges)
-    : channel_factory_(channel_factory), ranges_(ranges) {
+ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
+                                     const SZD::DeviceInfo& info,
+                                     const RangeArray& ranges)
+    : ranges_(ranges), channel_factory_(channel_factory) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
   // Create tables
-  sstable_wal_level_[0] = new L0ZnsSSTable(channel_factory_, info,
-                                           ranges[0].first, ranges[0].second);
+  sstable_level_[0] = new L0ZnsSSTable(channel_factory_, info, ranges[0].first,
+                                       ranges[0].second);
   for (size_t level = 1; level < ZnsConfig::level_count; level++) {
-    sstable_wal_level_[level] = new LNZnsSSTable(
+    sstable_level_[level] = new LNZnsSSTable(
         channel_factory_, info, ranges[level].first, ranges[level].second);
   }
   // Increase ranges
@@ -70,7 +35,7 @@ ZNSSSTableManager::ZNSSSTableManager(
 ZNSSSTableManager::~ZNSSSTableManager() {
   // printf("Deleting SSTable manager.\n");
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (sstable_wal_level_[i] != nullptr) delete sstable_wal_level_[i];
+    if (sstable_level_[i] != nullptr) delete sstable_level_[i];
   }
   channel_factory_->Unref();
   channel_factory_ = nullptr;
@@ -85,7 +50,7 @@ Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
                                        const Slice& content,
                                        SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->WriteSSTable(content, meta);
+  return sstable_level_[level]->WriteSSTable(content, meta);
 }
 
 Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
@@ -98,7 +63,7 @@ Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
   if (!s.ok()) {
     return s;
   }
-  s = sstable_wal_level_[level2]->WriteSSTable(original, meta);
+  s = sstable_level_[level2]->WriteSSTable(original, meta);
   delete[] original.data();
   return s;
 }
@@ -106,13 +71,13 @@ Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
 bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
                                              const Slice& slice) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->EnoughSpaceAvailable(slice);
+  return sstable_level_[level]->EnoughSpaceAvailable(slice);
 }
 
 Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
                                            const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->InvalidateSSZone(meta);
+  return sstable_level_[level]->InvalidateSSZone(meta);
 }
 
 Status ZNSSSTableManager::SetValidRangeAndReclaim(
@@ -120,31 +85,37 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(
     const uint64_t live_head) const {
   assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
-  uint64_t written_tail = sstable_wal_level_[level]->GetTail();
+  uint64_t written_tail = sstable_level_[level]->GetTail();
   if (live_tail == written_tail) {
     return Status::OK();
   } else if (live_tail < written_tail) {
     meta.lba = written_tail;
     meta.lba_count = ranges_[level].second - written_tail;
-    printf("Invalidating data from %u %lu %lu \n", level, meta.lba,
-           meta.lba_count);
-    Status s = sstable_wal_level_[level]->InvalidateSSZone(meta);
+    Status s = sstable_level_[level]->InvalidateSSZone(meta);
+    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
+           level, meta.lba, meta.lba_count, GetFractionFilled(level),
+           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
+           ranges_[level].first, ranges_[level].second);
     if (!s.ok()) return s;
     meta.lba = ranges_[level].first;
     meta.lba_count = live_tail - meta.lba;
     if (meta.lba_count == 0) {
       return Status::OK();
     }
-    s = sstable_wal_level_[level]->InvalidateSSZone(meta);
-    printf("Invalidating data from %u %lu %lu %f\n", level, meta.lba,
-           meta.lba_count, GetFractionFilled(level));
+    s = sstable_level_[level]->InvalidateSSZone(meta);
+    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
+           level, meta.lba, meta.lba_count, GetFractionFilled(level),
+           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
+           ranges_[level].first, ranges_[level].second);
     return s;
   } else {
     meta.lba = written_tail;
     meta.lba_count = live_tail - written_tail;
-    Status s = sstable_wal_level_[level]->InvalidateSSZone(meta);
-    printf("Invalidating data from %u %lu %lu %f\n", level, meta.lba,
-           meta.lba_count, GetFractionFilled(level));
+    Status s = sstable_level_[level]->InvalidateSSZone(meta);
+    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
+           level, meta.lba, meta.lba + meta.lba_count, GetFractionFilled(level),
+           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
+           ranges_[level].first, ranges_[level].second);
     return s;
   }
 }
@@ -155,36 +126,36 @@ Status ZNSSSTableManager::Get(const uint8_t level,
                               const SSZoneMetaData& meta,
                               EntryStatus* status) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
+  return sstable_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
 }
 
 Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
                                       const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->ReadSSTable(sstable, meta);
+  return sstable_level_[level]->ReadSSTable(sstable, meta);
 }
 
 L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
-  return dynamic_cast<L0ZnsSSTable*>(sstable_wal_level_[0]);
+  return dynamic_cast<L0ZnsSSTable*>(sstable_level_[0]);
 }
 
 Iterator* ZNSSSTableManager::NewIterator(
     const uint8_t level, const SSZoneMetaData& meta,
     const InternalKeyComparator& icmp) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->NewIterator(meta, icmp);
+  return sstable_level_[level]->NewIterator(meta, icmp);
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
                                               SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_wal_level_[level]->NewBuilder(meta);
+  return sstable_level_[level]->NewBuilder(meta);
 }
 
 Status ZNSSSTableManager::Recover() {
   Status s = Status::OK();
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (!(s = sstable_wal_level_[i]->Recover()).ok()) {
+    if (!(s = sstable_level_[i]->Recover()).ok()) {
       return s;
     }
   }
@@ -193,8 +164,8 @@ Status ZNSSSTableManager::Recover() {
 
 double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  uint64_t head = sstable_wal_level_[level]->GetHead();
-  uint64_t tail = sstable_wal_level_[level]->GetTail();
+  uint64_t head = sstable_level_[level]->GetHead();
+  uint64_t tail = sstable_level_[level]->GetTail();
   uint64_t sum =
       head >= tail
           ? (head - tail)
@@ -261,6 +232,40 @@ size_t ZNSSSTableManager::FindSSTableIndex(
     }
   }
   return right;
+}
+
+std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
+    SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
+    const uint64_t min_zone, const uint64_t max_zone) {
+  uint64_t zone_head = min_zone;
+  uint64_t zone_step;
+  uint64_t num_zones = max_zone - min_zone;
+  RangeArray ranges;
+  // Validate
+  if (min_zone > max_zone || num_zones < ZnsConfig::level_count * 2 ||
+      channel_factory == nullptr) {
+    return {};
+  }
+  // Distribute
+  uint64_t distr =
+      std::accumulate(ZnsConfig::ss_distribution,
+                      ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
+  for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
+    zone_step = (num_zones / distr) * ZnsConfig::ss_distribution[i];
+    zone_step = zone_step < ZnsConfig::min_ss_zone_count
+                    ? ZnsConfig::min_ss_zone_count
+                    : zone_step;
+    ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
+    zone_head += zone_step;
+  }
+  // Last zone will also get the remainer.
+  zone_step = max_zone - zone_head;
+  ranges[ZnsConfig::level_count - 1] =
+      std::make_pair(zone_head, zone_head + zone_step);
+  zone_head += zone_step;
+  assert(zone_head == max_zone);
+  // Create
+  return new ZNSSSTableManager(channel_factory, info, ranges);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

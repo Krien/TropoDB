@@ -21,11 +21,9 @@
 namespace ROCKSDB_NAMESPACE {
 class ZnsCompaction {
  public:
-  ZnsCompaction(ZnsVersionSet* vset);
+  ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level);
   ~ZnsCompaction();
 
-  void SetupTargets(const std::vector<SSZoneMetaData*>& t1,
-                    const std::vector<SSZoneMetaData*>& t2);
   void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
   bool IsTrivialMove() const;
   Status DoTrivialMove(ZnsVersionEdit* edit);
@@ -33,6 +31,7 @@ class ZnsCompaction {
   Status DoCompaction(ZnsVersionEdit* edit);
 
  private:
+  friend class ZnsVersionSet;
   static Iterator* GetLNIterator(void* arg, const Slice& file_value,
                                  const InternalKeyComparator& icmp);
   Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,

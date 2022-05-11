@@ -96,13 +96,12 @@ void DBImplZNS::BackgroundCompaction() {
   ZnsVersionEdit edit;
   {
     // printf("  Compact LN...\n");
-    ZnsCompaction compaction(versions_);
-    versions_->Compact(&compaction);
-    compaction.MarkStaleTargetsReusable(&edit);
+    ZnsCompaction* c = versions_->PickCompaction();
+    c->MarkStaleTargetsReusable(&edit);
     if (false) {
-      s = compaction.DoTrivialMove(&edit);
+      s = c->DoTrivialMove(&edit);
     } else {
-      s = compaction.DoCompaction(&edit);
+      s = c->DoCompaction(&edit);
     }
   }
   mutex_.Lock();

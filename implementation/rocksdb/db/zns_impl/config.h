@@ -36,6 +36,8 @@ constexpr static uint64_t max_bytes_sstable_ =
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
 constexpr static uint64_t max_zone =
     128; /**< Maximum zone to use for database*/
+constexpr static size_t max_channels =
+    0x100; /**< Used to ensure that there is no channel leak. */
 
 // Configs are asking for trouble... As they say in security, never trust user
 // input! Even/especially your own.

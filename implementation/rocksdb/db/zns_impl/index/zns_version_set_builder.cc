@@ -40,6 +40,12 @@ ZnsVersionSet::Builder::~Builder() {
 // Apply all of the edits in *edit to the current state.
 void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
   // TODO Update compaction pointers
+  for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
+    const uint8_t level = edit->compact_pointers_[i].first;
+    vset_->compact_pointer_[level] =
+        edit->compact_pointers_[i].second.Encode().ToString();
+  }
+
   // Delete files
   for (const auto& deleted_ss_set_kvp : edit->deleted_ss_) {
     const uint8_t level = deleted_ss_set_kvp.first;
