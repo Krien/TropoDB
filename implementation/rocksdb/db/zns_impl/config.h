@@ -39,6 +39,12 @@ constexpr static uint64_t max_zone =
 constexpr static size_t max_channels =
     0x100; /**< Used to ensure that there is no channel leak. */
 
+constexpr static bool use_sstable_encoding =
+    true; /**< If rle should be used for SSTables. */
+constexpr static uint32_t max_sstable_encoding = 16; /**< RLE max size. */
+constexpr static const char* deadbeef =
+    "\xaf\xeb\xad\xde"; /**< Used for placeholder strings*/
+
 // Configs are asking for trouble... As they say in security, never trust user
 // input! Even/especially your own.
 static_assert(level_count > 1 &&
@@ -52,6 +58,7 @@ static_assert(min_ss_zone_count > 1);
 static_assert(min_zone < max_zone);
 static_assert(max_zone > manifest_zones + zones_foreach_wal * wal_count +
                              min_ss_zone_count * level_count);
+static_assert(!use_sstable_encoding || max_sstable_encoding > 0);
 
 }  // namespace ZnsConfig
 }  // namespace ROCKSDB_NAMESPACE

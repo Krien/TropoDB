@@ -1,7 +1,9 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
+#include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_coding.h"
 
@@ -10,9 +12,19 @@ namespace ROCKSDB_NAMESPACE {
 class L0ZnsSSTable::Builder : public SSTableBuilder {
  public:
   Builder(L0ZnsSSTable* table, SSZoneMetaData* meta)
-      : table_(table), meta_(meta), buffer_(""), started_(false) {
+      : table_(table),
+        meta_(meta),
+        buffer_(""),
+        kv_numbers_(0),
+        started_(false),
+        counter_(0) {
     meta_->lba_count = 0;
     buffer_.clear();
+    kv_pair_offsets_.clear();
+    if (ZnsConfig::use_sstable_encoding) {
+      kv_pair_offsets_.push_back(0);
+      last_key_.clear();
+    }
   }
   ~Builder() {}
 
@@ -21,14 +33,47 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
       meta_->smallest.DecodeFrom(key);
       started_ = true;
     }
-    EncodeKVPair(&buffer_, key, value);
+
+    if (ZnsConfig::use_sstable_encoding) {
+      Slice last_key_piece(last_key_);
+      size_t shared = 0;
+      if (counter_ < ZnsConfig::max_sstable_encoding) {
+        const size_t min_length = std::min(last_key_piece.size(), key.size());
+        while ((shared < min_length) &&
+               (last_key_piece[shared] == key[shared])) {
+          shared++;
+        }
+      } else {
+        // Restart compression
+        kv_pair_offsets_.push_back(buffer_.size());
+        counter_ = 0;
+      }
+      const size_t non_shared = key.size() - shared;
+      // Add "<shared><non_shared><value_size>" to buffer_
+      PutVarint32(&buffer_, shared);
+      PutVarint32(&buffer_, non_shared);
+      PutVarint32(&buffer_, value.size());
+
+      // Add string delta to buffer_ followed by value
+      buffer_.append(key.data() + shared, non_shared);
+      buffer_.append(value.data(), value.size());
+
+      // Update state
+      last_key_.resize(shared);
+      last_key_.append(key.data() + shared, non_shared);
+      assert(Slice(last_key_) == key);
+      counter_++;
+    } else {
+      EncodeKVPair(&buffer_, key, value);
+      kv_pair_offsets_.push_back(buffer_.size());
+    }
     meta_->largest.DecodeFrom(key);
-    kv_pair_offsets_.push_back(buffer_.size());
+    kv_numbers_++;
     return Status::OK();
   }
 
   Status Finalise() override {
-    meta_->numbers = kv_pair_offsets_.size();
+    meta_->numbers = kv_numbers_;
     EncodeSSTablePreamble(&buffer_, kv_pair_offsets_);
     return Status::OK();
   }
@@ -44,8 +89,11 @@ class L0ZnsSSTable::Builder : public SSTableBuilder {
   SSZoneMetaData* meta_;
   std::string buffer_;
   std::vector<uint32_t> kv_pair_offsets_;
+  uint32_t kv_numbers_;
   bool started_;
-};
+  uint32_t counter_;
+  std::string last_key_;
+};  // namespace ROCKSDB_NAMESPACE
 
 L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
@@ -204,9 +252,15 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     return nullptr;
   }
   char* data = (char*)sstable.data();
-  uint32_t count = DecodeFixed32(data);
-  return new SSTableIterator(data, sstable.size(), (size_t)count, &ParseNext,
-                             cmp);
+  if (ZnsConfig::use_sstable_encoding) {
+    uint32_t size = DecodeFixed32(data);
+    uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    return new SSTableIteratorCompressed(cmp, data, size, count);
+  } else {
+    uint32_t count = DecodeFixed32(data);
+    return new SSTableIterator(data, sstable.size(), (size_t)count, &ParseNext,
+                               cmp);
+  }
 }
 
 Status L0ZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }

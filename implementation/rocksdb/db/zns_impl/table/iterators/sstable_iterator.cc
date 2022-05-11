@@ -1,5 +1,6 @@
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 
+#include "db/zns_impl/config.h"
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -14,8 +15,8 @@ SSTableIterator::SSTableIterator(char* data, const size_t data_size,
       nextf_(nextf),
       index_(count + 1),
       walker_(data_ + kv_pairs_offset_),
-      current_val_("deadbeef"),
-      current_key_("deadbeef"),
+      current_val_(ZnsConfig::deadbeef),
+      current_key_(ZnsConfig::deadbeef),
       restart_index_(0) {}
 
 SSTableIterator::~SSTableIterator() { free(data_); };
