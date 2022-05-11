@@ -75,9 +75,17 @@ Status ZnsTableCache::Get(const ReadOptions& options,
     Iterator* it = reinterpret_cast<Iterator*>(cache_->Value(handle));
     it->Seek(key);
     if (it->Valid()) {
-      *value = it->value().ToString();
-      *status =
-          it->value().size() > 0 ? EntryStatus::found : EntryStatus::deleted;
+      ParsedInternalKey parsed_key;
+      if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
+        printf("corrupt key in cache\n");
+      }
+      if (parsed_key.type == kTypeDeletion) {
+        *status = EntryStatus::deleted;
+        value->clear();
+      } else {
+        *status = EntryStatus::found;
+        *value = it->value().ToString();
+      }
     } else {
       *status = EntryStatus::notfound;
     }

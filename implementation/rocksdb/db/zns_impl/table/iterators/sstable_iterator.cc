@@ -12,7 +12,7 @@ SSTableIterator::SSTableIterator(char* data, const size_t data_size,
       count_(count),
       icmp_(icmp),
       nextf_(nextf),
-      index_(count),
+      index_(count + 1),
       walker_(data_ + kv_pairs_offset_),
       current_val_("deadbeef"),
       current_key_("deadbeef"),
@@ -22,15 +22,18 @@ SSTableIterator::~SSTableIterator() { free(data_); };
 
 void SSTableIterator::Seek(const Slice& target) {
   Slice target_ptr_stripped = ExtractUserKey(target);
-
   // binary search as seen in LevelDB.
   size_t left = 0;
   size_t right = count_ - 1;
   int current_key_compare = 0;
+  ParsedInternalKey parsed_key;
 
   if (Valid()) {
+    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
+      printf("corrupt key %lu %lu\n", index_, count_);
+    }
     current_key_compare =
-        icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped);
+        icmp_.Compare(parsed_key.user_key, target_ptr_stripped);
     if (current_key_compare < 0) {
       left = restart_index_;  // index_ > 2 ? index_ - 2 : 0;
     } else if (current_key_compare > 0) {
@@ -46,7 +49,10 @@ void SSTableIterator::Seek(const Slice& target) {
     mid = (left + right + 1) / 2;
     SeekToRestartPoint(mid);
     ParseNextKey();
-    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) < 0) {
+    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
+      printf("corrupt key %lu %lu\n", index_, count_);
+    }
+    if (icmp_.Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
       left = mid;
     } else {
       right = mid - 1;
@@ -55,7 +61,10 @@ void SSTableIterator::Seek(const Slice& target) {
   SeekToRestartPoint(left);
   ParseNextKey();
   while (Valid()) {
-    if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
+    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
+      printf("corrupt key %lu %lu\n", index_, count_);
+    }
+    if (icmp_.Compare(parsed_key.user_key, target_ptr_stripped) == 0) {
       restart_index_ = left;
       break;
     }

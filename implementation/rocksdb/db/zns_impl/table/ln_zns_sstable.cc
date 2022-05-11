@@ -148,9 +148,18 @@ Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
   Slice key_ptr_stripped = ExtractUserKey(key_ptr);
   while (counter < count) {
     ParseNext(&walker, &key, &value);
-    if (user_comparator->Compare(ExtractUserKey(key), key_ptr_stripped) == 0) {
-      *status = value.size() > 0 ? EntryStatus::found : EntryStatus::deleted;
-      value_ptr->assign(value.data(), value.size());
+    ParsedInternalKey parsed_key;
+    if (!(s = ParseInternalKey(key, &parsed_key, false)).ok()) {
+      printf("corrupt key LN %s\n", s.getState());
+      continue;
+    }
+    if (user_comparator->Compare(parsed_key.user_key, key_ptr_stripped) == 0) {
+      if (parsed_key.type == kTypeDeletion) {
+        value_ptr->clear();
+      } else {
+        *status = EntryStatus::found;
+        value_ptr->assign(value.data(), value.size());
+      }
       delete[] sstable.data();
       return Status::OK();
     }

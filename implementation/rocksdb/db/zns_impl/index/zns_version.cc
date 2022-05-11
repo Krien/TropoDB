@@ -54,13 +54,22 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
 
   // L0 (no sorting of L0 yet, because it is an append-only log. Earlier zones
   // are guaranteed to be older). So start from end to begin.
+  std::vector<SSZoneMetaData*> tmp;
+  tmp.reserve(ss_[0].size());
   for (size_t i = ss_[0].size(); i != 0; --i) {
-    SSZoneMetaData* m = ss_[0][i - 1];
-    if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
-        ucmp->Compare(key, m->largest.user_key()) <= 0) {
-      s = vset_->table_cache_->Get(options, m, 0, internal_key, value, &status);
-      // s = znssstable->Get(0, vset_->icmp_, internal_key, value, tmp[i],
-      //                     &status);
+    SSZoneMetaData* z = ss_[0][i - 1];
+    if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
+        ucmp->Compare(key, z->largest.user_key()) <= 0) {
+      tmp.push_back(z);
+    }
+  }
+  if (!tmp.empty()) {
+    std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
+      return a->number > b->number;
+    });
+    for (uint32_t i = 0; i < tmp.size(); i++) {
+      s = vset_->table_cache_->Get(options, tmp[i], 0, internal_key, value,
+                                   &status);
       if (s.ok()) {
         if (status == EntryStatus::notfound) {
           continue;
