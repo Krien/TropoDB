@@ -21,7 +21,8 @@ enum class ZnsRecordType : uint32_t {
   kMiddleType = 3,
   kLastType = 4
 };
-static const uint32_t kZnsHeaderSize = 4 + 2 + 1;
+// Header is checksum (4 bytes), length (3 bytes), type (1 byte).
+static const uint32_t kZnsHeaderSize = 4 + 3 + 1;
 static const uint32_t kZnsRecordTypeLast =
     static_cast<uint32_t>(ZnsRecordType::kLastType) + 1;
 static_assert(kZnsRecordTypeLast == 5);
@@ -38,9 +39,9 @@ class ZnsCommitter {
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
   ~ZnsCommitter();
 
-  bool SpaceEnough(const Slice& data);
-  Status Commit(const Slice& data);
-  Status SafeCommit(const Slice& data);
+  bool SpaceEnough(const Slice& data) const;
+  Status Commit(const Slice& data, uint64_t* lbas = nullptr);
+  Status SafeCommit(const Slice& data, uint64_t* lbas = nullptr);
 
   // Get the commit
   bool GetCommitReader(uint64_t begin, uint64_t end);

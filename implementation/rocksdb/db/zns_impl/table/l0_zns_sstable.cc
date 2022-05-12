@@ -15,7 +15,8 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t min_zone_nr,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr) {}
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr),
+      committer_(&log_, info, true) {}
 
 L0ZnsSSTable::~L0ZnsSSTable() = default;
 
@@ -26,7 +27,7 @@ SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
 }
 
 bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
-  return log_.SpaceLeft(slice.size());
+  return committer_.SpaceEnough(slice);
 }
 
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
@@ -35,12 +36,8 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
     return Status::IOError("Not enough space available for L0");
   }
   meta->lba = log_.GetWriteHead();
-  if (!FromStatus(
-           log_.Append(content.data(), content.size(), &meta->lba_count, false))
-           .ok()) {
-    return Status::IOError("Error during appending\n");
-  }
-  return Status::OK();
+  Status s = committer_.SafeCommit(content, &meta->lba_count);
+  return s;
 }
 
 Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
@@ -70,38 +67,23 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       meta.lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
-  // We are going to reserve some DMA memory for the loop, as we are reading Lba
-  // by lba....
-  uint64_t backed_size = std::min(meta.lba_count * lba_size_, mdts_);
-  if (!(s = FromStatus(buffer_.ReallocBuffer(backed_size))).ok()) {
-    return s;
+
+  sstable->clear();
+  Slice record;
+  std::string* raw_data = new std::string();
+
+  if (!committer_.GetCommitReader(meta.lba, meta.lba + meta.lba_count)) {
+    return Status::MemoryLimit();
   }
-  char* raw_buffer;
-  if (!(s = FromStatus(buffer_.GetBuffer((void**)&raw_buffer))).ok()) {
-    return s;
+  while (committer_.SeekCommitReader(&record)) {
+    raw_data->append(record.data(), record.size());
+  }
+  if (!committer_.CloseCommit()) {
+    return Status::Corruption();
   }
 
-  char* slice_buffer = (char*)calloc(meta.lba_count * lba_size_, sizeof(char));
-  // mdts is always a factor of lba_size, so safe.
-  uint64_t stepsize = mdts_ / lba_size_;
-  uint64_t steps = (meta.lba_count + stepsize - 1) / stepsize;
-  uint64_t current_step_size_bytes = mdts_;
-  uint64_t last_step_size =
-      mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
-  for (uint64_t step = 0; step < steps; ++step) {
-    current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    uint64_t lba = meta.lba + step * stepsize;
-    lba = lba > max_zone_head_ ? min_zone_head_ + (lba - max_zone_head_) : lba;
-    if (!FromStatus(log_.Read(lba, &buffer_, current_step_size_bytes, true))
-             .ok()) {
-      delete[] slice_buffer;
-      return Status::IOError("Error reading SSTable");
-    }
-    memcpy(slice_buffer + step * stepsize * lba_size_, raw_buffer,
-           current_step_size_bytes);
-  }
-  *sstable = Slice((char*)slice_buffer, meta.lba_count * lba_size_);
-  return s;
+  *sstable = Slice(raw_data->data(), raw_data->size());
+  return Status::OK();
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
@@ -150,6 +132,7 @@ Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
     }
   } else {
     *status = EntryStatus::notfound;
+    value_ptr->clear();
   }
   return Status::OK();
 }

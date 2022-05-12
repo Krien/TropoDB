@@ -4,13 +4,13 @@
 #define L0_ZNS_SSTABLE_H
 
 #include "db/zns_impl/memtable/zns_memtable.h"
+#include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
-
 namespace ROCKSDB_NAMESPACE {
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
@@ -38,6 +38,7 @@ class L0ZnsSSTable : public ZnsSSTable {
   friend class ZnsSSTableManagerInternal;
 
   SZD::SZDCircularLog log_;
+  ZnsCommitter committer_;
 };
 
 /**

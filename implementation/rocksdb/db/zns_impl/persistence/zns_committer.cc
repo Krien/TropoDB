@@ -32,14 +32,14 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
 
 ZnsCommitter::~ZnsCommitter() {}
 
-bool ZnsCommitter::SpaceEnough(const Slice& data) {
+bool ZnsCommitter::SpaceEnough(const Slice& data) const {
   size_t fragcount = data.size() / zasl_ + 1;
   size_t size_needed = fragcount * kZnsHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
   return log_->SpaceLeft(size_needed);
 }
 
-Status ZnsCommitter::Commit(const Slice& data) {
+Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();
   size_t left = data.size();
@@ -53,12 +53,17 @@ Status ZnsCommitter::Commit(const Slice& data) {
   }
 
   bool begin = true;
+  uint64_t lbas_iter = 0;
+  if (lbas != nullptr) {
+    *lbas = 0;
+  }
   do {
     uint64_t write_head = log_->GetWriteHead();
     uint64_t zone_head = (write_head / zone_size_) * zone_size_;
     // determine next fragment part.
     size_t avail = ((zone_head + zone_size_) - write_head) * lba_size_;
-    avail = (avail > zasl_ ? zasl_ : avail) - kZnsHeaderSize;
+    avail = (avail > zasl_ ? zasl_ : avail);
+    avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 
     ZnsRecordType type;
@@ -73,19 +78,25 @@ Status ZnsCommitter::Commit(const Slice& data) {
       type = ZnsRecordType::kMiddleType;
     }
     memset(fragment, '\0', zasl_);  // Ensure no stale bits.
+    memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);  // new body.
+    // Build header
     fragment[4] = static_cast<char>(fragment_length & 0xffu);
-    fragment[5] = static_cast<char>(fragment_length >> 8);
-    fragment[6] = static_cast<char>(type);
+    fragment[5] = static_cast<char>((fragment_length >> 8) & 0xffu);
+    fragment[6] = static_cast<char>((fragment_length >> 16) & 0xffu);
+    fragment[7] = static_cast<char>(type);
     // CRC
     uint32_t crc = crc32c::Extend(type_crc_[static_cast<uint32_t>(type)], ptr,
                                   fragment_length);
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment, crc);
     // Actual commit
-    memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);
     s = FromStatus(log_->Append(buffer_, 0, fragment_length + kZnsHeaderSize,
-                                nullptr, false));
+                                &lbas_iter, false));
+    write_head = log_->GetWriteHead();
     zone_head = (write_head / zone_size_) * zone_size_;
+    if (lbas != nullptr) {
+      *lbas += lbas_iter;
+    }
     if (!s.ok()) {
       return s;
     }
@@ -99,11 +110,11 @@ Status ZnsCommitter::Commit(const Slice& data) {
   return s;
 }  // namespace ROCKSDB_NAMESPACE
 
-Status ZnsCommitter::SafeCommit(const Slice& data) {
+Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   if (!SpaceEnough(data)) {
     return Status::IOError("No space left");
   }
-  return Commit(data);
+  return Commit(data, lbas);
 }
 
 bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
@@ -143,15 +154,17 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     buffer_.GetBuffer((void**)&header);
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
-    const uint32_t c = static_cast<uint32_t>(header[6]);
-    ZnsRecordType type = c > kZnsRecordTypeLast
-                             ? ZnsRecordType::kInvalid
-                             : static_cast<ZnsRecordType>(header[6]);
-    const uint32_t length = a | (b << 8);
+    const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
+    const uint32_t d = static_cast<uint32_t>(header[7]);
+    ZnsRecordType type = d > kZnsRecordTypeLast ? ZnsRecordType::kInvalid
+                                                : static_cast<ZnsRecordType>(d);
+    const uint32_t length = a | (b << 8) | (c << 16);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      log_->Read(commit_ptr_ + 1, &buffer_, lba_size_, to_read - lba_size_,
-                 false);
+      buffer_.ReallocBuffer(to_read);
+      buffer_.GetBuffer((void**)&header);
+      // TODO: Could also skip first block, but atm addr is bugged.
+      log_->Read(commit_ptr_, &buffer_, 0, to_read, true);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -160,7 +173,7 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     }
     {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
-      uint32_t actual_crc = crc32c::Value(header + 6, 1 + length);
+      uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
         printf("Corrupt crc %u %u %u\n", length, a, b);
         type = ZnsRecordType::kInvalid;

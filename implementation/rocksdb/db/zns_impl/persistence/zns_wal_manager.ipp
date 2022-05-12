@@ -1,3 +1,8 @@
+#pragma once
+#ifdef ZNS_PLUGIN_ENABLED
+#ifndef ZNS_WAL_MANAGER_IPP
+#define ZNS_WAL_MANAGER_IPP
+
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -169,3 +174,6 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
 }
 
 }  // namespace ROCKSDB_NAMESPACE
+
+#endif
+#endif
