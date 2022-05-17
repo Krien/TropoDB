@@ -89,7 +89,7 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   if (!wal_man_->WALAvailable()) {
-    // printf(" Trying to free WALS...\n");
+    printf(" Trying to free WALS...\n");
     s = wal_man_->ResetOldWALs(&mutex_);
     return;
   }

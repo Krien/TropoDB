@@ -25,9 +25,7 @@ class ZNSWAL : public RefCounter {
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
 
-  inline Status DirectAppend(const Slice& data) {
-    return committer_.SafeCommit(data);
-  }
+  Status DirectAppend(const Slice& data);
   Status Append(const Slice& data);
   Status Close();
   Status Sync();

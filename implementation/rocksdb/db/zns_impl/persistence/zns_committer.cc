@@ -126,7 +126,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     } else {
       type = ZnsRecordType::kMiddleType;
     }
-    memset(fragment, '\0', zasl_);  // Ensure no stale bits.
+    memset(fragment, 0, zasl_);  // Ensure no stale bits.
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);  // new body.
     // Build header
     fragment[4] = static_cast<char>(fragment_length & 0xffu);
@@ -223,7 +223,8 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u\n", length, d);
+        printf("Corrupt crc %u %u %lu %lu\n", length, d, commit_ptr_,
+               commit_end_);
         type = ZnsRecordType::kInvalid;
       }
     }

@@ -19,14 +19,14 @@ namespace ROCKSDB_NAMESPACE {
 ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                const uint64_t max_zone_nr)
-    : buffsize_(info.zasl - info.lba_size),
+    : buffsize_(512),
       pos_(0),
       channel_factory_(channel_factory),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr),
       committer_(&log_, info, true) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
-  buf_ = new char[buffsize_];
+  buf_ = new char[buffsize_ + 1];
 }
 
 ZNSWAL::~ZNSWAL() {
@@ -35,20 +35,27 @@ ZNSWAL::~ZNSWAL() {
   delete[] buf_;
 }
 
-// See LevelDB env_posix. This is the similar, if not the same.
+Status ZNSWAL::DirectAppend(const Slice& data) {
+  char buf[data.size() + 2 * sizeof(uint32_t)];
+  std::memcpy(buf + sizeof(uint32_t), data.data(), data.size());
+  EncodeFixed32(buf, data.size() + sizeof(uint32_t));
+  EncodeFixed32(buf + data.size() + sizeof(uint32_t), 0);
+  return committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint32_t)));
+}
+
+// See LevelDB env_posix. This is similar, but slightly different as we store
+// offsets and do not directly use the committed CRC format.
 Status ZNSWAL::Append(const Slice& data) {
-  std::string new_data;
-  committer_.CommitToString(data, &new_data);
+  size_t write_size = data.size();
+  const char* write_data = data.data();
 
-  size_t write_size = new_data.size();
-  const char* write_data = new_data.data();
-
-  size_t copy_size = std::min(write_size, buffsize_ - pos_);
-  std::memcpy(buf_ + pos_, write_data, copy_size);
-  write_data += copy_size;
-  write_size -= copy_size;
-  pos_ += copy_size;
-  if (write_size == 0) {
+  // [4 bytes for next| N bytes for entry | sentinel ...]
+  size_t required_write_size = write_size + 2 * sizeof(uint32_t);
+  if (pos_ + required_write_size < buffsize_) {
+    EncodeFixed32(buf_ + pos_, pos_ + write_size + sizeof(uint32_t));
+    std::memcpy(buf_ + pos_ + sizeof(uint32_t), write_data, write_size);
+    pos_ += write_size + sizeof(uint32_t);
+    EncodeFixed32(buf_ + pos_, 0);
     return Status::OK();
   }
 
@@ -59,9 +66,11 @@ Status ZNSWAL::Append(const Slice& data) {
   }
 
   // Small writes go to buffer, large writes are written directly.
-  if (write_size < buffsize_) {
-    std::memcpy(buf_, write_data, write_size);
-    pos_ = write_size;
+  if (pos_ + required_write_size < buffsize_) {
+    EncodeFixed32(buf_ + pos_, pos_ + write_size + sizeof(uint32_t));
+    std::memcpy(buf_ + pos_ + sizeof(uint32_t), write_data, write_size);
+    pos_ += write_size + sizeof(uint32_t);
+    EncodeFixed32(buf_ + pos_, 0);
     return Status::OK();
   }
   return DirectAppend(data);
@@ -72,8 +81,9 @@ Status ZNSWAL::Close() { return Sync(); }
 Status ZNSWAL::Sync() {
   Status s = Status::OK();
   if (pos_ > 0) {
-    s = FromStatus(log_.Append(buf_, pos_));
+    s = committer_.SafeCommit(Slice(buf_, pos_ + sizeof(uint32_t)));
     pos_ = 0;
+    memset(buf_, 0, buffsize_);
   }
   return s;
 }
@@ -89,21 +99,43 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   // Iterate over all batches and apply them to the memtable
   committer_.GetCommitReader(log_.GetWriteTail(), log_.GetWriteHead());
   while (committer_.SeekCommitReader(&record)) {
-    WriteBatch batch;
-    s = WriteBatchInternal::SetContents(&batch, record);
-    if (!s.ok()) {
+    uint32_t pos = sizeof(uint32_t);
+    uint32_t upto = DecodeFixed32(record.data());
+    if (upto > record.size()) {
+      s = Status::Corruption();
       break;
     }
-    s = mem->Write(wo, &batch);
-    if (!s.ok()) {
-      break;
-    }
-    // Ensure the sequence number is up to date.
-    const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
-                                    WriteBatchInternal::Count(&batch) - 1;
-    if (last_seq > *seq) {
-      *seq = last_seq;
-    }
+    uint32_t next = DecodeFixed32(record.data() + upto);
+    do {
+      WriteBatch batch;
+      s = WriteBatchInternal::SetContents(
+          &batch, Slice(record.data() + pos, upto - pos));
+      if (!s.ok()) {
+        break;
+      }
+      s = mem->Write(wo, &batch);
+      if (!s.ok()) {
+        break;
+      }
+      // Ensure the sequence number is up to date.
+      const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
+                                      WriteBatchInternal::Count(&batch) - 1;
+      if (last_seq > *seq) {
+        *seq = last_seq;
+      }
+      pos = upto + sizeof(uint32_t);
+      upto = next;
+      if (upto == record.size()) {
+        break;
+      }
+      if (upto > record.size()) {
+        s = Status::Corruption();
+        break;
+      }
+      if (next != 0) {
+        next = DecodeFixed32(record.data() + next);
+      }
+    } while (next > upto || (next == 0 && upto != 0));
   }
   committer_.CloseCommit();
   return s;

@@ -338,6 +338,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       bg_work_finished_signal_.Wait();
     } else {
       // create new WAL
+      wal_->Sync();
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
       wal_->Ref();
