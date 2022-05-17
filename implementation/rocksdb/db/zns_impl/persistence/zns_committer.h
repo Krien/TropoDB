@@ -61,7 +61,8 @@ class ZnsCommitter {
   uint64_t lba_size_;
   uint64_t zasl_;
   // amortise copying
-  SZD::SZDBuffer buffer_;
+  SZD::SZDBuffer read_buffer_;
+  SZD::SZDBuffer write_buffer_;
   bool keep_buffer_;
   // CRC
   std::array<uint32_t, kZnsRecordTypeLast + 1> type_crc_;

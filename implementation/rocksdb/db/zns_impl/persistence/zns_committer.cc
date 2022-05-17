@@ -25,7 +25,8 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
       zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
-      buffer_(0, info.lba_size),
+      read_buffer_(0, info.lba_size),
+      write_buffer_(0, info.lba_size),
       keep_buffer_(keep_buffer),
       scratch_(ZnsConfig::deadbeef) {
   InitTypeCrc(type_crc_);
@@ -45,11 +46,11 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   const char* ptr = data.data();
   size_t left = data.size();
 
-  if (!(s = FromStatus(buffer_.ReallocBuffer(zasl_))).ok()) {
+  if (!(s = FromStatus(write_buffer_.ReallocBuffer(zasl_))).ok()) {
     return s;
   }
   char* fragment;
-  if (!(s = FromStatus(buffer_.GetBuffer((void**)&fragment))).ok()) {
+  if (!(s = FromStatus(write_buffer_.GetBuffer((void**)&fragment))).ok()) {
     return s;
   }
 
@@ -91,8 +92,8 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment, crc);
     // Actual commit
-    s = FromStatus(log_->Append(buffer_, 0, fragment_length + kZnsHeaderSize,
-                                &lbas_iter, false));
+    s = FromStatus(log_->Append(
+        write_buffer_, 0, fragment_length + kZnsHeaderSize, &lbas_iter, false));
     if (lbas != nullptr) {
       *lbas += lbas_iter;
     }
@@ -104,7 +105,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     begin = false;
   } while (s.ok() && left > 0);
   if (!keep_buffer_) {
-    s = FromStatus(buffer_.FreeBuffer());
+    s = FromStatus(write_buffer_.FreeBuffer());
   }
   return s;
 }  // namespace ROCKSDB_NAMESPACE
@@ -124,14 +125,14 @@ bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
   commit_start_ = begin;
   commit_end_ = end;
   commit_ptr_ = commit_start_;
-  if (!FromStatus(buffer_.ReallocBuffer(zasl_)).ok()) {
+  if (!FromStatus(read_buffer_.ReallocBuffer(zasl_)).ok()) {
     return false;
   }
   return true;
 }
 
 bool ZnsCommitter::SeekCommitReader(Slice* record) {
-  if (!has_commit_ || buffer_.GetBufferSize() == 0) {
+  if (!has_commit_ || read_buffer_.GetBufferSize() == 0) {
     printf("FATAL, be sure to first get a commit\n");
     return false;
   }
@@ -147,10 +148,10 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
                                ? zasl_
                                : (commit_end_ - commit_ptr_) * lba_size_;
     // first read header (prevents reading too much)
-    log_->Read(commit_ptr_, &buffer_, 0, lba_size_, true);
+    log_->Read(commit_ptr_, &read_buffer_, 0, lba_size_, true);
     // parse header
     const char* header;
-    buffer_.GetBuffer((void**)&header);
+    read_buffer_.GetBuffer((void**)&header);
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
@@ -160,10 +161,10 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8) | (c << 16);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      buffer_.ReallocBuffer(to_read);
-      buffer_.GetBuffer((void**)&header);
+      read_buffer_.ReallocBuffer(to_read);
+      read_buffer_.GetBuffer((void**)&header);
       // TODO: Could also skip first block, but atm addr is bugged.
-      log_->Read(commit_ptr_, &buffer_, 0, to_read, true);
+      log_->Read(commit_ptr_, &read_buffer_, 0, to_read, true);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -218,7 +219,7 @@ bool ZnsCommitter::CloseCommit() {
   }
   has_commit_ = false;
   if (!keep_buffer_) {
-    buffer_.FreeBuffer();
+    read_buffer_.FreeBuffer();
   }
   scratch_.clear();
   return true;
