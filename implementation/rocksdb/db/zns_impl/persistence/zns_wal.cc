@@ -15,11 +15,7 @@ namespace ROCKSDB_NAMESPACE {
 ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                const uint64_t max_zone_nr)
-    : min_zone_head_(min_zone_nr * info.zone_size),
-      max_zone_head_(max_zone_nr * info.zone_size),
-      zone_size_(info.zone_size),
-      lba_size_(info.lba_size),
-      channel_factory_(channel_factory),
+    : channel_factory_(channel_factory),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr),
       committer_(&log_, info, true) {
   assert(channel_factory_ != nullptr);
@@ -37,7 +33,7 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   WriteOptions wo;
   Slice record;
   // Iterate over all batches and apply them to the memtable
-  committer_.GetCommitReader(min_zone_head_, log_.GetWriteHead());
+  committer_.GetCommitReader(log_.GetWriteTail(), log_.GetWriteHead());
   while (committer_.SeekCommitReader(&record)) {
     WriteBatch batch;
     s = WriteBatchInternal::SetContents(&batch, record);

@@ -39,6 +39,7 @@ class L0ZnsSSTable : public ZnsSSTable {
 
   SZD::SZDCircularLog log_;
   ZnsCommitter committer_;
+  port::Mutex mutex_;  // TODO: find a way to remove the mutex...
 };
 
 /**

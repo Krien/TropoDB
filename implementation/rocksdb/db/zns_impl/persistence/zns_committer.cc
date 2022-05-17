@@ -1,6 +1,7 @@
 #include "db/zns_impl/persistence/zns_committer.h"
 
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -26,7 +27,7 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
       zasl_(info.zasl),
       buffer_(0, info.lba_size),
       keep_buffer_(keep_buffer),
-      scratch_("\xef\xbe\xad\xde") {
+      scratch_(ZnsConfig::deadbeef) {
   InitTypeCrc(type_crc_);
 }
 
@@ -92,8 +93,6 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     // Actual commit
     s = FromStatus(log_->Append(buffer_, 0, fragment_length + kZnsHeaderSize,
                                 &lbas_iter, false));
-    write_head = log_->GetWriteHead();
-    zone_head = (write_head / zone_size_) * zone_size_;
     if (lbas != nullptr) {
       *lbas += lbas_iter;
     }
@@ -171,11 +170,12 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     if (kZnsHeaderSize + length > to_read) {
       type = ZnsRecordType::kInvalid;
     }
+    // Validate CRC
     {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %u\n", length, a, b);
+        printf("Corrupt crc %u %u\n", length, d);
         type = ZnsRecordType::kInvalid;
       }
     }

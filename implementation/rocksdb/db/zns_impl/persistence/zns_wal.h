@@ -38,11 +38,6 @@ class ZNSWAL : public RefCounter {
   void MarkInactive() { committer_.ClearBuffer();}
 
  private:
-  // const after initialisation
-  const uint64_t min_zone_head_;
-  const uint64_t max_zone_head_;
-  const uint64_t zone_size_;
-  const uint64_t lba_size_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;

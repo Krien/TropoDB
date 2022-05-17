@@ -52,11 +52,14 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   // We are going to reserve some DMA memory for the loop, as we are reading Lba
   // by lba....
   uint64_t backed_size = std::min(meta.lba_count * lba_size_, mdts_);
+  mutex_.Lock();
   if (!(s = FromStatus(buffer_.ReallocBuffer(backed_size))).ok()) {
+    mutex_.Unlock();
     return s;
   }
   char* raw_buffer;
   if (!(s = FromStatus(buffer_.GetBuffer((void**)&raw_buffer))).ok()) {
+    mutex_.Unlock();
     return s;
   }
 
@@ -75,11 +78,13 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     if (!FromStatus(log_.Read(addr, &buffer_, current_step_size_bytes, true))
              .ok()) {
       delete[] slice_buffer;
+      mutex_.Unlock();
       return Status::IOError("Error reading SSTable");
     }
     memcpy(slice_buffer + step * stepsize * lba_size_, raw_buffer,
            current_step_size_bytes);
   }
+  mutex_.Unlock();
   *sstable = Slice((char*)slice_buffer, meta.lba_count * lba_size_);
   return s;
 }

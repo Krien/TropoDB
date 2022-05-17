@@ -34,6 +34,7 @@ class LNZnsSSTable : public ZnsSSTable {
 
  private:
   SZD::SZDCircularLog log_;
+  port::Mutex mutex_;  // TODO: find a way to remove the mutex...
 };
 }  // namespace ROCKSDB_NAMESPACE
 

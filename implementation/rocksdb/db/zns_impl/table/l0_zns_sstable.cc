@@ -71,14 +71,25 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   sstable->clear();
   Slice record;
   std::string* raw_data = new std::string();
+  bool succeeded_once = false;
 
+  mutex_.Lock();
   if (!committer_.GetCommitReader(meta.lba, meta.lba + meta.lba_count)) {
+    mutex_.Unlock();
     return Status::MemoryLimit();
   }
   while (committer_.SeekCommitReader(&record)) {
+    succeeded_once = true;
     raw_data->append(record.data(), record.size());
   }
   if (!committer_.CloseCommit()) {
+    mutex_.Unlock();
+    return Status::Corruption();
+  }
+  mutex_.Unlock();
+
+  // Committer never succeeded.
+  if (!succeeded_once) {
     return Status::Corruption();
   }
 
@@ -121,7 +132,7 @@ Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      printf("corrupt key in cache\n");
+      printf("corrupt key in L0 SSTable\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;
