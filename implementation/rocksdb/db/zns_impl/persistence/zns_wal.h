@@ -24,20 +24,32 @@ class ZNSWAL : public RefCounter {
   ZNSWAL(const ZNSWAL&) = delete;
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
-  inline Status Append(const Slice& data) {
+
+  inline Status DirectAppend(const Slice& data) {
     return committer_.SafeCommit(data);
   }
-  inline Status Reset() { return FromStatus(log_.ResetAll()); }
+  Status Append(const Slice& data);
+  Status Close();
+  Status Sync();
+
+  inline Status Reset() {
+    pos_ = 0;
+    return FromStatus(log_.ResetAll());
+  }
   inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
-  inline bool Empty() { return log_.Empty(); }
+  inline bool Empty() { return log_.Empty() && pos_ == 0; }
   inline bool SpaceLeft(const Slice& data) {
-    return log_.SpaceLeft(data.size());
+    return log_.SpaceLeft(data.size() + pos_);
   }
 
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
-  void MarkInactive() { committer_.ClearBuffer();}
 
  private:
+  // buffer
+  const size_t buffsize_;
+  WriteBatch batch_;
+  char* buf_;
+  size_t pos_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;

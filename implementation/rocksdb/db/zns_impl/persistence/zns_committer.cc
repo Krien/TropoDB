@@ -41,6 +41,53 @@ bool ZnsCommitter::SpaceEnough(const Slice& data) const {
   return log_->SpaceLeft(size_needed);
 }
 
+Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
+  Status s = Status::OK();
+  const char* ptr = in.data();
+  size_t left = in.size();
+
+  bool begin = true;
+  uint64_t lbas_iter = 0;
+  do {
+    const size_t avail = lba_size_;
+    const size_t fragment_length = (left < avail) ? left : avail;
+
+    ZnsRecordType type;
+    const bool end = (left == fragment_length);
+    if (begin && end) {
+      type = ZnsRecordType::kFullType;
+    } else if (begin) {
+      type = ZnsRecordType::kFirstType;
+    } else if (end) {
+      type = ZnsRecordType::kLastType;
+    } else {
+      type = ZnsRecordType::kMiddleType;
+    }
+    // Build header
+    char header[kZnsHeaderSize];
+    header[4] = static_cast<char>(fragment_length & 0xffu);
+    header[5] = static_cast<char>((fragment_length >> 8) & 0xffu);
+    header[6] = static_cast<char>((fragment_length >> 16) & 0xffu);
+    header[7] = static_cast<char>(type);
+    // CRC
+    uint32_t crc = crc32c::Extend(type_crc_[static_cast<uint32_t>(type)], ptr,
+                                  fragment_length);
+    crc = crc32c::Mask(crc);
+    EncodeFixed32(header, crc);
+    // Actual commit
+    out->append(header, kZnsHeaderSize);
+    out->append(ptr, fragment_length);
+    if (fragment_length + kZnsHeaderSize < lba_size_) {
+      char zeros[lba_size_ - fragment_length - kZnsHeaderSize];
+      out->append(zeros, lba_size_ - fragment_length - kZnsHeaderSize);
+    }
+    ptr += fragment_length;
+    left -= fragment_length;
+    begin = false;
+  } while (s.ok() && left > 0);
+  return s;
+}
+
 Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();

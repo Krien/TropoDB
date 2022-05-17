@@ -40,6 +40,7 @@ class ZnsCommitter {
   ~ZnsCommitter();
 
   bool SpaceEnough(const Slice& data) const;
+  Status CommitToString(const Slice& in, std::string* out);
   Status Commit(const Slice& data, uint64_t* lbas = nullptr);
   Status SafeCommit(const Slice& data, uint64_t* lbas = nullptr);
 

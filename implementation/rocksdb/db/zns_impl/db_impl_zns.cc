@@ -423,7 +423,11 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     {
       wal_->Ref();
       mutex_.Unlock();
-      s = wal_->Append(WriteBatchInternal::Contents(write_batch));
+      if (options.sync) {
+        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch));
+      } else {
+        s = wal_->Append(WriteBatchInternal::Contents(write_batch));
+      }
       // write to memtable
       assert(this->mem_ != nullptr);
       if (s.ok()) {

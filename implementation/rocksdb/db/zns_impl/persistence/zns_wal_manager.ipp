@@ -42,7 +42,10 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
 template <std::size_t N>
 ZnsWALManager<N>::~ZnsWALManager() {
   for (auto i = wals_.begin(); i != wals_.end(); ++i) {
-    if ((*i) != nullptr) (*i)->Unref();
+    if ((*i) != nullptr) {
+      (*i)->Close();
+      (*i)->Unref();
+    }
   }
 }
 
@@ -67,7 +70,7 @@ Status ZnsWALManager<N>::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
     return Status::Busy();
   }
   if (current_wal_ != nullptr) {
-    current_wal_->MarkInactive();
+    current_wal_->Close();
   }
   current_wal_ = wals_[wal_head_];
   if (!current_wal_->Empty()) {
