@@ -118,14 +118,30 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     if (base_iter == base_end) {
       continue;
     }
-    uint64_t first = (*base_iter)->lba;
-    uint64_t last = (*base_iter)->lba + (*base_iter)->lba_count;
+    uint64_t lba = (*base_iter)->lba;
+    uint64_t number = (*base_iter)->number;
+    uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
       edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
-      last = (*base_iter)->lba + (*base_iter)->lba_count;
+      if ((*base_iter)->number < number) {
+        number = (*base_iter)->number;
+        lba = (*base_iter)->lba;
+      }
+      count += +(*base_iter)->lba_count;
     }
-    printf("delete range %u %lu %lu \n", first_level_ + i, first, last);
-    edit->AddDeletedRange(first_level_ + i, std::make_pair(first, last));
+    // Carry over
+    std::pair<uint64_t, uint64_t> new_deleted_range;
+    if (vset_->current_->ss_d_[first_level_ + i].second != 0) {
+      new_deleted_range = std::make_pair(
+          vset_->current_->ss_d_[first_level_ + i].first,
+          count + vset_->current_->ss_d_[first_level_ + i].second);
+    } else {
+      new_deleted_range = std::make_pair(lba, count);
+    }
+
+    printf("delete range %u %lu %lu \n", first_level_ + i,
+           new_deleted_range.first, new_deleted_range.second);
+    edit->AddDeletedRange(first_level_ + i, new_deleted_range);
   }
 }
 

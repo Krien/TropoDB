@@ -424,10 +424,14 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     {
       wal_->Ref();
       mutex_.Unlock();
-      if (options.sync) {
+      // buffering does not really make sense at the moment.
+      // later we might decide to implement "FSync" or "ZoneSync", then it
+      // should be reinstagated.
+      if (true) {
         s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch));
       } else {
         s = wal_->Append(WriteBatchInternal::Contents(write_batch));
+        s = wal_->Sync();
       }
       // write to memtable
       assert(this->mem_ != nullptr);

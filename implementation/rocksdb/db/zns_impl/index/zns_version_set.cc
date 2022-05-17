@@ -76,13 +76,16 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   std::pair<uint64_t, uint64_t> range;
   ZnsVersionEdit edit;
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (current_->ss_d_[i].first == 0) {
+    if (current_->ss_d_[i].second == 0) {
       continue;
     }
     GetLiveZoneRange(i, &range);
-    s = znssstable_->SetValidRangeAndReclaim(i, current_->ss_d_[i].second,
-                                             range.second);
-    edit.AddDeletedRange(i, std::make_pair(0, 0));
+    uint64_t new_deleted_range_lba = current_->ss_d_[i].first;
+    uint64_t new_deleted_range_count = current_->ss_d_[i].second;
+    s = znssstable_->SetValidRangeAndReclaim(i, &new_deleted_range_lba,
+                                             &new_deleted_range_count);
+    edit.AddDeletedRange(
+        i, std::make_pair(new_deleted_range_lba, new_deleted_range_count));
     if (!s.ok()) {
       return s;
     }
@@ -103,6 +106,12 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
       edit.AddSSDefinition(level, m->number, m->lba, m->lba_count, m->numbers,
                            m->smallest, m->largest);
     }
+    std::pair<uint64_t, uint64_t>& range = version->ss_d_[level];
+    edit.AddDeletedRange(level, range);
+    std::string& compact_ptr = compact_pointer_[level];
+    InternalKey ikey;
+    ikey.DecodeFrom(compact_ptr);
+    edit.SetCompactPointer(level, ikey);
   }
   edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);

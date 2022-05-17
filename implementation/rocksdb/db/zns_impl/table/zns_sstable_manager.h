@@ -38,8 +38,8 @@ class ZNSSSTableManager : public RefCounter {
              EntryStatus* entry) const;
   Status InvalidateSSZone(const uint8_t level,
                           const SSZoneMetaData& meta) const;
-  Status SetValidRangeAndReclaim(const uint8_t level, const uint64_t tail,
-                                 const uint64_t head) const;
+  Status SetValidRangeAndReclaim(const uint8_t level, uint64_t* live_tail,
+                                 uint64_t* blocks) const;
   L0ZnsSSTable* GetL0SSTableLog() const;
   Iterator* NewIterator(const uint8_t level, const SSZoneMetaData& meta,
                         const Comparator* cmp) const;
@@ -65,6 +65,7 @@ class ZNSSSTableManager : public RefCounter {
 
   ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);
+  const uint64_t zone_size_;
   // sstables
   RangeArray ranges_;
   SSTableArray sstable_level_;

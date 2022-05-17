@@ -15,7 +15,9 @@ namespace ROCKSDB_NAMESPACE {
 ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                                      const SZD::DeviceInfo& info,
                                      const RangeArray& ranges)
-    : ranges_(ranges), channel_factory_(channel_factory) {
+    : zone_size_(info.zone_size),
+      ranges_(ranges),
+      channel_factory_(channel_factory) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
   // Create tables
@@ -81,44 +83,26 @@ Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
   return sstable_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::SetValidRangeAndReclaim(
-    const uint8_t level, const uint64_t live_tail,
-    const uint64_t live_head) const {
+Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
+                                                  uint64_t* live_tail,
+                                                  uint64_t* blocks) const {
   assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
   uint64_t written_tail = sstable_level_[level]->GetTail();
-  if (live_tail == written_tail) {
-    return Status::OK();
-  } else if (live_tail < written_tail) {
-    meta.lba = written_tail;
-    meta.lba_count = ranges_[level].second - written_tail;
-    Status s = sstable_level_[level]->InvalidateSSZone(meta);
-    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
-           level, meta.lba, meta.lba_count, GetFractionFilled(level),
-           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
-           ranges_[level].first, ranges_[level].second);
-    if (!s.ok()) return s;
-    meta.lba = ranges_[level].first;
-    meta.lba_count = live_tail - meta.lba;
-    if (meta.lba_count == 0) {
-      return Status::OK();
-    }
+
+  meta.lba = *live_tail;
+  uint64_t nexthead = ((meta.lba + *blocks) / zone_size_) * zone_size_;
+  meta.lba_count = nexthead - meta.lba;
+
+  Status s = Status::OK();
+  if (meta.lba_count != 0) {
     s = sstable_level_[level]->InvalidateSSZone(meta);
-    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
-           level, meta.lba, meta.lba_count, GetFractionFilled(level),
-           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
-           ranges_[level].first, ranges_[level].second);
-    return s;
-  } else {
-    meta.lba = written_tail;
-    meta.lba_count = live_tail - written_tail;
-    Status s = sstable_level_[level]->InvalidateSSZone(meta);
-    printf("Invalidating data from %u %lu %lu -- %f -- %lu %lu -- %lu %lu\n",
-           level, meta.lba, meta.lba + meta.lba_count, GetFractionFilled(level),
-           sstable_level_[level]->GetTail(), sstable_level_[level]->GetHead(),
-           ranges_[level].first, ranges_[level].second);
-    return s;
   }
+  if (s.ok()) {
+    *blocks -= meta.lba_count;
+    *live_tail = sstable_level_[level]->GetTail();
+  }
+  return s;
 }
 
 Status ZNSSSTableManager::Get(const uint8_t level,
