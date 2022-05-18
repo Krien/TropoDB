@@ -12,6 +12,9 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 namespace ROCKSDB_NAMESPACE {
+
+static constexpr uint8_t number_of_concurrent_readers = 4;
+
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
  public:
@@ -37,9 +40,16 @@ class L0ZnsSSTable : public ZnsSSTable {
  private:
   friend class ZnsSSTableManagerInternal;
 
+  uint8_t request_read_queue();
+  void release_read_queue();
+
   SZD::SZDCircularLog log_;
   ZnsCommitter committer_;
-  port::Mutex mutex_;  // TODO: find a way to remove the mutex...
+  // light queue inevitable as we can have ONE reader accesssed by ONE thread
+  // concurrently.
+  port::Mutex mutex_;
+  port::CondVar cv_;
+  uint8_t read_queue_;
 };
 
 /**

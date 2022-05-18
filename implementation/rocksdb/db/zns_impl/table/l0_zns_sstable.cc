@@ -15,8 +15,11 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t min_zone_nr,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr, 4),
-      committer_(&log_, info, true) {}
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr,
+           number_of_concurrent_readers),
+      committer_(&log_, info, true),
+      cv_(&mutex_),
+      read_queue_(0) {}
 
 L0ZnsSSTable::~L0ZnsSSTable() = default;
 
@@ -61,6 +64,28 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
   return s;
 }
 
+// TODO: this is better than locking around the entire read, but we have to
+// investigate the performance.
+uint8_t L0ZnsSSTable::request_read_queue() {
+  uint8_t claimed_reader = 0;
+  mutex_.Lock();
+  while (read_queue_ >= number_of_concurrent_readers) {
+    cv_.Wait();
+  }
+  claimed_reader = read_queue_;
+  read_queue_++;
+  // printf("      reader claimed at %u \n", claimed_reader);
+  mutex_.Unlock();
+  return claimed_reader;
+}
+void L0ZnsSSTable::release_read_queue() {
+  mutex_.Lock();
+  assert(read_queue_ > 0);
+  read_queue_--;
+  cv_.SignalAll();
+  mutex_.Unlock();
+}
+
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (meta.lba > max_zone_head_ || meta.lba < min_zone_head_ ||
@@ -73,12 +98,11 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   std::string* raw_data = new std::string();
   bool succeeded_once = false;
 
-  mutex_.Lock();
   ZnsCommitReader reader;
-  s = committer_.GetCommitReader(0, meta.lba, meta.lba + meta.lba_count,
-                                 &reader);
+  s = committer_.GetCommitReader(request_read_queue(), meta.lba,
+                                 meta.lba + meta.lba_count, &reader);
   if (!s.ok()) {
-    mutex_.Unlock();
+    release_read_queue();
     return s;
   }
   while (committer_.SeekCommitReader(reader, &record)) {
@@ -86,10 +110,10 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     raw_data->append(record.data(), record.size());
   }
   if (!committer_.CloseCommit(reader)) {
-    mutex_.Unlock();
+    release_read_queue();
     return Status::Corruption();
   }
-  mutex_.Unlock();
+  release_read_queue();
 
   // Committer never succeeded.
   if (!succeeded_once) {
