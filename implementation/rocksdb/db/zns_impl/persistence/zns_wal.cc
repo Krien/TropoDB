@@ -97,8 +97,10 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   WriteOptions wo;
   Slice record;
   // Iterate over all batches and apply them to the memtable
-  committer_.GetCommitReader(log_.GetWriteTail(), log_.GetWriteHead());
-  while (committer_.SeekCommitReader(&record)) {
+  ZnsCommitReader reader;
+  committer_.GetCommitReader(0, log_.GetWriteTail(), log_.GetWriteHead(),
+                             &reader);
+  while (committer_.SeekCommitReader(reader, &record)) {
     uint32_t pos = sizeof(uint32_t);
     uint32_t upto = DecodeFixed32(record.data());
     if (upto > record.size()) {
@@ -137,7 +139,7 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
       }
     } while (next > upto || (next == 0 && upto != 0));
   }
-  committer_.CloseCommit();
+  committer_.CloseCommit(reader);
   return s;
 }
 

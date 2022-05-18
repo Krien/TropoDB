@@ -21,18 +21,28 @@ static void InitTypeCrc(
 
 ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
                            bool keep_buffer)
-    : log_(log),
-      zone_size_(info.zone_size),
+    : zone_size_(info.zone_size),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
-      read_buffer_(0, info.lba_size),
+      number_of_readers_(log->GetNumberOfReaders()),
+      log_(log),
+      read_buffer_(nullptr),
       write_buffer_(0, info.lba_size),
-      keep_buffer_(keep_buffer),
-      scratch_(ZnsConfig::deadbeef) {
+      keep_buffer_(keep_buffer) {
   InitTypeCrc(type_crc_);
+
+  read_buffer_ = new SZD::SZDBuffer*[number_of_readers_];
+  for (uint8_t i = 0; i < number_of_readers_; i++) {
+    read_buffer_[i] = new SZD::SZDBuffer(0, lba_size_);
+  }
 }
 
-ZnsCommitter::~ZnsCommitter() {}
+ZnsCommitter::~ZnsCommitter() {
+  for (uint8_t i = 0; i < number_of_readers_; i++) {
+    delete read_buffer_[i];
+  }
+  delete[] read_buffer_;
+}
 
 bool ZnsCommitter::SpaceEnough(const Slice& data) const {
   size_t fragcount = data.size() / zasl_ + 1;
@@ -164,41 +174,48 @@ Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   return Commit(data, lbas);
 }
 
-bool ZnsCommitter::GetCommitReader(uint64_t begin, uint64_t end) {
-  if (begin >= end) {
-    return false;
+Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
+                                     uint64_t end, ZnsCommitReader* reader) {
+  if (begin >= end || reader_number >= number_of_readers_) {
+    return Status::InvalidArgument();
   }
-  has_commit_ = true;
-  commit_start_ = begin;
-  commit_end_ = end;
-  commit_ptr_ = commit_start_;
-  if (!FromStatus(read_buffer_.ReallocBuffer(zasl_)).ok()) {
-    return false;
+  reader->commit_start = begin;
+  reader->commit_end = end;
+  reader->commit_ptr = reader->commit_start;
+  reader->reader_nr = reader_number;
+  reader->scratch = ZnsConfig::deadbeef;
+  if (!FromStatus(read_buffer_[reader->reader_nr]->ReallocBuffer(zasl_)).ok()) {
+    return Status::MemoryLimit();
   }
-  return true;
+
+  return Status::OK();
 }
 
-bool ZnsCommitter::SeekCommitReader(Slice* record) {
-  if (!has_commit_ || read_buffer_.GetBufferSize() == 0) {
+bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
+  // buffering issue
+  if (read_buffer_[reader.reader_nr]->GetBufferSize() == 0) {
     printf("FATAL, be sure to first get a commit\n");
     return false;
   }
-  if (commit_ptr_ >= commit_end_) {
+  if (reader.commit_ptr >= reader.commit_end) {
     return false;
   }
-  scratch_.clear();
+  reader.scratch.clear();
   record->clear();
   bool in_fragmented_record = false;
 
-  while (commit_ptr_ < commit_end_ && commit_ptr_ >= commit_start_) {
-    const size_t to_read = (commit_end_ - commit_ptr_) * lba_size_ > zasl_
-                               ? zasl_
-                               : (commit_end_ - commit_ptr_) * lba_size_;
+  while (reader.commit_ptr < reader.commit_end &&
+         reader.commit_ptr >= reader.commit_start) {
+    const size_t to_read =
+        (reader.commit_end - reader.commit_ptr) * lba_size_ > zasl_
+            ? zasl_
+            : (reader.commit_end - reader.commit_ptr) * lba_size_;
     // first read header (prevents reading too much)
-    log_->Read(commit_ptr_, &read_buffer_, 0, lba_size_, true);
+    log_->Read(reader.commit_ptr, *(&read_buffer_[reader.reader_nr]), 0,
+               lba_size_, true, reader.reader_nr);
     // parse header
     const char* header;
-    read_buffer_.GetBuffer((void**)&header);
+    read_buffer_[reader.reader_nr]->GetBuffer((void**)&header);
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
@@ -208,10 +225,11 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
     const uint32_t length = a | (b << 8) | (c << 16);
     // read potential body
     if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
-      read_buffer_.ReallocBuffer(to_read);
-      read_buffer_.GetBuffer((void**)&header);
+      read_buffer_[reader.reader_nr]->ReallocBuffer(to_read);
+      read_buffer_[reader.reader_nr]->GetBuffer((void**)&header);
       // TODO: Could also skip first block, but atm addr is bugged.
-      log_->Read(commit_ptr_, &read_buffer_, 0, to_read, true);
+      log_->Read(reader.commit_ptr, *(&read_buffer_[reader.reader_nr]), 0,
+                 to_read, true, reader.reader_nr);
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -223,53 +241,49 @@ bool ZnsCommitter::SeekCommitReader(Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %lu %lu\n", length, d, commit_ptr_,
-               commit_end_);
+        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
+               reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
     }
-    commit_ptr_ += (length + lba_size_ - 1) / lba_size_;
+    reader.commit_ptr += (length + lba_size_ - 1) / lba_size_;
     switch (type) {
       case ZnsRecordType::kFullType:
-        scratch_.assign(header + kZnsHeaderSize, length);
-        *record = Slice(scratch_);
+        reader.scratch.assign(header + kZnsHeaderSize, length);
+        *record = Slice(reader.scratch);
         return true;
       case ZnsRecordType::kFirstType:
-        scratch_.assign(header + kZnsHeaderSize, length);
+        reader.scratch.assign(header + kZnsHeaderSize, length);
         in_fragmented_record = true;
         break;
       case ZnsRecordType::kMiddleType:
         if (!in_fragmented_record) {
         } else {
-          scratch_.append(header + kZnsHeaderSize, length);
+          reader.scratch.append(header + kZnsHeaderSize, length);
         }
         break;
       case ZnsRecordType::kLastType:
         if (!in_fragmented_record) {
         } else {
-          scratch_.append(header + kZnsHeaderSize, length);
-          *record = Slice(scratch_);
+          reader.scratch.append(header + kZnsHeaderSize, length);
+          *record = Slice(reader.scratch);
           return true;
         }
         break;
       default:
         in_fragmented_record = false;
-        scratch_.clear();
+        reader.scratch.clear();
         return false;
         break;
     }
   }
   return false;
 }
-bool ZnsCommitter::CloseCommit() {
-  if (!has_commit_) {
-    return false;
-  }
-  has_commit_ = false;
+bool ZnsCommitter::CloseCommit(ZnsCommitReader& reader) {
   if (!keep_buffer_) {
-    read_buffer_.FreeBuffer();
+    read_buffer_[reader.reader_nr]->FreeBuffer();
   }
-  scratch_.clear();
+  reader.scratch.clear();
   return true;
 }
 }  // namespace ROCKSDB_NAMESPACE

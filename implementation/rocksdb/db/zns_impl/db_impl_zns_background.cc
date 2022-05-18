@@ -100,11 +100,15 @@ void DBImplZNS::BackgroundCompaction() {
   {
     // printf("  Compact LN...\n");
     ZnsCompaction* c = versions_->PickCompaction();
+    printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
+    printf("marked reusable\n");
     if (c->IsTrivialMove()) {
+      printf("starting trivial move\n");
       s = c->DoTrivialMove(&edit);
       printf("\t\ttrivial move\n");
     } else {
+      printf("starting compaction\n");
       s = c->DoCompaction(&edit);
       printf("\t\tnormal compaction\n");
     }

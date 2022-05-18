@@ -15,7 +15,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t min_zone_nr,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr),
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr, 4),
       committer_(&log_, info, true) {}
 
 L0ZnsSSTable::~L0ZnsSSTable() = default;
@@ -74,15 +74,18 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   bool succeeded_once = false;
 
   mutex_.Lock();
-  if (!committer_.GetCommitReader(meta.lba, meta.lba + meta.lba_count)) {
+  ZnsCommitReader reader;
+  s = committer_.GetCommitReader(0, meta.lba, meta.lba + meta.lba_count,
+                                 &reader);
+  if (!s.ok()) {
     mutex_.Unlock();
-    return Status::MemoryLimit();
+    return s;
   }
-  while (committer_.SeekCommitReader(&record)) {
+  while (committer_.SeekCommitReader(reader, &record)) {
     succeeded_once = true;
     raw_data->append(record.data(), record.size());
   }
-  if (!committer_.CloseCommit()) {
+  if (!committer_.CloseCommit(reader)) {
     mutex_.Unlock();
     return Status::Corruption();
   }

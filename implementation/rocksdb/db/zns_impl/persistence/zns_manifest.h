@@ -30,7 +30,8 @@ class ZnsManifest : public RefCounter {
  private:
   inline Status RecoverLog() { return FromStatus(log_.RecoverPointers()); }
   Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest);
-  Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest);
+  Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
+                         ZnsCommitReader& reader);
   Status ValidateManifestPointers() const;
 
   // State

@@ -16,7 +16,7 @@ ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
     : current_lba_(min_zone_nr * info.zone_size),
       manifest_start_(max_zone_nr * info.zone_size),  // enforce corruption
       manifest_end_(min_zone_nr * info.zone_size),    // enforce corruption
-      log_(channel_factory, info, min_zone_nr, max_zone_nr),
+      log_(channel_factory, info, min_zone_nr, max_zone_nr, 1),
       committer_(&log_, info, true),
       min_zone_head_(min_zone_nr * info.zone_size),
       max_zone_head_(max_zone_nr * info.zone_size),
@@ -72,10 +72,11 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   return s;
 }
 
-Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest) {
+Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
+                                    ZnsCommitReader& reader) {
   Slice potential;
-  committer_.GetCommitReader(slba, slba + 1);
-  if (!committer_.SeekCommitReader(&potential)) {
+  committer_.GetCommitReader(0, slba, slba + 1, &reader);
+  if (!committer_.SeekCommitReader(reader, &potential)) {
     return Status::Corruption("CURRENT", "Invalid block");
   }
   // prevent memory errors on half reads
@@ -105,19 +106,20 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
   // It is possible that a previous manifest was written, but not yet installed.
   // Therefore move back from head till tail until it is found.
   bool found = false;
+  ZnsCommitReader reader;
   uint64_t slba = log_.GetWriteHead() == min_zone_head_
                       ? max_zone_head_ - 1
                       : log_.GetWriteHead() - 1;
   for (; slba != log_.GetWriteTail();
        slba = slba == min_zone_head_ ? max_zone_head_ - 1 : slba - 1) {
-    if (TryParseCurrent(slba, start_manifest).ok()) {
+    if (TryParseCurrent(slba, start_manifest, reader).ok()) {
       current_lba_ = slba;
       *end_manifest = current_lba_;
       found = true;
       break;
     }
   }
-  committer_.CloseCommit();
+  committer_.CloseCommit(reader);
   if (!found) {
     return Status::NotFound("Did not find a valid CURRENT");
   }
@@ -164,25 +166,15 @@ Status ZnsManifest::ReadManifest(std::string* manifest) {
 
   Slice record;
   // Read data from commits. If necessary wraparound from end to start.
-  if (manifest_end_ > manifest_start_) {
-    committer_.GetCommitReader(manifest_start_, manifest_end_);
-    while (committer_.SeekCommitReader(&record)) {
-      manifest->append(record.ToString());
-    }
-    committer_.CloseCommit();
-  } else {
-    committer_.GetCommitReader(manifest_start_, max_zone_head_);
-    while (committer_.SeekCommitReader(&record)) {
-      manifest->append(record.ToString());
-    }
-    committer_.CloseCommit();
-    committer_.GetCommitReader(min_zone_head_, manifest_end_);
-    while (committer_.SeekCommitReader(&record)) {
-      manifest->append(record.ToString());
-    }
-    committer_.CloseCommit();
+  ZnsCommitReader reader;
+  s = committer_.GetCommitReader(0, manifest_start_, manifest_end_, &reader);
+  if (!s.ok()) {
+    return s;
   }
-  printf("done\n");
+  while (committer_.SeekCommitReader(reader, &record)) {
+    manifest->append(record.ToString());
+  }
+  committer_.CloseCommit(reader);
   return s;
 }
 

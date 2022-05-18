@@ -27,6 +27,14 @@ static const uint32_t kZnsRecordTypeLast =
     static_cast<uint32_t>(ZnsRecordType::kLastType) + 1;
 static_assert(kZnsRecordTypeLast == 5);
 
+struct ZnsCommitReader {
+  uint64_t commit_start;
+  uint64_t commit_end;
+  uint64_t commit_ptr;
+  uint8_t reader_nr;
+  std::string scratch;
+};
+
 /**
  * @brief ZnsCommiter is a helper class that can be used for persistent commits
  * in a log. It requires external synchronisation and verification!
@@ -45,11 +53,12 @@ class ZnsCommitter {
   Status SafeCommit(const Slice& data, uint64_t* lbas = nullptr);
 
   // Get the commit
-  bool GetCommitReader(uint64_t begin, uint64_t end);
+  Status GetCommitReader(uint8_t reader_number, uint64_t begin, uint64_t end,
+                         ZnsCommitReader* reader);
   // Can not be called without first getting the commit
-  bool SeekCommitReader(Slice* record);
+  bool SeekCommitReader(ZnsCommitReader& reader, Slice* record);
   // Can not be called without first getting the commit
-  bool CloseCommit();
+  bool CloseCommit(ZnsCommitReader& reader);
 
   // Clears buffer if it is filled.
   void ClearBuffer() {
@@ -57,20 +66,17 @@ class ZnsCommitter {
   }
 
  private:
+  const uint64_t zone_size_;
+  const uint64_t lba_size_;
+  const uint64_t zasl_;
+  const uint8_t number_of_readers_;
   SZD::SZDLog* log_;
-  uint64_t zone_size_;
-  uint64_t lba_size_;
-  uint64_t zasl_;
   // amortise copying
-  SZD::SZDBuffer read_buffer_;
+  SZD::SZDBuffer** read_buffer_;
   SZD::SZDBuffer write_buffer_;
   bool keep_buffer_;
   // CRC
   std::array<uint32_t, kZnsRecordTypeLast + 1> type_crc_;
-  // Used for reading
-  std::string scratch_;
-  uint64_t commit_start_, commit_ptr_, commit_end_;
-  bool has_commit_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
