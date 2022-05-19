@@ -5,6 +5,7 @@
 
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
+#include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "util/coding.h"
 
@@ -28,10 +29,15 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
                                      const SSZoneMetaData& meta) {
   SSZoneMetaData f;
   f.number = meta.number;
-  f.lba_regions = meta.lba_regions;
-  std::copy(meta.lbas, meta.lbas + f.lba_regions, f.lbas);
-  std::copy(meta.lba_region_sizes, meta.lba_region_sizes + f.lba_regions,
-            f.lba_region_sizes);
+  if (level == 0) {
+    f.L0.lba = meta.L0.lba;
+  } else {
+    f.LN.lba_regions = meta.LN.lba_regions;
+    std::copy(meta.LN.lbas, meta.LN.lbas + f.LN.lba_regions, f.LN.lbas);
+    std::copy(meta.LN.lba_region_sizes,
+              meta.LN.lba_region_sizes + f.LN.lba_regions,
+              f.LN.lba_region_sizes);
+  }
   f.numbers = meta.numbers;
   f.lba_count = meta.lba_count;
   f.smallest = meta.smallest;
@@ -84,10 +90,14 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
     PutFixed8(dst, new_ss_[i].first);  // level
     PutVarint64(dst, m.number);
-    PutFixed8(dst, m.lba_regions);
-    for (size_t j = 0; j < m.lba_regions; j++) {
-      PutVarint64(dst, m.lbas[j]);
-      PutVarint64(dst, m.lba_region_sizes[j]);
+    if (new_ss_[i].first == 0) {
+      PutVarint64(dst, m.L0.lba);
+    } else {
+      PutFixed8(dst, m.LN.lba_regions);
+      for (size_t j = 0; j < m.LN.lba_regions; j++) {
+        PutVarint64(dst, m.LN.lbas[j]);
+        PutVarint64(dst, m.LN.lba_region_sizes[j]);
+      }
     }
     PutVarint64(dst, m.numbers);
     PutVarint64(dst, m.lba_count);
@@ -113,6 +123,39 @@ static bool GetLevel(Slice* input, uint8_t* level) {
     return true;
   } else {
     return false;
+  }
+}
+
+static bool DecodeL0(Slice* input, SSZoneMetaData* m) {
+  return GetVarint64(input, &m->number) && GetVarint64(input, &m->L0.lba) &&
+         GetVarint64(input, &m->numbers) && GetVarint64(input, &m->lba_count) &&
+         GetInternalKey(input, &m->smallest) &&
+         GetInternalKey(input, &m->largest);
+}
+
+static bool DecodeLN(Slice* input, SSZoneMetaData* m) {
+  bool s = GetVarint64(input, &m->number) &&
+           GetFixed8(input, &m->LN.lba_regions) && m->LN.lba_regions <= 8;
+  if (!s) {
+    return s;
+  }
+  for (size_t i = 0; i < m->LN.lba_regions; i++) {
+    s = GetVarint64(input, &m->LN.lbas[i]) &&
+        GetVarint64(input, &m->LN.lba_region_sizes[i]);
+    if (!s) {
+      return s;
+    }
+  }
+  s = GetVarint64(input, &m->numbers) && GetVarint64(input, &m->lba_count) &&
+      GetInternalKey(input, &m->smallest) && GetInternalKey(input, &m->largest);
+  return s;
+}
+
+static bool DecodeLevel(Slice* input, uint8_t level, SSZoneMetaData* m) {
+  if (level == 0) {
+    return DecodeL0(input, m);
+  } else {
+    return DecodeLN(input, m);
   }
 }
 
@@ -163,25 +206,8 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
       case ZnsVersionTag::kNewSSTable:
-        if (GetLevel(&input, &level) && GetVarint64(&input, &m.number) &&
-            GetFixed8(&input, &m.lba_regions) && m.lba_regions <= 8) {
-          bool substatus = true;
-          for (size_t i = 0; i < m.lba_regions; i++) {
-            substatus = GetVarint64(&input, &m.lbas[i]) &&
-                        GetVarint64(&input, &m.lba_region_sizes[i]);
-            if (!substatus) {
-              break;
-            }
-          }
-          substatus = substatus && GetVarint64(&input, &m.numbers) &&
-                      GetVarint64(&input, &m.lba_count) &&
-                      GetInternalKey(&input, &m.smallest) &&
-                      GetInternalKey(&input, &m.largest);
-          if (substatus) {
-            new_ss_.push_back(std::make_pair(level, m));
-          } else {
-            msg = "new sstable entry";
-          }
+        if (GetLevel(&input, &level) && DecodeLevel(&input, level, &m)) {
+          new_ss_.push_back(std::make_pair(level, m));
         } else {
           msg = "new sstable entry";
         }
@@ -205,6 +231,6 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
     return Status::Corruption("VersionEdit", msg);
   }
   return Status::OK();
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 }  // namespace ROCKSDB_NAMESPACE

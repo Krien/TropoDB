@@ -41,26 +41,28 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
            .ok()) {
     return Status::IOError("Error during appending\n");
   }
-  meta->lba_regions = 0;
+  meta->LN.lba_regions = 0;
   for (auto ptr : ptrs) {
-    meta->lbas[meta->lba_regions] = ptr.first * zone_size_;
-    meta->lba_region_sizes[meta->lba_regions] = ptr.second * zone_size_;
-    meta->lba_count += meta->lba_region_sizes[meta->lba_regions];
-    meta->lba_regions++;
+    meta->LN.lbas[meta->LN.lba_regions] = ptr.first * zone_size_;
+    meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_size_;
+    meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
+    meta->LN.lba_regions++;
   }
+  printf("Added %u regions of %lu lbas, for size of %lu \n",
+         meta->LN.lba_regions, meta->lba_count, content.size());
   return Status::OK();
 }
 
 Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
-  if (meta.lba_regions > 8) {
+  if (meta.LN.lba_regions > 8) {
     return Status::Corruption("Invalid metadata");
   }
 
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  for (size_t i = 0; i < meta.lba_regions; i++) {
-    uint64_t from = meta.lbas[i];
-    uint64_t blocks = meta.lba_region_sizes[i];
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    uint64_t from = meta.LN.lbas[i];
+    uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }
@@ -81,9 +83,9 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 
 Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  for (size_t i = 0; i < meta.lba_regions; i++) {
-    uint64_t from = meta.lbas[i];
-    uint64_t blocks = meta.lba_region_sizes[i];
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    uint64_t from = meta.LN.lbas[i];
+    uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }

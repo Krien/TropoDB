@@ -94,9 +94,9 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
   SSZoneMetaData meta;
   uint64_t written_tail = sstable_level_[level]->GetTail();
 
-  meta.lbas[0] = *live_tail;
-  uint64_t nexthead = ((meta.lbas[0] + *blocks) / zone_size_) * zone_size_;
-  meta.lba_count = nexthead - meta.lbas[0];
+  meta.L0.lba = *live_tail;
+  uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_size_) * zone_size_;
+  meta.lba_count = nexthead - meta.L0.lba;
 
   Status s = Status::OK();
   if (meta.lba_count != 0) {
@@ -176,6 +176,9 @@ void ZNSSSTableManager::GetRange(const uint8_t level,
   //   *range = std::make_pair(metas[metas.size()-1]->lba,
   //   metas[0]->lba+metas[0]->lba_count);
   // }
+  if (level != 0) {
+    return;
+  }
   uint64_t lowest = 0, lowest_res = ranges_[level].first;
   uint64_t highest = 0, highest_res = ranges_[level].second;
   bool first = false;
@@ -183,18 +186,18 @@ void ZNSSSTableManager::GetRange(const uint8_t level,
   for (auto n = metas.begin(); n != metas.end(); n++) {
     if (!first) {
       lowest = (*n)->number;
-      lowest_res = (*n)->lbas[0];
+      lowest_res = (*n)->L0.lba;
       highest = (*n)->number;
-      highest_res = (*n)->lbas[0] + (*n)->lba_count;
+      highest_res = (*n)->L0.lba + (*n)->lba_count;
       first = true;
     }
     if (lowest > (*n)->number) {
       lowest = (*n)->number;
-      lowest_res = (*n)->lbas[0];
+      lowest_res = (*n)->L0.lba;
     }
     if (highest < (*n)->number) {
       highest = (*n)->number;
-      highest_res = (*n)->lbas[0] + (*n)->lba_count;
+      highest_res = (*n)->L0.lba + (*n)->lba_count;
     }
   }
   if (first) {

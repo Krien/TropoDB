@@ -36,13 +36,15 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const Comparator* cmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
   SSZoneMetaData meta;
-  uint64_t lba_regions = DecodeFixed64(file_value.data());
-  for (size_t i = 0; i < lba_regions; i++) {
-    meta.lbas[i] = DecodeFixed64(file_value.data() + 8 + 16 * i);
-    meta.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 16 + 16 * i);
+  meta.LN.lba_regions = DecodeFixed8(file_value.data());
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
+    meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
   }
-  uint64_t lba_count = DecodeFixed64(file_value.data() + 16 * lba_regions);
-  uint8_t level = DecodeFixed8(file_value.data() + 16 + 16 * lba_regions);
+  uint64_t lba_count =
+      DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
+  uint8_t level =
+      DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
   meta.lba_count = lba_count;
   Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
   return iterator;
@@ -79,8 +81,9 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   }
   meta.number = vset_->NewSSNumber();
   edit->AddSSDefinition(first_level_ + 1, meta);
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta.lbas[0],
-         meta.lba_count, s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
+         first_level_ == 0 ? meta.L0.lba : meta.LN.lbas[0], meta.lba_count,
+         s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
   return s;
 }
 
@@ -114,20 +117,23 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
 
 void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
   for (int i = 0; i <= 1; i++) {
+    if (i + first_level_ != 0) {
+      return;
+    }
     std::vector<SSZoneMetaData*>::const_iterator base_iter =
         targets_[i].begin();
     std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
     if (base_iter == base_end) {
       continue;
     }
-    uint64_t lba = (*base_iter)->lbas[0];
+    uint64_t lba = (*base_iter)->L0.lba;
     uint64_t number = (*base_iter)->number;
     uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
       edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
       if ((*base_iter)->number < number) {
         number = (*base_iter)->number;
-        lba = (*base_iter)->lbas[0];
+        lba = (*base_iter)->L0.lba;
       }
       count += +(*base_iter)->lba_count;
     }
@@ -154,7 +160,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->lbas[0],
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
          meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
   if (s.ok()) {
     edit->AddSSDefinition(first_level_ + 1, *meta);
