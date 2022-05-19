@@ -84,6 +84,9 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     uint64_t new_deleted_range_count = current_->ss_d_[i].second;
     s = znssstable_->SetValidRangeAndReclaim(i, &new_deleted_range_lba,
                                              &new_deleted_range_count);
+    printf("Move deleted range from %lu %lu to %lu %lu \n",
+           current_->ss_d_[i].first, current_->ss_d_[i].second,
+           new_deleted_range_lba, new_deleted_range_count);
     edit.AddDeletedRange(
         i, std::make_pair(new_deleted_range_lba, new_deleted_range_count));
     if (!s.ok()) {
@@ -102,9 +105,8 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
-      const SSZoneMetaData* m = ss[i];
-      edit.AddSSDefinition(level, m->number, m->lba, m->lba_count, m->numbers,
-                           m->smallest, m->largest);
+      const SSZoneMetaData& m = *ss[i];
+      edit.AddSSDefinition(level, m);
     }
     std::pair<uint64_t, uint64_t>& range = version->ss_d_[level];
     edit.AddDeletedRange(level, range);

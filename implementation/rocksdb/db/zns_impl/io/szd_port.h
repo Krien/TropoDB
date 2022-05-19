@@ -6,6 +6,7 @@
 #define ZNS_DEVICE
 #include <szd/datastructures/szd_buffer.hpp>
 #include <szd/datastructures/szd_circular_log.hpp>
+#include <szd/datastructures/szd_fragmented_log.hpp>
 #include <szd/datastructures/szd_log.hpp>
 #include <szd/datastructures/szd_once_log.hpp>
 #include <szd/szd_channel.hpp>

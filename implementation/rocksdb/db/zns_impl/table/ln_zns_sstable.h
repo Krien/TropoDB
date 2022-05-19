@@ -29,11 +29,11 @@ class LNZnsSSTable : public ZnsSSTable {
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
-  uint64_t GetTail() const override { return log_.GetWriteTail(); }
-  uint64_t GetHead() const override { return log_.GetWriteHead(); }
+  uint64_t GetTail() const override { return 0; }
+  uint64_t GetHead() const override { return 0; }
 
  private:
-  SZD::SZDCircularLog log_;
+  SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
 };
 }  // namespace ROCKSDB_NAMESPACE

@@ -19,78 +19,77 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
 
 LNZnsSSTable::~LNZnsSSTable() = default;
 
-Status LNZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
+Status LNZnsSSTable::Recover() { return Status::OK(); }
 
 SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
 }
 
 bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
-  return log_.SpaceLeft(slice.size());
+  return log_.SpaceLeft(slice.size(), false);
 }
 
 Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    printf("%lu %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
+    printf("%lu %lu \n", content.size(), log_.SpaceAvailable());
     return Status::IOError("Not enough space available for LN");
   }
-  meta->lba = log_.GetWriteHead();
-  if (!FromStatus(log_.Append(content.ToString(false), &meta->lba_count, false))
+
+  std::vector<std::pair<uint64_t, uint64_t>> ptrs;
+  if (!FromStatus(log_.Append(content.data(), content.size(), ptrs, false))
            .ok()) {
     return Status::IOError("Error during appending\n");
+  }
+  meta->lba_regions = 0;
+  for (auto ptr : ptrs) {
+    meta->lbas[meta->lba_regions] = ptr.first * zone_size_;
+    meta->lba_region_sizes[meta->lba_regions] = ptr.second * zone_size_;
+    meta->lba_count += meta->lba_region_sizes[meta->lba_regions];
+    meta->lba_regions++;
   }
   return Status::OK();
 }
 
 Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
-  if (meta.lba > max_zone_head_ || meta.lba < min_zone_head_ ||
-      meta.lba_count > max_zone_head_ - min_zone_head_) {
+  if (meta.lba_regions > 8) {
     return Status::Corruption("Invalid metadata");
   }
-  // We are going to reserve some DMA memory for the loop, as we are reading Lba
-  // by lba....
-  uint64_t backed_size = std::min(meta.lba_count * lba_size_, mdts_);
-  mutex_.Lock();
-  if (!(s = FromStatus(buffer_.ReallocBuffer(backed_size))).ok()) {
-    mutex_.Unlock();
-    return s;
-  }
-  char* raw_buffer;
-  if (!(s = FromStatus(buffer_.GetBuffer((void**)&raw_buffer))).ok()) {
-    mutex_.Unlock();
-    return s;
+
+  std::vector<std::pair<uint64_t, uint64_t>> ptrs;
+  for (size_t i = 0; i < meta.lba_regions; i++) {
+    uint64_t from = meta.lbas[i];
+    uint64_t blocks = meta.lba_region_sizes[i];
+    if (from > max_zone_head_ || from < min_zone_head_) {
+      return Status::Corruption("Invalid metadata");
+    }
+    ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
   }
 
-  char* slice_buffer = (char*)calloc(meta.lba_count * lba_size_, sizeof(char));
-  // mdts is always a factor of lba_size, so safe.
-  uint64_t stepsize = mdts_ / lba_size_;
-  uint64_t steps = (meta.lba_count + stepsize - 1) / stepsize;
-  uint64_t current_step_size_bytes = mdts_;
-  uint64_t last_step_size =
-      mdts_ - (steps * stepsize - meta.lba_count) * lba_size_;
-  for (uint64_t step = 0; step < steps; ++step) {
-    current_step_size_bytes = step == steps - 1 ? last_step_size : mdts_;
-    uint64_t addr = meta.lba + step * stepsize;
-    addr =
-        addr > max_zone_head_ ? min_zone_head_ + (addr - max_zone_head_) : addr;
-    if (!FromStatus(log_.Read(addr, &buffer_, current_step_size_bytes, true))
-             .ok()) {
-      delete[] slice_buffer;
-      mutex_.Unlock();
-      return Status::IOError("Error reading SSTable");
-    }
-    memcpy(slice_buffer + step * stepsize * lba_size_, raw_buffer,
-           current_step_size_bytes);
-  }
+  char* buffer = new char[meta.lba_count * lba_size_];
+  mutex_.Lock();
+  s = FromStatus(log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true));
   mutex_.Unlock();
-  *sstable = Slice((char*)slice_buffer, meta.lba_count * lba_size_);
+  if (!s.ok()) {
+    delete[] buffer;
+    return s;
+  }
+  *sstable = Slice(buffer, meta.lba_count * lba_size_);
   return s;
 }
 
 Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  return FromStatus(log_.ConsumeTail(meta.lba, meta.lba + meta.lba_count));
+  std::vector<std::pair<uint64_t, uint64_t>> ptrs;
+  for (size_t i = 0; i < meta.lba_regions; i++) {
+    uint64_t from = meta.lbas[i];
+    uint64_t blocks = meta.lba_region_sizes[i];
+    if (from > max_zone_head_ || from < min_zone_head_) {
+      return Status::Corruption("Invalid metadata");
+    }
+    ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
+  }
+  return FromStatus(log_.Reset(ptrs));
 }
 
 Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
@@ -105,6 +104,7 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    printf("size %u count %u \n", size, count);
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

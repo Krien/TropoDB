@@ -29,10 +29,7 @@ class ZnsVersionEdit {
   ~ZnsVersionEdit() = default;
 
   void Clear();
-  void AddSSDefinition(const uint8_t level, const uint64_t number,
-                       const uint64_t lba, const uint64_t lba_count,
-                       const uint64_t numbers, const InternalKey& smallest,
-                       const InternalKey& largest);
+  void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   void RemoveSSDefinition(const uint8_t level, const uint64_t number);
   // Used for Manifest logic
   void EncodeTo(std::string* dst) const;

@@ -38,7 +38,8 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   if (!EnoughSpaceAvailable(content)) {
     return Status::IOError("Not enough space available for L0");
   }
-  meta->lba = log_.GetWriteHead();
+  meta->lba_regions = 1;
+  meta->lbas[0] = log_.GetWriteHead();
   Status s = committer_.SafeCommit(content, &meta->lba_count);
   return s;
 }
@@ -88,7 +89,7 @@ void L0ZnsSSTable::release_read_queue() {
 
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
-  if (meta.lba > max_zone_head_ || meta.lba < min_zone_head_ ||
+  if (meta.lbas[0] > max_zone_head_ || meta.lbas[0] < min_zone_head_ ||
       meta.lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
@@ -99,8 +100,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   bool succeeded_once = false;
 
   ZnsCommitReader reader;
-  s = committer_.GetCommitReader(request_read_queue(), meta.lba,
-                                 meta.lba + meta.lba_count, &reader);
+  s = committer_.GetCommitReader(request_read_queue(), meta.lbas[0],
+                                 meta.lbas[0] + meta.lba_count, &reader);
   if (!s.ok()) {
     release_read_queue();
     return s;
@@ -125,7 +126,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  return FromStatus(log_.ConsumeTail(meta.lba, meta.lba + meta.lba_count));
+  return FromStatus(
+      log_.ConsumeTail(meta.lbas[0], meta.lbas[0] + meta.lba_count));
 }
 
 Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
