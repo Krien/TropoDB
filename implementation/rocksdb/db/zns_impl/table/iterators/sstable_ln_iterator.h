@@ -34,9 +34,14 @@ class LNZoneIterator : public Iterator {
   }
   Slice value() const override {
     assert(Valid());
-    std::string out;
-    (*slist_)[index_]->Encode(&out);
-    memcpy(value_buf_, out.data(), out.size());
+    EncodeFixed64(value_buf_, (*slist_)[index_]->lba_regions);
+    for (size_t i = 0; i < (*slist_)[index_]->lba_regions; i++) {
+      EncodeFixed64(value_buf_ + 8 * i * 16, (*slist_)[index_]->lbas[i]);
+      EncodeFixed64(value_buf_ + 16 * i * 16,
+                    (*slist_)[index_]->lba_region_sizes[i]);
+    }
+    EncodeFixed64(value_buf_ + 8 + 16 * 8, (*slist_)[index_]->lba_count);
+    EncodeFixed8(value_buf_ + 16 + 16 * 8, level_);
     return Slice(value_buf_, sizeof(value_buf_));
   }
   Status status() const override { return Status::OK(); }

@@ -60,16 +60,9 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
   }
 
   // Add new files
-  for (size_t i = 0; i < edit->new_ss_L0_.size(); i++) {
-    const uint8_t level = edit->new_ss_L0_[i].first;
-    SSZoneMetaDataL0* m = new SSZoneMetaDataL0(edit->new_ss_L0_[i].second);
-    m->refs = 1;
-    levels_[level].deleted_ss.erase(m->number);
-    levels_[level].added_ss->insert(m);
-  }
-  for (size_t i = 0; i < edit->new_ss_LN_.size(); i++) {
-    const uint8_t level = edit->new_ss_LN_[i].first;
-    SSZoneMetaDataLN* m = new SSZoneMetaDataLN(edit->new_ss_LN_[i].second);
+  for (size_t i = 0; i < edit->new_ss_.size(); i++) {
+    const uint8_t level = edit->new_ss_[i].first;
+    SSZoneMetaData* m = new SSZoneMetaData(edit->new_ss_[i].second);
     m->refs = 1;
     levels_[level].deleted_ss.erase(m->number);
     levels_[level].added_ss->insert(m);

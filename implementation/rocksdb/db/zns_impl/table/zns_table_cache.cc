@@ -33,11 +33,11 @@ ZnsTableCache::ZnsTableCache(const Options& options,
 
 ZnsTableCache::~ZnsTableCache() { cache_.reset(); }
 
-Status ZnsTableCache::FindSSZone(const SSZoneMetaData* meta,
+Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta,
                                  const uint8_t level, Cache::Handle** handle) {
   Status s;
-  char buf[sizeof(meta->number)];
-  EncodeFixed64(buf, meta->number);
+  char buf[sizeof(meta.number)];
+  EncodeFixed64(buf, meta.number);
   Slice key(buf, sizeof(buf));
   *handle = cache_->Lookup(key);
   if (*handle == nullptr) {
@@ -49,7 +49,7 @@ Status ZnsTableCache::FindSSZone(const SSZoneMetaData* meta,
 }
 
 Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
-                                     const SSZoneMetaData* meta,
+                                     const SSZoneMetaData& meta,
                                      const uint8_t level,
                                      ZnsSSTable** tableptr) {
   if (tableptr != nullptr) {
@@ -67,7 +67,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
 }
 
 Status ZnsTableCache::Get(const ReadOptions& options,
-                          const SSZoneMetaData* meta, const uint8_t level,
+                          const SSZoneMetaData& meta, const uint8_t level,
                           const Slice& key, std::string* value,
                           EntryStatus* status) {
   Cache::Handle* handle = nullptr;

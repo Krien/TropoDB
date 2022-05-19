@@ -12,17 +12,6 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-// LN can be different regions of different sizes, so we need indirection...
-struct SSZoneMetaDataLN : public SSZoneMetaData {
-  SSZoneMetaDataLN() : lba_regions(0) {}
-  uint8_t lba_regions;           // Number of start lbas (legal from 1 to 8)
-  uint64_t lbas[8];              // start lbas (can be multiple, up to 8)
-  uint64_t lba_region_sizes[8];  // Size in zones of an lbas region
-  bool DecodeFrom(Slice* input) override;
-  void Encode(std::string* dst) const override;
-};
-
 class LNZnsSSTable : public ZnsSSTable {
  public:
   LNZnsSSTable(SZD::SZDChannelFactory* channel_factory_,
@@ -31,13 +20,13 @@ class LNZnsSSTable : public ZnsSSTable {
   ~LNZnsSSTable();
   bool EnoughSpaceAvailable(const Slice& slice) const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
-  Iterator* NewIterator(const SSZoneMetaData* meta,
+  Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
-             std::string* value, const SSZoneMetaData* meta,
+             std::string* value, const SSZoneMetaData& meta,
              EntryStatus* entry) override;
-  Status ReadSSTable(Slice* sstable, const SSZoneMetaData* meta) override;
-  Status InvalidateSSZone(const SSZoneMetaData* meta) override;
+  Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
+  Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
   uint64_t GetTail() const override { return 0; }

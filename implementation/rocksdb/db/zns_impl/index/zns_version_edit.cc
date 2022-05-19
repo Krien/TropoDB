@@ -14,8 +14,7 @@ ZnsVersionEdit::ZnsVersionEdit() { Clear(); }
 void ZnsVersionEdit::Clear() {
   last_sequence_ = 0;
   has_last_sequence_ = false;
-  new_ss_L0_.clear();
-  new_ss_LN_.clear();
+  new_ss_.clear();
   deleted_ss_.clear();
   deleted_range_.clear();
   compact_pointers_.clear();
@@ -26,33 +25,18 @@ void ZnsVersionEdit::Clear() {
 }
 
 void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
-                                     const SSZoneMetaData* basemeta) {
-  if (level == 0) {
-    const SSZoneMetaDataL0* meta =
-        dynamic_cast<const SSZoneMetaDataL0*>(basemeta);
-    SSZoneMetaDataL0 f;
-    f.number = meta->number;
-    f.lba = meta->lba;
-    f.numbers = meta->numbers;
-    f.lba_count = meta->lba_count;
-    f.smallest = meta->smallest;
-    f.largest = meta->largest;
-    new_ss_L0_.push_back(std::make_pair(level, f));
-  } else {
-    const SSZoneMetaDataLN* meta =
-        dynamic_cast<const SSZoneMetaDataLN*>(basemeta);
-    SSZoneMetaDataLN f;
-    f.number = meta->number;
-    f.lba_regions = meta->lba_regions;
-    std::copy(meta->lbas, meta->lbas + f.lba_regions, f.lbas);
-    std::copy(meta->lba_region_sizes, meta->lba_region_sizes + f.lba_regions,
-              f.lba_region_sizes);
-    f.numbers = meta->numbers;
-    f.lba_count = meta->lba_count;
-    f.smallest = meta->smallest;
-    f.largest = meta->largest;
-    new_ss_LN_.push_back(std::make_pair(level, f));
-  }
+                                     const SSZoneMetaData& meta) {
+  SSZoneMetaData f;
+  f.number = meta.number;
+  f.lba_regions = meta.lba_regions;
+  std::copy(meta.lbas, meta.lbas + f.lba_regions, f.lbas);
+  std::copy(meta.lba_region_sizes, meta.lba_region_sizes + f.lba_regions,
+            f.lba_region_sizes);
+  f.numbers = meta.numbers;
+  f.lba_count = meta.lba_count;
+  f.smallest = meta.smallest;
+  f.largest = meta.largest;
+  new_ss_.push_back(std::make_pair(level, f));
 }
 
 void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
@@ -95,17 +79,20 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   // deleted LN
 
   // new files
-  for (size_t i = 0; i < new_ss_L0_.size(); i++) {
-    const SSZoneMetaDataL0& m = new_ss_L0_[i].second;
+  for (size_t i = 0; i < new_ss_.size(); i++) {
+    const SSZoneMetaData& m = new_ss_[i].second;
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
-    PutFixed8(dst, new_ss_L0_[i].first);  // level
-    m.Encode(dst);
-  }
-  for (size_t i = 0; i < new_ss_LN_.size(); i++) {
-    const SSZoneMetaDataLN& m = new_ss_LN_[i].second;
-    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
-    PutFixed8(dst, new_ss_LN_[i].first);  // level
-    m.Encode(dst);
+    PutFixed8(dst, new_ss_[i].first);  // level
+    PutVarint64(dst, m.number);
+    PutFixed8(dst, m.lba_regions);
+    for (size_t j = 0; j < m.lba_regions; j++) {
+      PutVarint64(dst, m.lbas[j]);
+      PutVarint64(dst, m.lba_region_sizes[j]);
+    }
+    PutVarint64(dst, m.numbers);
+    PutVarint64(dst, m.lba_count);
+    PutLengthPrefixedSlice(dst, m.smallest.Encode());
+    PutLengthPrefixedSlice(dst, m.largest.Encode());
   }
 }
 
@@ -138,8 +125,7 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
   uint8_t level;
   uint64_t number;
   uint64_t number_second;
-  SSZoneMetaDataL0 m0;
-  SSZoneMetaDataLN mn;
+  SSZoneMetaData m;
   InternalKey key;
 
   while (msg == nullptr && GetVarint32(&input, &tag)) {
@@ -177,13 +163,24 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
       case ZnsVersionTag::kNewSSTable:
-        if (GetLevel(&input, &level) &&
-            ((level == 0 && m0.DecodeFrom(&input)) ||
-             (mn.DecodeFrom(&input)))) {
-          if (level == 0) {
-            new_ss_L0_.push_back(std::make_pair(0, m0));
+        if (GetLevel(&input, &level) && GetVarint64(&input, &m.number) &&
+            GetFixed8(&input, &m.lba_regions) && m.lba_regions <= 8) {
+          bool substatus = true;
+          for (size_t i = 0; i < m.lba_regions; i++) {
+            substatus = GetVarint64(&input, &m.lbas[i]) &&
+                        GetVarint64(&input, &m.lba_region_sizes[i]);
+            if (!substatus) {
+              break;
+            }
+          }
+          substatus = substatus && GetVarint64(&input, &m.numbers) &&
+                      GetVarint64(&input, &m.lba_count) &&
+                      GetInternalKey(&input, &m.smallest) &&
+                      GetInternalKey(&input, &m.largest);
+          if (substatus) {
+            new_ss_.push_back(std::make_pair(level, m));
           } else {
-            new_ss_LN_.push_back(std::make_pair(level, mn));
+            msg = "new sstable entry";
           }
         } else {
           msg = "new sstable entry";

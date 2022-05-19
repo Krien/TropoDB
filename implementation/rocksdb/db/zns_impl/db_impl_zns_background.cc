@@ -136,12 +136,12 @@ Status DBImplZNS::CompactMemtable() {
   // Flush and set new version
   {
     ZnsVersionEdit edit;
-    SSZoneMetaDataL0 meta;
+    SSZoneMetaData meta;
     meta.number = versions_->NewSSNumber();
     s = FlushL0SSTables(&meta);
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
-      edit.AddSSDefinition(level, &meta);
+      edit.AddSSDefinition(level, meta);
       s = versions_->LogAndApply(&edit);
       s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
     } else {

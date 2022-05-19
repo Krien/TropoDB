@@ -29,7 +29,7 @@ class ZnsVersionEdit {
   ~ZnsVersionEdit() = default;
 
   void Clear();
-  void AddSSDefinition(const uint8_t level, const SSZoneMetaData* meta);
+  void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   void RemoveSSDefinition(const uint8_t level, const uint64_t number);
   // Used for Manifest logic
   void EncodeTo(std::string* dst) const;
@@ -60,8 +60,7 @@ class ZnsVersionEdit {
   friend class ZnsVersionSet;
   friend class ZnsCompaction;
 
-  std::vector<std::pair<uint8_t, SSZoneMetaDataL0>> new_ss_L0_;
-  std::vector<std::pair<uint8_t, SSZoneMetaDataLN>> new_ss_LN_;
+  std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
   std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
   std::vector<DeletedZoneRange> deleted_range_;

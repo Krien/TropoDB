@@ -105,7 +105,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
-      const SSZoneMetaData* m = ss[i];
+      const SSZoneMetaData& m = *ss[i];
       edit.AddSSDefinition(level, m);
     }
     std::pair<uint64_t, uint64_t>& range = version->ss_d_[level];
