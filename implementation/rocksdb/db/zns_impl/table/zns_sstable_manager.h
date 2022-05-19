@@ -27,21 +27,21 @@ class ZNSSSTableManager : public RefCounter {
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) const;
   Status CopySSTable(const uint8_t level1, const uint8_t level2,
-                     const SSZoneMetaData& meta,
+                     const SSZoneMetaData* meta,
                      SSZoneMetaData* new_meta) const;
   Status WriteSSTable(const uint8_t level, const Slice& content,
                       SSZoneMetaData* meta) const;
   Status ReadSSTable(const uint8_t level, Slice* sstable,
-                     const SSZoneMetaData& meta) const;
+                     const SSZoneMetaData* meta) const;
   Status Get(const uint8_t level, const InternalKeyComparator& icmp,
-             const Slice& key, std::string* value, const SSZoneMetaData& meta,
+             const Slice& key, std::string* value, const SSZoneMetaData* meta,
              EntryStatus* entry) const;
   Status InvalidateSSZone(const uint8_t level,
-                          const SSZoneMetaData& meta) const;
+                          const SSZoneMetaData* meta) const;
   Status SetValidRangeAndReclaim(const uint8_t level, uint64_t* live_tail,
                                  uint64_t* blocks) const;
   L0ZnsSSTable* GetL0SSTableLog() const;
-  Iterator* NewIterator(const uint8_t level, const SSZoneMetaData& meta,
+  Iterator* NewIterator(const uint8_t level, const SSZoneMetaData* meta,
                         const Comparator* cmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency

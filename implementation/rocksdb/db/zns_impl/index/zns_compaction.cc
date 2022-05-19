@@ -35,16 +35,10 @@ ZnsCompaction::~ZnsCompaction() {
 Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const Comparator* cmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
-  SSZoneMetaData meta;
-  uint64_t lba_regions = DecodeFixed64(file_value.data());
-  for (size_t i = 0; i < lba_regions; i++) {
-    meta.lbas[i] = DecodeFixed64(file_value.data() + 8 + 16 * i);
-    meta.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 16 + 16 * i);
-  }
-  uint64_t lba_count = DecodeFixed64(file_value.data() + 16 * lba_regions);
-  uint8_t level = DecodeFixed8(file_value.data() + 16 + 16 * lba_regions);
-  meta.lba_count = lba_count;
-  Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
+  SSZoneMetaDataLN meta;
+  Slice* ref = const_cast<Slice*>(&file_value);
+  meta.DecodeFrom(ref);
+  Iterator* iterator = zns->NewIterator(1, &meta, cmp);
   return iterator;
 }
 
@@ -71,16 +65,16 @@ bool ZnsCompaction::IsTrivialMove() const {
 Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   Status s = Status::OK();
   SSZoneMetaData* old_meta = targets_[0][0];
-  SSZoneMetaData meta;
-  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, *old_meta,
+  SSZoneMetaDataLN meta;
+  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, old_meta,
                                       &meta);
   if (!s.ok()) {
     return s;
   }
   meta.number = vset_->NewSSNumber();
-  edit->AddSSDefinition(first_level_ + 1, meta);
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta.lbas[0],
-         meta.lba_count, s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
+  edit->AddSSDefinition(first_level_ + 1, &meta);
+  printf("adding... %u  %lu %s %s\n", first_level_ + 1, meta.lba_count,
+         s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
   return s;
 }
 
@@ -97,7 +91,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
     std::vector<SSZoneMetaData*>::const_iterator base_end = l0ss.end();
     for (; base_iter != base_end; ++base_iter) {
       iterators[iterator_index++] = vset_->znssstable_->NewIterator(
-          0, **base_iter, vset_->icmp_.user_comparator());
+          0, *base_iter, vset_->icmp_.user_comparator());
     }
   }
   // LN
@@ -113,38 +107,38 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
 }
 
 void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
-  for (int i = 0; i <= 1; i++) {
-    std::vector<SSZoneMetaData*>::const_iterator base_iter =
-        targets_[i].begin();
-    std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
-    if (base_iter == base_end) {
-      continue;
-    }
-    uint64_t lba = (*base_iter)->lbas[0];
-    uint64_t number = (*base_iter)->number;
-    uint64_t count = 0;
-    for (; base_iter != base_end; ++base_iter) {
-      edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
-      if ((*base_iter)->number < number) {
-        number = (*base_iter)->number;
-        lba = (*base_iter)->lbas[0];
-      }
-      count += +(*base_iter)->lba_count;
-    }
-    // Carry over
-    std::pair<uint64_t, uint64_t> new_deleted_range;
-    if (vset_->current_->ss_d_[first_level_ + i].second != 0) {
-      new_deleted_range = std::make_pair(
-          vset_->current_->ss_d_[first_level_ + i].first,
-          count + vset_->current_->ss_d_[first_level_ + i].second);
-    } else {
-      new_deleted_range = std::make_pair(lba, count);
-    }
+  // for (int i = 0; i <= 1; i++) {
+  //   std::vector<SSZoneMetaData*>::const_iterator base_iter =
+  //       targets_[i].begin();
+  //   std::vector<SSZoneMetaData*>::const_iterator base_end =
+  //   targets_[i].end(); if (base_iter == base_end) {
+  //     continue;
+  //   }
+  //   uint64_t lba = (*base_iter)->lbas[0];
+  //   uint64_t number = (*base_iter)->number;
+  //   uint64_t count = 0;
+  //   for (; base_iter != base_end; ++base_iter) {
+  //     edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
+  //     if ((*base_iter)->number < number) {
+  //       number = (*base_iter)->number;
+  //       lba = (*base_iter)->lbas[0];
+  //     }
+  //     count += +(*base_iter)->lba_count;
+  //   }
+  //   // Carry over
+  //   std::pair<uint64_t, uint64_t> new_deleted_range;
+  //   if (vset_->current_->ss_d_[first_level_ + i].second != 0) {
+  //     new_deleted_range = std::make_pair(
+  //         vset_->current_->ss_d_[first_level_ + i].first,
+  //         count + vset_->current_->ss_d_[first_level_ + i].second);
+  //   } else {
+  //     new_deleted_range = std::make_pair(lba, count);
+  //   }
 
-    printf("delete range %u %lu %lu \n", first_level_ + i,
-           new_deleted_range.first, new_deleted_range.second);
-    edit->AddDeletedRange(first_level_ + i, new_deleted_range);
-  }
+  //   printf("delete range %u %lu %lu \n", first_level_ + i,
+  //          new_deleted_range.first, new_deleted_range.second);
+  //   edit->AddDeletedRange(first_level_ + i, new_deleted_range);
+  // }
 }
 
 Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
@@ -154,10 +148,10 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->lbas[0],
-         meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
+  printf("adding... %u %lu %s %s\n", first_level_ + 1, meta->lba_count,
+         s.getState(), s.ok() ? "OK" : "NOK");
   if (s.ok()) {
-    edit->AddSSDefinition(first_level_ + 1, *meta);
+    edit->AddSSDefinition(first_level_ + 1, meta);
   }
   delete current_builder;
   current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
@@ -193,7 +187,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
   // printf("Starting compaction..\n");
   Status s = Status::OK();
   {
-    SSZoneMetaData meta;
+    SSZoneMetaDataLN meta;
     SSTableBuilder* builder =
         vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
     {

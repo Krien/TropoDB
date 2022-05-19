@@ -37,15 +37,15 @@ class ZnsSSTable {
     channel_factory_->Unref();
     channel_factory_ = nullptr;
   }
-  virtual Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) = 0;
+  virtual Status ReadSSTable(Slice* sstable, const SSZoneMetaData* meta) = 0;
   virtual Status Get(const InternalKeyComparator& icmp, const Slice& key,
-                     std::string* value, const SSZoneMetaData& meta,
+                     std::string* value, const SSZoneMetaData* meta,
                      EntryStatus* entry) = 0;
   virtual bool EnoughSpaceAvailable(const Slice& slice) const = 0;
-  virtual Status InvalidateSSZone(const SSZoneMetaData& meta) = 0;
+  virtual Status InvalidateSSZone(const SSZoneMetaData* meta) = 0;
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;
-  virtual Iterator* NewIterator(const SSZoneMetaData& meta,
+  virtual Iterator* NewIterator(const SSZoneMetaData* meta,
                                 const Comparator* cmp) = 0;
   virtual Status Recover() = 0;
   virtual uint64_t GetTail() const = 0;

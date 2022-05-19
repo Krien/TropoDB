@@ -57,7 +57,7 @@ Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
 
 Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
                                       const uint8_t level2,
-                                      const SSZoneMetaData& meta,
+                                      const SSZoneMetaData* meta,
                                       SSZoneMetaData* new_meta) const {
   Status s;
   Slice original;
@@ -65,7 +65,7 @@ Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
   if (!s.ok()) {
     return s;
   }
-  *new_meta = SSZoneMetaData(meta);
+  // *new_meta = SSZoneMetaData(meta);
   s = sstable_level_[level2]->WriteSSTable(original, new_meta);
   delete[] original.data();
   return s;
@@ -78,7 +78,7 @@ bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
 }
 
 Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
-                                           const SSZoneMetaData& meta) const {
+                                           const SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_level_[level]->InvalidateSSZone(meta);
 }
@@ -91,16 +91,16 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
     return Status::OK();
   }
   assert(level < ZnsConfig::level_count);
-  SSZoneMetaData meta;
+  SSZoneMetaDataL0 meta;
   uint64_t written_tail = sstable_level_[level]->GetTail();
 
-  meta.lbas[0] = *live_tail;
-  uint64_t nexthead = ((meta.lbas[0] + *blocks) / zone_size_) * zone_size_;
-  meta.lba_count = nexthead - meta.lbas[0];
+  meta.lba = *live_tail;
+  uint64_t nexthead = ((meta.lba + *blocks) / zone_size_) * zone_size_;
+  meta.lba_count = nexthead - meta.lba;
 
   Status s = Status::OK();
   if (meta.lba_count != 0) {
-    s = sstable_level_[level]->InvalidateSSZone(meta);
+    s = sstable_level_[level]->InvalidateSSZone(&meta);
   }
   if (s.ok()) {
     *blocks -= meta.lba_count;
@@ -112,14 +112,14 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
 Status ZNSSSTableManager::Get(const uint8_t level,
                               const InternalKeyComparator& icmp,
                               const Slice& key_ptr, std::string* value_ptr,
-                              const SSZoneMetaData& meta,
+                              const SSZoneMetaData* meta,
                               EntryStatus* status) const {
   assert(level < ZnsConfig::level_count);
   return sstable_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
 }
 
 Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
-                                      const SSZoneMetaData& meta) const {
+                                      const SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
   return sstable_level_[level]->ReadSSTable(sstable, meta);
 }
@@ -129,7 +129,7 @@ L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
 }
 
 Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
-                                         const SSZoneMetaData& meta,
+                                         const SSZoneMetaData* meta,
                                          const Comparator* cmp) const {
   assert(level < ZnsConfig::level_count);
   return sstable_level_[level]->NewIterator(meta, cmp);
@@ -176,32 +176,32 @@ void ZNSSSTableManager::GetRange(const uint8_t level,
   //   *range = std::make_pair(metas[metas.size()-1]->lba,
   //   metas[0]->lba+metas[0]->lba_count);
   // }
-  uint64_t lowest = 0, lowest_res = ranges_[level].first;
-  uint64_t highest = 0, highest_res = ranges_[level].second;
-  bool first = false;
+  // uint64_t lowest = 0, lowest_res = ranges_[level].first;
+  // uint64_t highest = 0, highest_res = ranges_[level].second;
+  // bool first = false;
 
-  for (auto n = metas.begin(); n != metas.end(); n++) {
-    if (!first) {
-      lowest = (*n)->number;
-      lowest_res = (*n)->lbas[0];
-      highest = (*n)->number;
-      highest_res = (*n)->lbas[0] + (*n)->lba_count;
-      first = true;
-    }
-    if (lowest > (*n)->number) {
-      lowest = (*n)->number;
-      lowest_res = (*n)->lbas[0];
-    }
-    if (highest < (*n)->number) {
-      highest = (*n)->number;
-      highest_res = (*n)->lbas[0] + (*n)->lba_count;
-    }
-  }
-  if (first) {
-    *range = std::make_pair(lowest_res, highest_res);
-  } else {
-    *range = std::make_pair(ranges_[level].first, ranges_[level].first);
-  }
+  // for (auto n = metas.begin(); n != metas.end(); n++) {
+  //   if (!first) {
+  //     lowest = (*n)->number;
+  //     lowest_res = (*n)->lbas[0];
+  //     highest = (*n)->number;
+  //     highest_res = (*n)->lbas[0] + (*n)->lba_count;
+  //     first = true;
+  //   }
+  //   if (lowest > (*n)->number) {
+  //     lowest = (*n)->number;
+  //     lowest_res = (*n)->lbas[0];
+  //   }
+  //   if (highest < (*n)->number) {
+  //     highest = (*n)->number;
+  //     highest_res = (*n)->lbas[0] + (*n)->lba_count;
+  //   }
+  // }
+  // if (first) {
+  //   *range = std::make_pair(lowest_res, highest_res);
+  // } else {
+  //   *range = std::make_pair(ranges_[level].first, ranges_[level].first);
+  // }
   // TODO: higher levels will need more info.
 }
 

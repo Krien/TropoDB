@@ -27,17 +27,17 @@ class ZnsTableCache {
   ZnsTableCache& operator=(const ZnsTableCache&) = delete;
   ~ZnsTableCache();
 
-  Iterator* NewIterator(const ReadOptions& options, const SSZoneMetaData& meta,
+  Iterator* NewIterator(const ReadOptions& options, const SSZoneMetaData* meta,
                         const uint8_t level, ZnsSSTable** tableptr = nullptr);
 
-  Status Get(const ReadOptions& options, const SSZoneMetaData& meta,
+  Status Get(const ReadOptions& options, const SSZoneMetaData* meta,
              const uint8_t level, const Slice& key, std::string* value,
              EntryStatus* status);
 
   void Evict(const uint64_t ss_number);
 
  private:
-  Status FindSSZone(const SSZoneMetaData& meta, const uint8_t level,
+  Status FindSSZone(const SSZoneMetaData* meta, const uint8_t level,
                     Cache::Handle** handle);
 
   const InternalKeyComparator icmp_;

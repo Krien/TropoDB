@@ -10,6 +10,31 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+static bool GetInternalKey(Slice* input, InternalKey* dst) {
+  Slice str;
+  if (GetLengthPrefixedSlice(input, &str)) {
+    dst->DecodeFrom(str);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool SSZoneMetaDataL0::DecodeFrom(Slice* input) {
+  return GetVarint64(input, &number) && GetVarint64(input, &lba) &&
+         GetVarint64(input, &numbers) && GetVarint64(input, &lba_count) &&
+         GetInternalKey(input, &smallest) && GetInternalKey(input, &largest);
+}
+
+void SSZoneMetaDataL0::Encode(std::string* dst) const {
+  PutVarint64(dst, number);
+  PutVarint64(dst, lba);
+  PutVarint64(dst, numbers);
+  PutVarint64(dst, lba_count);
+  PutLengthPrefixedSlice(dst, smallest.Encode());
+  PutLengthPrefixedSlice(dst, largest.Encode());
+}
+
 L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
                            const uint64_t min_zone_nr,
@@ -33,13 +58,14 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return committer_.SpaceEnough(slice);
 }
 
-Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status L0ZnsSSTable::WriteSSTable(const Slice& content,
+                                  SSZoneMetaData* metabase) {
+  SSZoneMetaDataL0* meta = reinterpret_cast<SSZoneMetaDataL0*>(metabase);
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     return Status::IOError("Not enough space available for L0");
   }
-  meta->lba_regions = 1;
-  meta->lbas[0] = log_.GetWriteHead();
+  meta->lba = log_.GetWriteHead();
   Status s = committer_.SafeCommit(content, &meta->lba_count);
   return s;
 }
@@ -87,10 +113,13 @@ void L0ZnsSSTable::release_read_queue() {
   mutex_.Unlock();
 }
 
-Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
+Status L0ZnsSSTable::ReadSSTable(Slice* sstable,
+                                 const SSZoneMetaData* metabase) {
   Status s = Status::OK();
-  if (meta.lbas[0] > max_zone_head_ || meta.lbas[0] < min_zone_head_ ||
-      meta.lba_count > max_zone_head_ - min_zone_head_) {
+  const SSZoneMetaDataL0* meta =
+      reinterpret_cast<const SSZoneMetaDataL0*>(metabase);
+  if (meta->lba > max_zone_head_ || meta->lba < min_zone_head_ ||
+      meta->lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
 
@@ -100,8 +129,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   bool succeeded_once = false;
 
   ZnsCommitReader reader;
-  s = committer_.GetCommitReader(request_read_queue(), meta.lbas[0],
-                                 meta.lbas[0] + meta.lba_count, &reader);
+  s = committer_.GetCommitReader(request_read_queue(), meta->lba,
+                                 meta->lba + meta->lba_count, &reader);
   if (!s.ok()) {
     release_read_queue();
     return s;
@@ -125,12 +154,13 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   return Status::OK();
 }
 
-Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  return FromStatus(
-      log_.ConsumeTail(meta.lbas[0], meta.lbas[0] + meta.lba_count));
+Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData* metabase) {
+  const SSZoneMetaDataL0* meta =
+      reinterpret_cast<const SSZoneMetaDataL0*>(metabase);
+  return FromStatus(log_.ConsumeTail(meta->lba, meta->lba + meta->lba_count));
 }
 
-Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
+Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData* meta,
                                     const Comparator* cmp) {
   Status s;
   Slice sstable;
@@ -152,7 +182,7 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
 
 Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta, EntryStatus* status) {
+                         const SSZoneMetaData* meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
     return Status::Corruption();

@@ -10,6 +10,45 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+static bool GetInternalKey(Slice* input, InternalKey* dst) {
+  Slice str;
+  if (GetLengthPrefixedSlice(input, &str)) {
+    dst->DecodeFrom(str);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool SSZoneMetaDataLN::DecodeFrom(Slice* input) {
+  bool success = GetVarint64(input, &number) &&
+                 GetFixed8(input, &lba_regions) && lba_regions <= 8;
+  if (!success) {
+    return success;
+  }
+  for (size_t i = 0; i < lba_regions; i++) {
+    if (!(GetVarint64(input, &lbas[i]) &&
+          GetVarint64(input, &lba_region_sizes[i]))) {
+      return false;
+    }
+  }
+  return GetVarint64(input, &numbers) && GetVarint64(input, &lba_count) &&
+         GetInternalKey(input, &smallest) && GetInternalKey(input, &largest);
+}
+
+void SSZoneMetaDataLN::Encode(std::string* dst) const {
+  PutVarint64(dst, number);
+  PutFixed8(dst, lba_regions);
+  for (size_t j = 0; j < lba_regions; j++) {
+    PutVarint64(dst, lbas[j]);
+    PutVarint64(dst, lba_region_sizes[j]);
+  }
+  PutVarint64(dst, numbers);
+  PutVarint64(dst, lba_count);
+  PutLengthPrefixedSlice(dst, smallest.Encode());
+  PutLengthPrefixedSlice(dst, largest.Encode());
+}
+
 LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
                            const uint64_t min_zone_nr,
@@ -29,7 +68,9 @@ bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return log_.SpaceLeft(slice.size(), false);
 }
 
-Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status LNZnsSSTable::WriteSSTable(const Slice& content,
+                                  SSZoneMetaData* metabase) {
+  SSZoneMetaDataLN* meta = dynamic_cast<SSZoneMetaDataLN*>(metabase);
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     printf("%lu %lu \n", content.size(), log_.SpaceAvailable());
@@ -51,39 +92,45 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   return Status::OK();
 }
 
-Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
+Status LNZnsSSTable::ReadSSTable(Slice* sstable,
+                                 const SSZoneMetaData* metabase) {
+  const SSZoneMetaDataLN* meta =
+      dynamic_cast<const SSZoneMetaDataLN*>(metabase);
+
   Status s = Status::OK();
-  if (meta.lba_regions > 8) {
+  if (meta->lba_regions > 8) {
     return Status::Corruption("Invalid metadata");
   }
 
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  for (size_t i = 0; i < meta.lba_regions; i++) {
-    uint64_t from = meta.lbas[i];
-    uint64_t blocks = meta.lba_region_sizes[i];
+  for (size_t i = 0; i < meta->lba_regions; i++) {
+    uint64_t from = meta->lbas[i];
+    uint64_t blocks = meta->lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }
     ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
   }
 
-  char* buffer = new char[meta.lba_count * lba_size_];
+  char* buffer = new char[meta->lba_count * lba_size_];
   mutex_.Lock();
-  s = FromStatus(log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true));
+  s = FromStatus(log_.Read(ptrs, buffer, meta->lba_count * lba_size_, true));
   mutex_.Unlock();
   if (!s.ok()) {
     delete[] buffer;
     return s;
   }
-  *sstable = Slice(buffer, meta.lba_count * lba_size_);
+  *sstable = Slice(buffer, meta->lba_count * lba_size_);
   return s;
 }
 
-Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
+Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData* metabase) {
+  const SSZoneMetaDataLN* meta =
+      dynamic_cast<const SSZoneMetaDataLN*>(metabase);
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  for (size_t i = 0; i < meta.lba_regions; i++) {
-    uint64_t from = meta.lbas[i];
-    uint64_t blocks = meta.lba_region_sizes[i];
+  for (size_t i = 0; i < meta->lba_regions; i++) {
+    uint64_t from = meta->lbas[i];
+    uint64_t blocks = meta->lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }
@@ -92,7 +139,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
   return FromStatus(log_.Reset(ptrs));
 }
 
-Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
+Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData* meta,
                                     const Comparator* cmp) {
   Status s;
   Slice sstable;
@@ -115,7 +162,7 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
 
 Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta, EntryStatus* status) {
+                         const SSZoneMetaData* meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
     return Status::Corruption();

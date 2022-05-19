@@ -15,6 +15,14 @@ namespace ROCKSDB_NAMESPACE {
 
 static constexpr uint8_t number_of_concurrent_readers = 4;
 
+// L0 is always contigent
+struct SSZoneMetaDataL0 : public SSZoneMetaData {
+  SSZoneMetaDataL0() : lba(0) {}
+  uint64_t lba;  // Start lba of data
+  bool DecodeFrom(Slice* input) override;
+  void Encode(std::string* dst) const override;
+};
+
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
  public:
@@ -24,14 +32,14 @@ class L0ZnsSSTable : public ZnsSSTable {
   ~L0ZnsSSTable();
   bool EnoughSpaceAvailable(const Slice& slice) const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
-  Iterator* NewIterator(const SSZoneMetaData& meta,
+  Iterator* NewIterator(const SSZoneMetaData* meta,
                         const Comparator* cmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
-             std::string* value, const SSZoneMetaData& meta,
+             std::string* value, const SSZoneMetaData* meta,
              EntryStatus* entry) override;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
-  Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
-  Status InvalidateSSZone(const SSZoneMetaData& meta) override;
+  Status ReadSSTable(Slice* sstable, const SSZoneMetaData* meta) override;
+  Status InvalidateSSZone(const SSZoneMetaData* meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
   uint64_t GetTail() const override { return log_.GetWriteTail(); }

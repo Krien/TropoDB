@@ -12,7 +12,6 @@ SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
       use_encoding_(use_encoding),
       table_(table),
       meta_(meta) {
-  meta_->lba_regions = 0;
   meta_->lba_count = 0;
   buffer_.clear();
   kv_pair_offsets_.clear();
