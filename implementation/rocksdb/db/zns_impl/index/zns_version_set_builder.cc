@@ -107,7 +107,6 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
     const std::pair<uint64_t, uint64_t> deleted_range = levels_[level].ss_d_;
     v->ss_d_[level] = deleted_range;
 
-#ifndef NDEBUG
     // Make sure there is no overlap in levels > 0
     if (level > 0) {
       for (size_t i = 1; i < v->ss_[level].size(); i++) {
@@ -121,7 +120,6 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
         }
       }
     }
-#endif
   }
 }
 

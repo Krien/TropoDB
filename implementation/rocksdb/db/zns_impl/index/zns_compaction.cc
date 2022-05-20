@@ -117,9 +117,6 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
 
 void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
   for (int i = 0; i <= 1; i++) {
-    if (i + first_level_ != 0) {
-      return;
-    }
     std::vector<SSZoneMetaData*>::const_iterator base_iter =
         targets_[i].begin();
     std::vector<SSZoneMetaData*>::const_iterator base_end = targets_[i].end();
@@ -145,6 +142,10 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
           count + vset_->current_->ss_d_[first_level_ + i].second);
     } else {
       new_deleted_range = std::make_pair(lba, count);
+    }
+
+    if (i + first_level_ != 0) {
+      break;
     }
 
     printf("delete range %u %lu %lu \n", first_level_ + i,
