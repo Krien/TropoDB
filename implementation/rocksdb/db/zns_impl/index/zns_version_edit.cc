@@ -17,7 +17,8 @@ void ZnsVersionEdit::Clear() {
   has_last_sequence_ = false;
   new_ss_.clear();
   deleted_ss_.clear();
-  deleted_range_.clear();
+  deleted_range_ = std::make_pair(0, 0);  // stub
+  has_deleted_range_ = false;
   compact_pointers_.clear();
   fragmented_data_.clear();
   has_comparator_ = false;
@@ -76,11 +77,10 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   }
 
   // deleted ranges
-  for (const auto& deleted_range : deleted_range_) {
-    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedSSTable));
-    PutFixed8(dst, deleted_range.first);            // level
-    PutVarint64(dst, deleted_range.second.first);   // range first
-    PutVarint64(dst, deleted_range.second.second);  // range last
+  if (has_deleted_range_) {
+    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedRange));
+    PutVarint64(dst, deleted_range_.first);   // range first
+    PutVarint64(dst, deleted_range_.second);  // range last
   }
 
   // deleted LN
@@ -205,11 +205,11 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
           msg = "next ss number";
         }
         break;
-      case ZnsVersionTag::kDeletedSSTable:
-        if (GetLevel(&input, &level) && GetVarint64(&input, &number) &&
+      case ZnsVersionTag::kDeletedRange:
+        if (GetVarint64(&input, &number) &&
             GetVarint64(&input, &number_second)) {
-          deleted_range_.push_back(
-              std::make_pair(level, std::make_pair(number, number_second)));
+          deleted_range_ = std::make_pair(number, number_second);
+          has_deleted_range_ = true;
         } else {
           msg = "deleted sstable entry";
         }

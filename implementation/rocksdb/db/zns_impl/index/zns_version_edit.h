@@ -18,7 +18,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 typedef std::set<std::pair<uint8_t, uint64_t>> DeletedZoneSet;
-typedef std::pair<uint8_t, std::pair<uint64_t, uint64_t>> DeletedZoneRange;
+typedef std::pair<uint64_t, uint64_t> DeletedZoneRange;
 /**
  * @brief Prepares the changes to the index structure to allow for CoW behaviour
  * for the index.
@@ -51,9 +51,9 @@ class ZnsVersionEdit {
   void SetCompactPointer(uint8_t level, const InternalKey& key) {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
-  void AddDeletedRange(uint8_t level,
-                       const std::pair<uint64_t, uint64_t>& range) {
-    deleted_range_.push_back(std::make_pair(level, range));
+  void AddDeletedRange(const std::pair<uint64_t, uint64_t>& range) {
+    deleted_range_ = range;
+    has_deleted_range_ = true;
   }
   void AddFragmentedData(uint8_t level, const Slice& fragmented_data) {
     // Important! Do use strings as Slice copies will not work correctly with
@@ -70,7 +70,8 @@ class ZnsVersionEdit {
   DeletedZoneSet deleted_ss_;
   std::vector<std::pair<uint8_t, std::string>> fragmented_data_;
 
-  std::vector<DeletedZoneRange> deleted_range_;
+  DeletedZoneRange deleted_range_;
+  bool has_deleted_range_;
 
   std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
 

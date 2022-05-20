@@ -36,7 +36,8 @@ enum class ZnsVersionTag : uint32_t {
   kNewSSTable = 7,
 
   kPrevLogNumber = 9,
-  kFragmentedData = 0xa
+  kDeletedRange = 0xa,
+  kFragmentedData = 0xb
 };
 
 /**
@@ -62,7 +63,7 @@ class ZnsVersion : public RefCounter {
 
   // Version specific
   std::array<std::vector<SSZoneMetaData*>, ZnsConfig::level_count> ss_;
-  std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count> ss_d_;
+  std::pair<uint64_t, uint64_t> ss_deleted_range_;
   // Parent
   ZnsVersionSet* vset_;
   // Linked list

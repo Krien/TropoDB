@@ -75,23 +75,27 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   Status s = Status::OK();
   std::pair<uint64_t, uint64_t> range;
   ZnsVersionEdit edit;
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (current_->ss_d_[i].second == 0) {
-      continue;
-    }
-    GetLiveZoneRange(i, &range);
-    uint64_t new_deleted_range_lba = current_->ss_d_[i].first;
-    uint64_t new_deleted_range_count = current_->ss_d_[i].second;
-    s = znssstable_->SetValidRangeAndReclaim(i, &new_deleted_range_lba,
+
+  // Reclaim L0
+  if (current_->ss_deleted_range_.second != 0) {
+    GetLiveZoneRange(0, &range);
+    uint64_t new_deleted_range_lba = current_->ss_deleted_range_.first;
+    uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
+    s = znssstable_->SetValidRangeAndReclaim(&new_deleted_range_lba,
                                              &new_deleted_range_count);
     printf("Move deleted range from %lu %lu to %lu %lu \n",
-           current_->ss_d_[i].first, current_->ss_d_[i].second,
-           new_deleted_range_lba, new_deleted_range_count);
+           current_->ss_deleted_range_.first,
+           current_->ss_deleted_range_.second, new_deleted_range_lba,
+           new_deleted_range_count);
     edit.AddDeletedRange(
-        i, std::make_pair(new_deleted_range_lba, new_deleted_range_count));
+        std::make_pair(new_deleted_range_lba, new_deleted_range_count));
     if (!s.ok()) {
       return s;
     }
+  }
+
+  // TODO: LN
+  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
   }
   s = LogAndApply(&edit);
   return s;
@@ -108,13 +112,13 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
       const SSZoneMetaData& m = *ss[i];
       edit.AddSSDefinition(level, m);
     }
-    std::pair<uint64_t, uint64_t>& range = version->ss_d_[level];
-    edit.AddDeletedRange(level, range);
     std::string& compact_ptr = compact_pointer_[level];
     InternalKey ikey;
     ikey.DecodeFrom(compact_ptr);
     edit.SetCompactPointer(level, ikey);
   }
+  // Deleted range
+  edit.AddDeletedRange(current_->ss_deleted_range_);
   // Fragmented logs
   for (uint8_t level = 1; level < ZnsConfig::level_count; level++) {
     std::string data = znssstable_->GetFragmentedLogData(level);

@@ -83,28 +83,25 @@ Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
   return sstable_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::SetValidRangeAndReclaim(const uint8_t level,
-                                                  uint64_t* live_tail,
+Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
                                                   uint64_t* blocks) const {
   // TODO: move to sstable
-  if (level != 0) {
-    return Status::OK();
-  }
-  assert(level < ZnsConfig::level_count);
   SSZoneMetaData meta;
-  uint64_t written_tail = sstable_level_[level]->GetTail();
+  uint64_t written_tail = sstable_level_[0]->GetTail();
 
   meta.L0.lba = *live_tail;
   uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_size_) * zone_size_;
   meta.lba_count = nexthead - meta.L0.lba;
 
+  printf("test %lu %lu %lu \n", meta.L0.lba, meta.lba_count, written_tail);
+
   Status s = Status::OK();
   if (meta.lba_count != 0) {
-    s = sstable_level_[level]->InvalidateSSZone(meta);
+    s = sstable_level_[0]->InvalidateSSZone(meta);
   }
   if (s.ok()) {
     *blocks -= meta.lba_count;
-    *live_tail = sstable_level_[level]->GetTail();
+    *live_tail = sstable_level_[0]->GetTail();
   }
   return s;
 }

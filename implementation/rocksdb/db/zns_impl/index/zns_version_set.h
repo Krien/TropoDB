@@ -140,10 +140,10 @@ class ZnsVersionSet::Builder {
   typedef std::set<SSZoneMetaData*, BySmallestKey> ZoneSet;
   struct LevelState {
     std::set<uint64_t> deleted_ss;
-    std::pair<uint64_t, uint64_t> ss_d_;
     ZoneSet* added_ss;
   };
 
+  std::pair<uint64_t, uint64_t> ss_deleted_range_;
   std::vector<std::pair<uint8_t, Slice>> fragmented_data_;
 
   ZnsVersionSet* vset_;

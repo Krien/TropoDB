@@ -134,23 +134,23 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
       }
       count += +(*base_iter)->lba_count;
     }
-    // Carry over
-    std::pair<uint64_t, uint64_t> new_deleted_range;
-    if (vset_->current_->ss_d_[first_level_ + i].second != 0) {
-      new_deleted_range = std::make_pair(
-          vset_->current_->ss_d_[first_level_ + i].first,
-          count + vset_->current_->ss_d_[first_level_ + i].second);
-    } else {
-      new_deleted_range = std::make_pair(lba, count);
-    }
 
-    if (i + first_level_ != 0) {
-      break;
+    // Setup deleted range when on L0
+    if (i + first_level_ == 0) {
+      // Carry over (move head of deleted range)
+      std::pair<uint64_t, uint64_t> new_deleted_range;
+      if (vset_->current_->ss_deleted_range_.second != 0) {
+        new_deleted_range =
+            std::make_pair(vset_->current_->ss_deleted_range_.first,
+                           count + vset_->current_->ss_deleted_range_.second);
+      } else {
+        // No deleted range yet, so create one.
+        new_deleted_range = std::make_pair(lba, count);
+      }
+      printf("delete range %u %lu %lu \n", first_level_ + i,
+             new_deleted_range.first, new_deleted_range.second);
+      edit->AddDeletedRange(new_deleted_range);
     }
-
-    printf("delete range %u %lu %lu \n", first_level_ + i,
-           new_deleted_range.first, new_deleted_range.second);
-    edit->AddDeletedRange(first_level_ + i, new_deleted_range);
   }
 }
 
