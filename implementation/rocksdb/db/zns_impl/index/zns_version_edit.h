@@ -30,7 +30,7 @@ class ZnsVersionEdit {
 
   void Clear();
   void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
-  void RemoveSSDefinition(const uint8_t level, const uint64_t number);
+  void RemoveSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   // Used for Manifest logic
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
@@ -61,6 +61,9 @@ class ZnsVersionEdit {
     fragmented_data_.push_back(
         std::make_pair(level, fragmented_data.ToString()));
   }
+  void AddDeletedSSTable(uint8_t level, const SSZoneMetaData& meta) {
+    deleted_ss_pers_.push_back(std::make_pair(level, meta));
+  }
 
  private:
   friend class ZnsVersionSet;
@@ -69,9 +72,9 @@ class ZnsVersionEdit {
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
   std::vector<std::pair<uint8_t, std::string>> fragmented_data_;
-
   DeletedZoneRange deleted_range_;
   bool has_deleted_range_;
+  std::vector<std::pair<uint8_t, SSZoneMetaData>> deleted_ss_pers_;
 
   std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
 

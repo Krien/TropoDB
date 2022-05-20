@@ -95,7 +95,12 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   }
 
   // TODO: LN
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+  for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
+    for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
+      printf("  deleting ln \n");
+      znssstable_->DeleteLNTable(i, *current_->ss_d_[i][j]);
+    }
+    current_->ss_d_[i].clear();
   }
   s = LogAndApply(&edit);
   return s;
@@ -124,6 +129,9 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
     std::string data = znssstable_->GetFragmentedLogData(level);
     Slice sdata = Slice(data.data(), data.size());
     edit.AddFragmentedData(level, sdata);
+    for (auto del : version->ss_d_[level]) {
+      edit.AddDeletedSSTable(level, *del);
+    }
   }
   edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);

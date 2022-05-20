@@ -17,6 +17,7 @@ void ZnsVersionEdit::Clear() {
   has_last_sequence_ = false;
   new_ss_.clear();
   deleted_ss_.clear();
+  deleted_ss_pers_.clear();
   deleted_range_ = std::make_pair(0, 0);  // stub
   has_deleted_range_ = false;
   compact_pointers_.clear();
@@ -48,8 +49,11 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
 }
 
 void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
-                                        const uint64_t number) {
-  deleted_ss_.insert(std::make_pair(level, number));
+                                        const SSZoneMetaData& meta) {
+  deleted_ss_.insert(std::make_pair(level, meta.number));
+  if (level != 0) {
+    deleted_ss_pers_.push_back(std::make_pair(level, meta));
+  }
 }
 
 void ZnsVersionEdit::EncodeTo(std::string* dst) const {
@@ -84,6 +88,22 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   }
 
   // deleted LN
+  for (auto del : deleted_ss_pers_) {
+    const uint8_t level = del.first;
+    const SSZoneMetaData& m = del.second;
+    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedSSTable));
+    PutFixed8(dst, level);  // level
+    PutVarint64(dst, m.number);
+    PutFixed8(dst, m.LN.lba_regions);
+    for (size_t j = 0; j < m.LN.lba_regions; j++) {
+      PutVarint64(dst, m.LN.lbas[j]);
+      PutVarint64(dst, m.LN.lba_region_sizes[j]);
+    }
+    PutVarint64(dst, m.numbers);
+    PutVarint64(dst, m.lba_count);
+    PutLengthPrefixedSlice(dst, m.smallest.Encode());
+    PutLengthPrefixedSlice(dst, m.largest.Encode());
+  }
 
   // new files
   for (size_t i = 0; i < new_ss_.size(); i++) {
@@ -210,6 +230,14 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &number_second)) {
           deleted_range_ = std::make_pair(number, number_second);
           has_deleted_range_ = true;
+        } else {
+          msg = "deleted sstable range";
+        }
+        break;
+      case ZnsVersionTag::kDeletedSSTable:
+        printf("Getting deleted sstable\n");
+        if (GetLevel(&input, &level) && DecodeLevel(&input, level, &m)) {
+          deleted_ss_pers_.push_back(std::make_pair(level, m));
         } else {
           msg = "deleted sstable entry";
         }

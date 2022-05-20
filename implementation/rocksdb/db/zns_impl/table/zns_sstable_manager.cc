@@ -106,6 +106,11 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
   return s;
 }
 
+Status ZNSSSTableManager::DeleteLNTable(const uint8_t level,
+                                        const SSZoneMetaData& meta) const {
+  Status s = sstable_level_[level]->InvalidateSSZone(meta);
+}
+
 Status ZNSSSTableManager::Get(const uint8_t level,
                               const InternalKeyComparator& icmp,
                               const Slice& key_ptr, std::string* value_ptr,

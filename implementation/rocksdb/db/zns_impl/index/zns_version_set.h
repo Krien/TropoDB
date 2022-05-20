@@ -141,6 +141,7 @@ class ZnsVersionSet::Builder {
   struct LevelState {
     std::set<uint64_t> deleted_ss;
     ZoneSet* added_ss;
+    std::vector<SSZoneMetaData*> deleted_ss_pers;
   };
 
   std::pair<uint64_t, uint64_t> ss_deleted_range_;

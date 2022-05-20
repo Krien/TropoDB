@@ -58,7 +58,15 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
     ss_deleted_range_ = edit->deleted_range_;
   }
 
-  // Add new files
+  // Add deleted zone regions
+  for (size_t i = 0; i < edit->deleted_ss_pers_.size(); i++) {
+    const uint8_t level = edit->deleted_ss_pers_[i].first;
+    SSZoneMetaData* m = new SSZoneMetaData(edit->deleted_ss_pers_[i].second);
+    m->refs = 1;
+    levels_[level].deleted_ss_pers.push_back(m);
+  }
+
+  // Add new zone regions
   for (size_t i = 0; i < edit->new_ss_.size(); i++) {
     const uint8_t level = edit->new_ss_[i].first;
     SSZoneMetaData* m = new SSZoneMetaData(edit->new_ss_[i].second);
@@ -114,6 +122,15 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
           std::abort();
         }
       }
+    }
+
+    // TODO: improve or something
+    // Add deleted files to level
+    for (auto d : base_->ss_d_[level]) {
+      v->ss_d_[level].push_back(d);
+    }
+    for (auto d : levels_[level].deleted_ss_pers) {
+      v->ss_d_[level].push_back(d);
     }
   }
   // Add ranges to delete.

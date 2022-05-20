@@ -127,7 +127,7 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     uint64_t number = (*base_iter)->number;
     uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
-      edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
+      edit->RemoveSSDefinition(i + first_level_, *(*base_iter));
       if ((*base_iter)->number < number) {
         number = (*base_iter)->number;
         lba = (*base_iter)->L0.lba;
