@@ -29,6 +29,8 @@ class LNZnsSSTable : public ZnsSSTable {
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
+  Status Recover(const std::string& from);
+  std::string Encode();
   uint64_t GetTail() const override { return 0; }
   uint64_t GetHead() const override { return 0; }
 

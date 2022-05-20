@@ -45,7 +45,8 @@ class ZNSSSTableManager : public RefCounter {
                         const Comparator* cmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
-  Status Recover();
+  Status Recover(const std::vector<std::pair<uint8_t, std::string>>& frag);
+  std::string GetFragmentedLogData(const uint8_t level);
   // Used for compaction
   double GetFractionFilled(const uint8_t level) const;
   // Used for cleaning

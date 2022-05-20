@@ -115,6 +115,12 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
     ikey.DecodeFrom(compact_ptr);
     edit.SetCompactPointer(level, ikey);
   }
+  // Fragmented logs
+  for (uint8_t level = 1; level < ZnsConfig::level_count; level++) {
+    std::string data = znssstable_->GetFragmentedLogData(level);
+    Slice sdata = Slice(data.data(), data.size());
+    edit.AddFragmentedData(level, sdata);
+  }
   edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);
   return Status::OK();
@@ -438,26 +444,29 @@ Status ZnsVersionSet::Recover() {
   std::string manifest_data;
   s = manifest_->ReadManifest(&manifest_data);
 
-  s = znssstable_->Recover();
-  if (!s.ok()) {
-    return s;
-  }
-
   ZnsVersionEdit edit;
   s = DecodeFrom(manifest_data, &edit);
   if (!s.ok()) {
     return s;
   }
 
+  // Recover log functionalities for L0 to LN.
+  s = znssstable_->Recover(edit.fragmented_data_);
+
   // Install recovered edit
   if (s.ok()) {
     LogAndApply(&edit);
   }
+
   if (edit.has_last_sequence_) {
     last_sequence_ = edit.last_sequence_;
   }
   if (edit.has_next_ss_number) {
     ss_number_ = edit.ss_number;
+  }
+
+  if (!s.ok()) {
+    return s;
   }
 
   // Setup numbers, temporary hack...

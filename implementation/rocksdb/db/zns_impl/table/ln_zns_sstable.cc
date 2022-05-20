@@ -21,6 +21,12 @@ LNZnsSSTable::~LNZnsSSTable() = default;
 
 Status LNZnsSSTable::Recover() { return Status::OK(); }
 
+Status LNZnsSSTable::Recover(const std::string& from) {
+  return FromStatus(log_.DecodeFrom(from.data(), from.size()));
+}
+
+std::string LNZnsSSTable::Encode() { return log_.Encode(); }
+
 SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
 }
@@ -66,6 +72,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }
+    printf("reading %lu %lu \n", from, blocks);
     ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
   }
 

@@ -144,6 +144,8 @@ class ZnsVersionSet::Builder {
     ZoneSet* added_ss;
   };
 
+  std::vector<std::pair<uint8_t, Slice>> fragmented_data_;
+
   ZnsVersionSet* vset_;
   ZnsVersion* base_;
   std::array<LevelState, ZnsConfig::level_count> levels_;

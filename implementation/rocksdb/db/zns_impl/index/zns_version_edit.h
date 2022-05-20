@@ -55,6 +55,12 @@ class ZnsVersionEdit {
                        const std::pair<uint64_t, uint64_t>& range) {
     deleted_range_.push_back(std::make_pair(level, range));
   }
+  void AddFragmentedData(uint8_t level, const Slice& fragmented_data) {
+    // Important! Do use strings as Slice copies will not work correctly with
+    // strings holding calloced C-strings...
+    fragmented_data_.push_back(
+        std::make_pair(level, fragmented_data.ToString()));
+  }
 
  private:
   friend class ZnsVersionSet;
@@ -62,8 +68,12 @@ class ZnsVersionEdit {
 
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
-  std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
+  std::vector<std::pair<uint8_t, std::string>> fragmented_data_;
+
   std::vector<DeletedZoneRange> deleted_range_;
+
+  std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
+
   SequenceNumber last_sequence_;
   bool has_last_sequence_;
   std::string comparator_;

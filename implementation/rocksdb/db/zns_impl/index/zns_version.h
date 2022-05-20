@@ -35,7 +35,8 @@ enum class ZnsVersionTag : uint32_t {
   kDeletedSSTable = 6,
   kNewSSTable = 7,
 
-  kPrevLogNumber = 9
+  kPrevLogNumber = 9,
+  kFragmentedData = 0xa
 };
 
 /**

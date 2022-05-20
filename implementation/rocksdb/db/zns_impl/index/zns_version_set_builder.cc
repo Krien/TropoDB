@@ -67,6 +67,12 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
     levels_[level].deleted_ss.erase(m->number);
     levels_[level].added_ss->insert(m);
   }
+
+  // fragmented data
+  fragmented_data_.clear();
+  for (auto frag : edit->fragmented_data_) {
+    fragmented_data_.push_back(frag);
+  }
 }
 
 // Save the current state in *v.

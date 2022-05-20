@@ -19,6 +19,7 @@ void ZnsVersionEdit::Clear() {
   deleted_ss_.clear();
   deleted_range_.clear();
   compact_pointers_.clear();
+  fragmented_data_.clear();
   has_comparator_ = false;
   comparator_.clear();
   has_next_ss_number = false;
@@ -104,6 +105,13 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutLengthPrefixedSlice(dst, m.smallest.Encode());
     PutLengthPrefixedSlice(dst, m.largest.Encode());
   }
+
+  // Fragmented logs
+  for (auto frag : fragmented_data_) {
+    PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kFragmentedData));
+    PutFixed8(dst, frag.first);
+    PutLengthPrefixedSlice(dst, frag.second);
+  }
 }
 
 static bool GetInternalKey(Slice* input, InternalKey* dst) {
@@ -168,6 +176,7 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
   uint8_t level;
   uint64_t number;
   uint64_t number_second;
+  Slice frag;
   SSZoneMetaData m;
   InternalKey key;
 
@@ -217,6 +226,14 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
           compact_pointers_.push_back(std::make_pair(level, key));
         } else {
           msg = "compaction pointer";
+        }
+        break;
+      case ZnsVersionTag::kFragmentedData:
+        frag.clear();
+        if (GetLevel(&input, &level) && GetLengthPrefixedSlice(&input, &frag)) {
+          fragmented_data_.push_back(std::make_pair(level, frag.ToString()));
+        } else {
+          msg = "fragmented log";
         }
         break;
       default:

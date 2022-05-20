@@ -141,14 +141,33 @@ SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
   return sstable_level_[level]->NewBuilder(meta);
 }
 
-Status ZNSSSTableManager::Recover() {
+Status ZNSSSTableManager::Recover(
+    const std::vector<std::pair<uint8_t, std::string>>& frag) {
   Status s = Status::OK();
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
-    if (!(s = sstable_level_[i]->Recover()).ok()) {
+  // Recover L0
+  s = dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
+  if (!s.ok()) {
+    return s;
+  }
+  // Recover LN
+  for (auto fragdata : frag) {
+    uint8_t level = fragdata.first;
+    if (level == 0 || level > ZnsConfig::level_count) {
+      return Status::Corruption();
+    }
+    s = dynamic_cast<LNZnsSSTable*>(sstable_level_[level])
+            ->Recover(fragdata.second);
+    if (!s.ok()) {
       return s;
     }
   }
   return s;
+}
+
+std::string ZNSSSTableManager::GetFragmentedLogData(const uint8_t level) {
+  assert(level > 0);  // L0 does not work!!
+  LNZnsSSTable* table = dynamic_cast<LNZnsSSTable*>(sstable_level_[level]);
+  return table->Encode();
 }
 
 double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
