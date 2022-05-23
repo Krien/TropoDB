@@ -23,6 +23,11 @@ SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
 
 SSTableBuilder::~SSTableBuilder() {}
 
+uint64_t SSTableBuilder::EstimateSizeImpact(const Slice& key,
+                                            const Slice& value) const {
+  return key.size() + value.size() + 5 * sizeof(uint32_t);
+}
+
 Status SSTableBuilder::Apply(const Slice& key, const Slice& value) {
   if (!started_) {
     meta_->smallest.DecodeFrom(key);

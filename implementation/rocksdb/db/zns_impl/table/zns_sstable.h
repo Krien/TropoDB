@@ -42,6 +42,7 @@ class ZnsSSTable {
                      std::string* value, const SSZoneMetaData& meta,
                      EntryStatus* entry) = 0;
   virtual bool EnoughSpaceAvailable(const Slice& slice) const = 0;
+  virtual uint64_t SpaceAvailable() const = 0;
   virtual Status InvalidateSSZone(const SSZoneMetaData& meta) = 0;
   virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;

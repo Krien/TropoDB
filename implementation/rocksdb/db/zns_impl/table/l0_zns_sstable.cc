@@ -33,6 +33,8 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return committer_.SpaceEnough(slice);
 }
 
+uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
+
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {

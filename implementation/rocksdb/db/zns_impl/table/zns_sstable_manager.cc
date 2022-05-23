@@ -16,6 +16,7 @@ ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                                      const SZD::DeviceInfo& info,
                                      const RangeArray& ranges)
     : zone_size_(info.zone_size),
+      lba_size_(info.lba_size),
       ranges_(ranges),
       channel_factory_(channel_factory) {
   assert(channel_factory_ != nullptr);
@@ -109,6 +110,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
 Status ZNSSSTableManager::DeleteLNTable(const uint8_t level,
                                         const SSZoneMetaData& meta) const {
   Status s = sstable_level_[level]->InvalidateSSZone(meta);
+  return s;
 }
 
 Status ZNSSSTableManager::Get(const uint8_t level,
@@ -174,15 +176,18 @@ std::string ZNSSSTableManager::GetFragmentedLogData(const uint8_t level) {
 
 double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  uint64_t head = sstable_level_[level]->GetHead();
-  uint64_t tail = sstable_level_[level]->GetTail();
-  uint64_t sum =
-      head >= tail
-          ? (head - tail)
-          : (ranges_[level].second - tail + head - ranges_[level].first);
-  double fract = (double)sum /
-                 ((double)ranges_[level].second - (double)ranges_[level].first);
+  uint64_t space_available =
+      sstable_level_[level]->SpaceAvailable() / lba_size_;
+  uint64_t total_space = ranges_[level].second - ranges_[level].first;
+  // printf("Space available %lu, Total space %lu \n", space_available,
+  //        total_space);
+  double fract = (double)(total_space - space_available) / (double)total_space;
   return fract;
+}
+
+uint64_t ZNSSSTableManager::SpaceRemaining(const uint8_t level) const {
+  assert(level < ZnsConfig::level_count);
+  return sstable_level_[level]->SpaceAvailable() / lba_size_;
 }
 
 void ZNSSSTableManager::GetDefaultRange(

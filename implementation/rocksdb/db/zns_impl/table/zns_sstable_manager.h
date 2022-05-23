@@ -49,6 +49,7 @@ class ZNSSSTableManager : public RefCounter {
   std::string GetFragmentedLogData(const uint8_t level);
   // Used for compaction
   double GetFractionFilled(const uint8_t level) const;
+  uint64_t SpaceRemaining(const uint8_t level) const;
   // Used for cleaning
   void GetDefaultRange(const uint8_t level,
                        std::pair<uint64_t, uint64_t>* range) const;
@@ -67,6 +68,7 @@ class ZNSSSTableManager : public RefCounter {
   ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);
   const uint64_t zone_size_;
+  const uint64_t lba_size_;
   // sstables
   RangeArray ranges_;
   SSTableArray sstable_level_;

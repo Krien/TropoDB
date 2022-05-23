@@ -19,6 +19,7 @@ class LNZnsSSTable : public ZnsSSTable {
                const uint64_t max_zone_nr);
   ~LNZnsSSTable();
   bool EnoughSpaceAvailable(const Slice& slice) const override;
+  uint64_t SpaceAvailable() const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
   Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;

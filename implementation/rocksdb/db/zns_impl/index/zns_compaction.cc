@@ -16,9 +16,11 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
     : first_level_(first_level),
-      max_lba_count_(((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
-                      vset->lba_size_) *
-                     vset->lba_size_),
+      max_lba_count_(((((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+                        vset->lba_size_) +
+                       vset->zone_size_ - 1) /
+                      vset->zone_size_) *
+                     vset->zone_size_),
       vset_(vset),
       version_(nullptr) {
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
@@ -246,13 +248,17 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         // add
         if (drop) {
         } else {
-          s = builder->Apply(key, value);
-          if (builder->GetSize() / vset_->lba_size_ >= max_lba_count_) {
+          // estimate if flush before would be better...
+          if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
+               vset_->lba_size_ - 1) /
+                  vset_->lba_size_ >=
+              max_lba_count_) {
             s = FlushSSTable(&builder, edit, &meta);
             if (!s.ok()) {
               break;
             }
           }
+          s = builder->Apply(key, value);
         }
       }
       if (s.ok() && builder->GetSize() > 0) {

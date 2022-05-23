@@ -17,13 +17,14 @@ namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
                              ZNSSSTableManager* znssstable,
                              ZnsManifest* manifest, const uint64_t lba_size,
-                             ZnsTableCache* table_cache)
+                             uint64_t zone_size, ZnsTableCache* table_cache)
     : dummy_versions_(this),
       current_(nullptr),
       icmp_(icmp),
       znssstable_(znssstable),
       manifest_(manifest),
       lba_size_(lba_size),
+      zone_size_(zone_size),
       ss_number_(0),
       logged_(false),
       table_cache_(table_cache) {
@@ -98,7 +99,11 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
       printf("  deleting ln \n");
-      znssstable_->DeleteLNTable(i, *current_->ss_d_[i][j]);
+      s = znssstable_->DeleteLNTable(i, *current_->ss_d_[i][j]);
+      if (!s.ok()) {
+        printf("Error deleting ln table \n");
+        return s;
+      }
     }
     current_->ss_d_[i].clear();
   }
@@ -299,20 +304,20 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
   }
 }
 
-static int64_t TotalLbas(const std::vector<SSZoneMetaData*>& ss) {
-  int64_t sum = 0;
-  for (size_t i = 0; i < ss.size(); i++) {
-    sum += ss[i]->lba_count;
-  }
-  return sum;
-}
+// static int64_t TotalLbas(const std::vector<SSZoneMetaData*>& ss) {
+//   int64_t sum = 0;
+//   for (size_t i = 0; i < ss.size(); i++) {
+//     sum += ss[i]->lba_count;
+//   }
+//   return sum;
+// }
 
-static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
-  return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
-               lba_size);
-}
+// static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
+//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+//                lba_size);
+// }
 
-void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
+void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   const uint8_t level = c->first_level_;
   InternalKey smallest, largest;
 
@@ -329,31 +334,31 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c) {
 
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
-  if (!c->targets_[1].empty()) {
-    std::vector<SSZoneMetaData*> expanded0;
-    current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
-    AddBoundaryInputs(icmp_, current_->ss_[level], &expanded0);
-    const int64_t inputs0_size = TotalLbas(c->targets_[0]);
-    const int64_t inputs1_size = TotalLbas(c->targets_[1]);
-    const int64_t expanded0_size = TotalLbas(expanded0);
-    if (expanded0.size() > c->targets_[0].size() &&
-        inputs1_size + expanded0_size <
-            ExpandedCompactionLbaSizeLimit(lba_size_)) {
-      InternalKey new_start, new_limit;
-      GetRange(expanded0, &new_start, &new_limit);
-      std::vector<SSZoneMetaData*> expanded1;
-      current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
-                                     &expanded1);
-      AddBoundaryInputs(icmp_, current_->ss_[level + 1], &expanded1);
-      if (expanded1.size() == c->targets_[1].size()) {
-        smallest = new_start;
-        largest = new_limit;
-        c->targets_[0] = expanded0;
-        c->targets_[1] = expanded1;
-        GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
-      }
-    }
-  }
+  // if (!c->targets_[1].empty()) {
+  //   std::vector<SSZoneMetaData*> expanded0;
+  //   current_->GetOverlappingInputs(level, &all_start, &all_limit,
+  //   &expanded0); AddBoundaryInputs(icmp_, current_->ss_[level], &expanded0);
+  //   const int64_t inputs0_size = TotalLbas(c->targets_[0]);
+  //   const int64_t inputs1_size = TotalLbas(c->targets_[1]);
+  //   const int64_t expanded0_size = TotalLbas(expanded0);
+  //   if (expanded0.size() > c->targets_[0].size() &&
+  //       inputs1_size + expanded0_size <
+  //           ExpandedCompactionLbaSizeLimit(lba_size_)) {
+  //     InternalKey new_start, new_limit;
+  //     GetRange(expanded0, &new_start, &new_limit);
+  //     std::vector<SSZoneMetaData*> expanded1;
+  //     current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
+  //                                    &expanded1);
+  //     AddBoundaryInputs(icmp_, current_->ss_[level + 1], &expanded1);
+  //     if (expanded1.size() == c->targets_[1].size()) {
+  //       smallest = new_start;
+  //       largest = new_limit;
+  //       c->targets_[0] = expanded0;
+  //       c->targets_[1] = expanded1;
+  //       GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
+  //     }
+  //   }
+  // }
 
   if (level + 2 < ZnsConfig::level_count) {
     current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
@@ -374,34 +379,52 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   printf("Compacting from <%d because score is %f, from %f>\n", level,
          current_->compaction_score_, znssstable_->GetFractionFilled(level));
 
+  // We must make sure that the compaction will not be too big!
+  uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
+
   // Pick the first file that comes after compact_pointer_[level]
   for (size_t i = 0; i < current_->ss_[level].size(); i++) {
     SSZoneMetaData* m = current_->ss_[level][i];
     if (compact_pointer_[level].empty() ||
         icmp_.Compare(m->largest.Encode(), compact_pointer_[level]) > 0) {
       c->targets_[0].push_back(m);
+      max_lba_c -= m->lba_count;
       break;
     }
   }
   if (c->targets_[0].empty()) {
     // Wrap-around to the beginning of the key space
     c->targets_[0].push_back(current_->ss_[level][0]);
+    max_lba_c -= current_->ss_[level][0]->lba_count;
   }
   c->version_ = current_;
   c->version_->Ref();
 
   // Files in level 0 may overlap each other, so pick up all overlapping ones
+  // (if it fits in the next level...)
   if (level == 0) {
     InternalKey smallest, largest;
     GetRange(c->targets_[0], &smallest, &largest);
     // Note that the next call will discard the file we placed in
     // c->inputs_[0] earlier and replace it with an overlapping set
     // which will include the picked file.
-    current_->GetOverlappingInputs(0, &smallest, &largest, &c->targets_[0]);
+    std::vector<SSZoneMetaData*> overlapping;
+    current_->GetOverlappingInputs(0, &smallest, &largest, &overlapping);
+    c->targets_[0].clear();
+    max_lba_c = znssstable_->SpaceRemaining(level + 1);
+    for (auto target : overlapping) {
+      if (target->lba_count > max_lba_c) {
+        break;
+      }
+      c->targets_[0].push_back(target);
+      max_lba_c -= target->lba_count;
+      // printf("expanding... %lu \n", max_lba_c);
+    }
+
     assert(!c->targets_[0].empty());
   }
 
-  SetupOtherInputs(c);
+  SetupOtherInputs(c, max_lba_c);
 
   return c;
 }
