@@ -35,6 +35,13 @@ class LNZnsSSTable : public ZnsSSTable {
   uint64_t GetTail() const override { return 0; }
   uint64_t GetHead() const override { return 0; }
 
+  inline ZNSDiagnostics GetDiagnostics() const {
+    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+                                  .bytes_read_ = log_.GetBytesRead(),
+                                  .zones_erased_ = log_.GetZonesReset()};
+    return diag;
+  }
+
  private:
   SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...

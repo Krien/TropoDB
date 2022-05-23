@@ -78,6 +78,35 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       bg_error_(Status::OK()),
       forced_schedule_(false) {}
 
+void DBImplZNS::IODiagnostics() {
+  printf("IO diagnostics:..........\n");
+  struct ZNSDiagnostics totaldiag = {
+      .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
+  {
+    ZNSDiagnostics diag = wal_man_->IODiagnostics();
+    totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.zones_erased_ += diag.zones_erased_;
+  }
+  {
+    ZNSDiagnostics diag = ss_manager_->IODiagnostics();
+    totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.zones_erased_ += diag.zones_erased_;
+  }
+  {
+    ZNSDiagnostics diag = manifest_->IODiagnostics();
+    totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.zones_erased_ += diag.zones_erased_;
+  }
+  printf(
+      "TOTAL :\n\tWritten %lu bytes\n\tRead %lu bytes\n\tReset %lu "
+      "zones\n",
+      totaldiag.bytes_written_, totaldiag.bytes_read_, totaldiag.zones_erased_);
+  printf(".........................\n");
+}
+
 DBImplZNS::~DBImplZNS() {
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
@@ -86,6 +115,8 @@ DBImplZNS::~DBImplZNS() {
   }
   mutex_.Unlock();
   std::cout << versions_->DebugString();
+
+  IODiagnostics();
 
   if (versions_ != nullptr) delete versions_;
   if (mem_ != nullptr) mem_->Unref();

@@ -254,6 +254,22 @@ size_t ZNSSSTableManager::FindSSTableIndex(
   return right;
 }
 
+ZNSDiagnostics ZNSSSTableManager::IODiagnostics() {
+  struct ZNSDiagnostics totaldiag = {
+      .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
+  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
+    ZNSDiagnostics diag = sstable_level_[level]->GetDiagnostics();
+    printf(
+        "L%lu has:\n\tWritten %lu bytes\n\tRead %lu bytes\n\t Reset%lu "
+        "zones\n",
+        level, diag.bytes_written_, diag.bytes_read_, diag.zones_erased_);
+    totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.zones_erased_ += diag.zones_erased_;
+  }
+  return totaldiag;
+}
+
 std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
     SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
     const uint64_t min_zone, const uint64_t max_zone) {

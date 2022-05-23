@@ -3,6 +3,7 @@
 #ifndef ZNS_SSTABLE_H
 #define ZNS_SSTABLE_H
 
+#include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
@@ -51,6 +52,8 @@ class ZnsSSTable {
   virtual Status Recover() = 0;
   virtual uint64_t GetTail() const = 0;
   virtual uint64_t GetHead() const = 0;
+
+  virtual ZNSDiagnostics GetDiagnostics() const = 0;
 
  protected:
   // const after init

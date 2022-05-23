@@ -3,6 +3,7 @@
 #ifndef ZNS_MANIFEST_H
 #define ZNS_MANIFEST_H
 
+#include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/ref_counter.h"
@@ -25,6 +26,20 @@ class ZnsManifest : public RefCounter {
     Status s = FromStatus(log_.ResetAll());
     current_lba_ = min_zone_head_;
     return s;
+  }
+  inline ZNSDiagnostics GetDiagnostics() const {
+    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+                                  .bytes_read_ = log_.GetBytesRead(),
+                                  .zones_erased_ = log_.GetZonesReset()};
+    return diag;
+  }
+  inline ZNSDiagnostics IODiagnostics() {
+    struct ZNSDiagnostics diag = GetDiagnostics();
+    printf(
+        "Manifest has:\n\tWritten %lu bytes\n\tRead %lu bytes\n\t Reset%lu "
+        "zones\n",
+        diag.bytes_written_, diag.bytes_read_, diag.zones_erased_);
+    return diag;
   }
 
  private:

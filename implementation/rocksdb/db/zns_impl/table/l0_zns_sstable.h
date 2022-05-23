@@ -38,6 +38,13 @@ class L0ZnsSSTable : public ZnsSSTable {
   uint64_t GetTail() const override { return log_.GetWriteTail(); }
   uint64_t GetHead() const override { return log_.GetWriteHead(); }
 
+  inline ZNSDiagnostics GetDiagnostics() const override {
+    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+                                  .bytes_read_ = log_.GetBytesRead(),
+                                  .zones_erased_ = log_.GetZonesReset()};
+    return diag;
+  }
+
  private:
   friend class ZnsSSTableManagerInternal;
 

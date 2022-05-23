@@ -3,6 +3,7 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
+#include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -38,6 +39,12 @@ class ZNSWAL : public RefCounter {
   inline bool Empty() { return log_.Empty() && pos_ == 0; }
   inline bool SpaceLeft(const Slice& data) {
     return log_.SpaceLeft(data.size() + pos_);
+  }
+  inline ZNSDiagnostics GetDiagnostics() const {
+    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+                                  .bytes_read_ = log_.GetBytesRead(),
+                                  .zones_erased_ = log_.GetZonesReset()};
+    return diag;
   }
 
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
