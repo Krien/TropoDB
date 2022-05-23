@@ -8,6 +8,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 struct ZNSDiagnostics {
+  std::string name_;
   uint64_t bytes_written_;
   uint64_t bytes_read_;
   uint64_t zones_erased_;

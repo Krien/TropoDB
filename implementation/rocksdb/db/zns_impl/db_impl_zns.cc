@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <set>
@@ -78,40 +79,53 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       bg_error_(Status::OK()),
       forced_schedule_(false) {}
 
+static void PrintIOColumn(const ZNSDiagnostics& diag) {
+  std::cout << std::left << std::setw(10) << diag.name_ << std::right
+            << std::setw(25) << diag.bytes_written_ << std::setw(25)
+            << diag.bytes_read_ << std::setw(16) << diag.zones_erased_ << "\n";
+}
+
 void DBImplZNS::IODiagnostics() {
-  printf("SSTable layout:..........\n");
+  std::cout << "==== Summary ====\n";
+  std::cout << "SSTable layout: \n";
   std::cout << versions_->DebugString();
-  printf(".........................\n");
-  printf("IO diagnostics:..........\n");
-  struct ZNSDiagnostics totaldiag = {
-      .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
+  std::cout << "==== raw IO metrics ==== \n";
+  std::cout << std::left << std::setw(10) << "Metric " << std::right
+            << std::setw(25) << "Written (Bytes)" << std::setw(25)
+            << "Read (Bytes)" << std::setw(16) << "Reset (zones)"
+            << "\n";
+  std::cout << std::setfill('_') << std::setw(77) << "\n" << std::setfill(' ');
+  struct ZNSDiagnostics totaldiag = {.name_ = "Total",
+                                     .bytes_written_ = 0,
+                                     .bytes_read_ = 0,
+                                     .zones_erased_ = 0};
   {
-    ZNSDiagnostics diag = wal_man_->IODiagnostics();
-    totaldiag.bytes_written_ += diag.bytes_written_;
-    totaldiag.bytes_read_ += diag.bytes_read_;
-    totaldiag.zones_erased_ += diag.zones_erased_;
+    std::vector<ZNSDiagnostics> diags = wal_man_->IODiagnostics();
+    for (auto& diag : diags) {
+      PrintIOColumn(diag);
+      totaldiag.bytes_written_ += diag.bytes_written_;
+      totaldiag.bytes_read_ += diag.bytes_read_;
+      totaldiag.zones_erased_ += diag.zones_erased_;
+    }
   }
   {
-    ZNSDiagnostics diag = ss_manager_->IODiagnostics();
-    totaldiag.bytes_written_ += diag.bytes_written_;
-    totaldiag.bytes_read_ += diag.bytes_read_;
-    totaldiag.zones_erased_ += diag.zones_erased_;
+    std::vector<ZNSDiagnostics> diags = ss_manager_->IODiagnostics();
+    for (auto& diag : diags) {
+      PrintIOColumn(diag);
+      totaldiag.bytes_written_ += diag.bytes_written_;
+      totaldiag.bytes_read_ += diag.bytes_read_;
+      totaldiag.zones_erased_ += diag.zones_erased_;
+    }
   }
   {
     ZNSDiagnostics diag = manifest_->IODiagnostics();
+    PrintIOColumn(diag);
     totaldiag.bytes_written_ += diag.bytes_written_;
     totaldiag.bytes_read_ += diag.bytes_read_;
     totaldiag.zones_erased_ += diag.zones_erased_;
   }
-  printf(
-      "TOTAL :\n\tWritten %lu bytes / %lu K %lu M\n\tRead %lu bytes / "
-      "%lu K %lu M\n\tReset %lu "
-      "zones\n",
-      totaldiag.bytes_written_, totaldiag.bytes_written_ / 1024,
-      totaldiag.bytes_written_ / 1024 / 1024, totaldiag.bytes_read_,
-      totaldiag.bytes_read_ / 1024, totaldiag.bytes_read_ / 1024 / 1024,
-      totaldiag.zones_erased_);
-  printf(".........................\n");
+  PrintIOColumn(totaldiag);
+  std::cout << std::setfill('_') << std::setw(77) << "\n" << std::setfill(' ');
 }
 
 DBImplZNS::~DBImplZNS() {

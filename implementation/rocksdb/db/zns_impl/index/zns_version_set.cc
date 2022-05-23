@@ -532,8 +532,8 @@ std::string ZnsVersionSet::DebugString() {
   std::string result;
   for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
     std::vector<SSZoneMetaData*>& m = current_->ss_[i];
-    result.append("\t" + std::to_string(i) + ": " + std::to_string(m.size()) +
-                  "\n");
+    result.append("\tLevel " + std::to_string(i) + ": " +
+                  std::to_string(m.size()) + " tables \n");
   }
   return result;
 }

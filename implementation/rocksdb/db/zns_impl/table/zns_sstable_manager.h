@@ -60,7 +60,7 @@ class ZNSSSTableManager : public RefCounter {
   static size_t FindSSTableIndex(const Comparator* icmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
-  ZNSDiagnostics IODiagnostics();
+  std::vector<ZNSDiagnostics> IODiagnostics();
 
  private:
   using RangeArray =

@@ -31,7 +31,7 @@ class ZnsWALManager : public RefCounter {
   Status ResetOldWALs(port::Mutex* mutex_);
   Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
 
-  ZNSDiagnostics IODiagnostics();
+  std::vector<ZNSDiagnostics> IODiagnostics();
 
  private:
   std::array<ZNSWAL*, N> wals_;

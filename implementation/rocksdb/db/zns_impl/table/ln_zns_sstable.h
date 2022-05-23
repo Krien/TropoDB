@@ -36,7 +36,8 @@ class LNZnsSSTable : public ZnsSSTable {
   uint64_t GetHead() const override { return 0; }
 
   inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+    struct ZNSDiagnostics diag = {.name_ = "LN",
+                                  .bytes_written_ = log_.GetBytesWritten(),
                                   .bytes_read_ = log_.GetBytesRead(),
                                   .zones_erased_ = log_.GetZonesReset()};
     return diag;

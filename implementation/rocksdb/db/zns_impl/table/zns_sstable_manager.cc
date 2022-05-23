@@ -257,20 +257,14 @@ size_t ZNSSSTableManager::FindSSTableIndex(
   return right;
 }
 
-ZNSDiagnostics ZNSSSTableManager::IODiagnostics() {
-  struct ZNSDiagnostics totaldiag = {
-      .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
+std::vector<ZNSDiagnostics> ZNSSSTableManager::IODiagnostics() {
+  std::vector<ZNSDiagnostics> diags;
   for (size_t level = 0; level < ZnsConfig::level_count; level++) {
     ZNSDiagnostics diag = sstable_level_[level]->GetDiagnostics();
-    printf(
-        "L%lu has:\n\tWritten %lu bytes\n\tRead %lu bytes\n\t Reset%lu "
-        "zones\n",
-        level, diag.bytes_written_, diag.bytes_read_, diag.zones_erased_);
-    totaldiag.bytes_written_ += diag.bytes_written_;
-    totaldiag.bytes_read_ += diag.bytes_read_;
-    totaldiag.zones_erased_ += diag.zones_erased_;
+    diag.name_ = "L" + std::to_string(level);
+    diags.push_back(diag);
   }
-  return totaldiag;
+  return diags;
 }
 
 std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(

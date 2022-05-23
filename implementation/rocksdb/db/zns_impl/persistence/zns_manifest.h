@@ -28,17 +28,14 @@ class ZnsManifest : public RefCounter {
     return s;
   }
   inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {.bytes_written_ = log_.GetBytesWritten(),
+    struct ZNSDiagnostics diag = {.name_ = "Manifest",
+                                  .bytes_written_ = log_.GetBytesWritten(),
                                   .bytes_read_ = log_.GetBytesRead(),
                                   .zones_erased_ = log_.GetZonesReset()};
     return diag;
   }
   inline ZNSDiagnostics IODiagnostics() {
     struct ZNSDiagnostics diag = GetDiagnostics();
-    printf(
-        "Manifest has:\n\tWritten %lu bytes\n\tRead %lu bytes\n\t Reset%lu "
-        "zones\n",
-        diag.bytes_written_, diag.bytes_read_, diag.zones_erased_);
     return diag;
   }
 
