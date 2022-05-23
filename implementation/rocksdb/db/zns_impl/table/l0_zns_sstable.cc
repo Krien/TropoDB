@@ -130,7 +130,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  printf("Invalidating L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
+  // printf("Invalidating L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
   return FromStatus(
       log_.ConsumeTail(meta.L0.lba, meta.L0.lba + meta.lba_count));
 }

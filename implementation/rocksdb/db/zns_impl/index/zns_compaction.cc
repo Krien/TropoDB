@@ -114,7 +114,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
         new LNZoneIterator(vset_->icmp_.user_comparator(), &targets_[i],
                            first_level_ + i),
         &GetLNIterator, vset_->znssstable_, vset_->icmp_.user_comparator());
-    printf("Iterators... %d %lu\n", first_level_ + i, iterators_needed);
+    // printf("Iterators... %d %lu\n", first_level_ + i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }
@@ -151,8 +151,8 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
         // No deleted range yet, so create one.
         new_deleted_range = std::make_pair(lba, count);
       }
-      printf("delete range %u %lu %lu \n", first_level_ + i,
-             new_deleted_range.first, new_deleted_range.second);
+      // printf("delete range %u %lu %lu \n", first_level_ + i,
+      //        new_deleted_range.first, new_deleted_range.second);
       edit->AddDeletedRange(new_deleted_range);
     }
   }
@@ -212,7 +212,6 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
       merger->SeekToFirst();
       if (!merger->Valid()) {
         delete merger;
-        printf("ok\n");
         return Status::Corruption("No valid merging iterator");
       }
       ParsedInternalKey ikey;

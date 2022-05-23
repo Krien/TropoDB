@@ -235,7 +235,7 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
       case ZnsVersionTag::kDeletedSSTable:
-        printf("Getting deleted sstable\n");
+        // printf("Getting deleted sstable\n");
         if (GetLevel(&input, &level) && DecodeLevel(&input, level, &m)) {
           deleted_ss_pers_.push_back(std::make_pair(level, m));
         } else {

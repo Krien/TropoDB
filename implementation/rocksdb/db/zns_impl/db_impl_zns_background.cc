@@ -89,7 +89,7 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   if (!wal_man_->WALAvailable()) {
-    printf(" Trying to free WALS...\n");
+    // printf(" Trying to free WALS...\n");
     s = wal_man_->ResetOldWALs(&mutex_);
     return;
   }
@@ -100,17 +100,17 @@ void DBImplZNS::BackgroundCompaction() {
   {
     // printf("  Compact LN...\n");
     ZnsCompaction* c = versions_->PickCompaction();
-    printf("Picked compact\n");
+    // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
-    printf("marked reusable\n");
+    // printf("marked reusable\n");
     if (c->IsTrivialMove()) {
-      printf("starting trivial move\n");
+      // printf("starting trivial move\n");
       s = c->DoTrivialMove(&edit);
-      printf("\t\ttrivial move\n");
+      // printf("\t\ttrivial move\n");
     } else {
-      printf("starting compaction\n");
+      // printf("starting compaction\n");
       s = c->DoCompaction(&edit);
-      printf("\t\tnormal compaction\n");
+      // printf("\t\tnormal compaction\n");
     }
   }
   mutex_.Lock();
@@ -125,7 +125,7 @@ void DBImplZNS::BackgroundCompaction() {
   if (!s.ok()) {
     printf("ERROR during compaction!!!\n");
   }
-  printf("Compacted!!\n");
+  // printf("Compacted!!\n");
 }
 
 Status DBImplZNS::CompactMemtable() {

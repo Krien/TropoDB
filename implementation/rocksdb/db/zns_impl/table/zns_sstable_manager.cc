@@ -94,7 +94,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
   uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_size_) * zone_size_;
   meta.lba_count = nexthead - meta.L0.lba;
 
-  printf("test %lu %lu %lu \n", meta.L0.lba, meta.lba_count, written_tail);
+  // printf("test %lu %lu %lu \n", meta.L0.lba, meta.lba_count, written_tail);
 
   Status s = Status::OK();
   if (meta.lba_count != 0) {
@@ -103,6 +103,9 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
   if (s.ok()) {
     *blocks -= meta.lba_count;
     *live_tail = sstable_level_[0]->GetTail();
+  } else {
+    printf("Error reclaiming L0? %lu %lu, true %lu\n", meta.L0.lba,
+           meta.lba_count, written_tail);
   }
   return s;
 }

@@ -59,9 +59,23 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   }
   // Reclaim old space
   uint64_t tail = log_.GetWriteTail();
-  uint64_t new_tail = current == 0 ? max_zone_head_ - 1 : current - 1;
-  if (tail != new_tail && manifest_start_ != manifest_end_) {
-    s = FromStatus(log_.ConsumeTail(tail, new_tail));
+  uint64_t new_tail = 0;
+  // wraparound
+  if (current - 1 < tail) {
+    new_tail += max_zone_head_ - tail;
+    if (current > min_zone_head_) {
+      new_tail += current - min_zone_head_ - 1;
+    }
+  } else {
+    new_tail += current - tail - 1;
+  }
+  // printf("current %lu tail %lu new tail %lu, max %lu min %lu, head %lu\n",
+  //        current, tail, new_tail, max_zone_head_, min_zone_head_,
+  //        log_.GetWriteHead());
+  new_tail = (new_tail / zone_size_) * zone_size_;
+  if (new_tail != 0 && manifest_start_ != manifest_end_) {
+    // printf("tail %lu new tail %lu \n", tail, new_tail);
+    s = FromStatus(log_.ConsumeTail(tail, tail + new_tail));
     if (!s.ok()) {
       printf("log eagain %lu %lu %lu\n", tail, new_tail, log_.GetWriteHead());
     }
@@ -129,6 +143,7 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
 Status ZnsManifest::Recover() {
   Status s = Status::OK();
   s = RecoverLog();
+  // printf("HEAD %lu TAIL %lu \n", log_.GetWriteHead(), log_.GetWriteTail());
   if (!s.ok()) {
     return s;
   }

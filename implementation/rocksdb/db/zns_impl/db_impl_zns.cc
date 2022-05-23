@@ -371,7 +371,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       // flush is scheduled, wait...
       bg_work_finished_signal_.Wait();
     } else if (versions_->NeedsFlushing()) {
-      printf("waiting for compaction\n");
+      // printf("waiting for compaction\n");
       MaybeScheduleCompaction(false);
       bg_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
@@ -521,7 +521,7 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
     mutex_.Unlock();
     if (mem->Get(options, lkey, value, &s)) {
     } else if (imm != nullptr && imm->Get(options, lkey, value, &s)) {
-      printf("read from immutable!\n");
+      // printf("read from immutable!\n");
       // Done
     } else {
       s = current->Get(options, lkey, value);

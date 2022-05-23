@@ -72,7 +72,7 @@ void ZnsVersionSet::GetLiveZoneRange(const uint8_t level,
 }
 
 Status ZnsVersionSet::ReclaimStaleSSTables() {
-  printf("reclaiming....\n");
+  //("reclaiming....\n");
   Status s = Status::OK();
   std::pair<uint64_t, uint64_t> range;
   ZnsVersionEdit edit;
@@ -84,15 +84,15 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
     s = znssstable_->SetValidRangeAndReclaim(&new_deleted_range_lba,
                                              &new_deleted_range_count);
-    printf("Move deleted range from %lu %lu to %lu %lu \n",
-           current_->ss_deleted_range_.first,
-           current_->ss_deleted_range_.second, new_deleted_range_lba,
-           new_deleted_range_count);
-    edit.AddDeletedRange(
-        std::make_pair(new_deleted_range_lba, new_deleted_range_count));
+    // printf("Move deleted range from %lu %lu to %lu %lu \n",
+    //        current_->ss_deleted_range_.first,
+    //        current_->ss_deleted_range_.second, new_deleted_range_lba,
+    //        new_deleted_range_count);
     if (!s.ok()) {
       return s;
     }
+    edit.AddDeletedRange(
+        std::make_pair(new_deleted_range_lba, new_deleted_range_count));
   }
 
   // TODO: LN
@@ -128,7 +128,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
     edit.SetCompactPointer(level, ikey);
   }
   // Deleted range
-  edit.AddDeletedRange(current_->ss_deleted_range_);
+  edit.AddDeletedRange(version->ss_deleted_range_);
   // Fragmented logs
   for (uint8_t level = 1; level < ZnsConfig::level_count; level++) {
     std::string data = znssstable_->GetFragmentedLogData(level);
@@ -384,8 +384,8 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   level = current_->compaction_level_;
   c = new ZnsCompaction(this, level);
 
-  printf("Compacting from <%d because score is %f, from %f>\n", level,
-         current_->compaction_score_, znssstable_->GetFractionFilled(level));
+  // printf("Compacting from <%d because score is %f, from %f>\n", level,
+  //        current_->compaction_score_, znssstable_->GetFractionFilled(level));
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
