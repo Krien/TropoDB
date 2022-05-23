@@ -71,7 +71,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
       return a->number > b->number;
     });
     for (uint32_t i = 0; i < tmp.size(); i++) {
-      s = vset_->table_cache_->Get(options, tmp[i], 0, internal_key, value,
+      s = vset_->table_cache_->Get(options, *tmp[i], 0, internal_key, value,
                                    &status);
       if (s.ok()) {
         if (status == EntryStatus::notfound) {
@@ -93,9 +93,9 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
     if (index >= num_ss) {
       continue;
     }
-    SSZoneMetaData* m = ss_[level][index];
-    if (ucmp->Compare(key, m->smallest.user_key()) >= 0 &&
-        ucmp->Compare(key, m->largest.user_key()) <= 0) {
+    const SSZoneMetaData& m = *ss_[level][index];
+    if (ucmp->Compare(key, m.smallest.user_key()) >= 0 &&
+        ucmp->Compare(key, m.largest.user_key()) <= 0) {
       in_range = level;
       s = vset_->table_cache_->Get(options, m, level, internal_key, value,
                                    &status);

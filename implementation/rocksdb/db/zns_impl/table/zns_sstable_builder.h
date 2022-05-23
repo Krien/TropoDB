@@ -13,6 +13,7 @@ class SSTableBuilder {
  public:
   SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta, bool use_encoding);
   ~SSTableBuilder();
+  uint64_t EstimateSizeImpact(const Slice& key, const Slice& value) const;
   Status Apply(const Slice& key, const Slice& value);
   Status Finalise();
   Status Flush();

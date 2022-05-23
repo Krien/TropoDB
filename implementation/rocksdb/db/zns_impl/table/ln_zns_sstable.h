@@ -19,6 +19,7 @@ class LNZnsSSTable : public ZnsSSTable {
                const uint64_t max_zone_nr);
   ~LNZnsSSTable();
   bool EnoughSpaceAvailable(const Slice& slice) const override;
+  uint64_t SpaceAvailable() const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
   Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;
@@ -29,11 +30,13 @@ class LNZnsSSTable : public ZnsSSTable {
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
-  uint64_t GetTail() const override { return log_.GetWriteTail(); }
-  uint64_t GetHead() const override { return log_.GetWriteHead(); }
+  Status Recover(const std::string& from);
+  std::string Encode();
+  uint64_t GetTail() const override { return 0; }
+  uint64_t GetHead() const override { return 0; }
 
  private:
-  SZD::SZDCircularLog log_;
+  SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
 };
 }  // namespace ROCKSDB_NAMESPACE

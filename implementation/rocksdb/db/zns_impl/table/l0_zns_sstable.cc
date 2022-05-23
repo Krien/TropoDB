@@ -33,13 +33,16 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return committer_.SpaceEnough(slice);
 }
 
+uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
+
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     return Status::IOError("Not enough space available for L0");
   }
-  meta->lba = log_.GetWriteHead();
+  meta->L0.lba = log_.GetWriteHead();
   Status s = committer_.SafeCommit(content, &meta->lba_count);
+  // printf("Writing L0 %lu %lu \n", meta->L0.lba, meta->lba_count);
   return s;
 }
 
@@ -88,7 +91,7 @@ void L0ZnsSSTable::release_read_queue() {
 
 Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
-  if (meta.lba > max_zone_head_ || meta.lba < min_zone_head_ ||
+  if (meta.L0.lba > max_zone_head_ || meta.L0.lba < min_zone_head_ ||
       meta.lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
@@ -99,8 +102,10 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   bool succeeded_once = false;
 
   ZnsCommitReader reader;
-  s = committer_.GetCommitReader(request_read_queue(), meta.lba,
-                                 meta.lba + meta.lba_count, &reader);
+  s = committer_.GetCommitReader(request_read_queue(), meta.L0.lba,
+                                 meta.L0.lba + meta.lba_count, &reader);
+
+  // printf("reading L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
   if (!s.ok()) {
     release_read_queue();
     return s;
@@ -125,7 +130,9 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  return FromStatus(log_.ConsumeTail(meta.lba, meta.lba + meta.lba_count));
+  printf("Invalidating L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
+  return FromStatus(
+      log_.ConsumeTail(meta.L0.lba, meta.L0.lba + meta.lba_count));
 }
 
 Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,

@@ -32,13 +32,7 @@ class LNZoneIterator : public Iterator {
     assert(Valid());
     return (*slist_)[index_]->largest.Encode();
   }
-  Slice value() const override {
-    assert(Valid());
-    EncodeFixed64(value_buf_, (*slist_)[index_]->lba);
-    EncodeFixed64(value_buf_ + 8, (*slist_)[index_]->lba_count);
-    EncodeFixed8(value_buf_ + 16, level_);
-    return Slice(value_buf_, sizeof(value_buf_));
-  }
+  Slice value() const override;
   Status status() const override { return Status::OK(); }
   void Seek(const Slice& target) override;
   void SeekForPrev(const Slice& target) override;
@@ -54,7 +48,7 @@ class LNZoneIterator : public Iterator {
   // Iterator
   size_t index_;
   // This is mutable because value and key are const... As in LevelDB.
-  mutable char value_buf_[18];
+  mutable char value_buf_[256];
 };
 
 typedef Iterator* (*NewZoneIteratorFunction)(void*, const Slice&,

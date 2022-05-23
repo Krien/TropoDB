@@ -18,7 +18,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 typedef std::set<std::pair<uint8_t, uint64_t>> DeletedZoneSet;
-typedef std::pair<uint8_t, std::pair<uint64_t, uint64_t>> DeletedZoneRange;
+typedef std::pair<uint64_t, uint64_t> DeletedZoneRange;
 /**
  * @brief Prepares the changes to the index structure to allow for CoW behaviour
  * for the index.
@@ -29,11 +29,8 @@ class ZnsVersionEdit {
   ~ZnsVersionEdit() = default;
 
   void Clear();
-  void AddSSDefinition(const uint8_t level, const uint64_t number,
-                       const uint64_t lba, const uint64_t lba_count,
-                       const uint64_t numbers, const InternalKey& smallest,
-                       const InternalKey& largest);
-  void RemoveSSDefinition(const uint8_t level, const uint64_t number);
+  void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
+  void RemoveSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   // Used for Manifest logic
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
@@ -54,9 +51,18 @@ class ZnsVersionEdit {
   void SetCompactPointer(uint8_t level, const InternalKey& key) {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
-  void AddDeletedRange(uint8_t level,
-                       const std::pair<uint64_t, uint64_t>& range) {
-    deleted_range_.push_back(std::make_pair(level, range));
+  void AddDeletedRange(const std::pair<uint64_t, uint64_t>& range) {
+    deleted_range_ = range;
+    has_deleted_range_ = true;
+  }
+  void AddFragmentedData(uint8_t level, const Slice& fragmented_data) {
+    // Important! Do use strings as Slice copies will not work correctly with
+    // strings holding calloced C-strings...
+    fragmented_data_.push_back(
+        std::make_pair(level, fragmented_data.ToString()));
+  }
+  void AddDeletedSSTable(uint8_t level, const SSZoneMetaData& meta) {
+    deleted_ss_pers_.push_back(std::make_pair(level, meta));
   }
 
  private:
@@ -65,8 +71,13 @@ class ZnsVersionEdit {
 
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
+  std::vector<std::pair<uint8_t, std::string>> fragmented_data_;
+  DeletedZoneRange deleted_range_;
+  bool has_deleted_range_;
+  std::vector<std::pair<uint8_t, SSZoneMetaData>> deleted_ss_pers_;
+
   std::vector<std::pair<uint8_t, InternalKey>> compact_pointers_;
-  std::vector<DeletedZoneRange> deleted_range_;
+
   SequenceNumber last_sequence_;
   bool has_last_sequence_;
   std::string comparator_;

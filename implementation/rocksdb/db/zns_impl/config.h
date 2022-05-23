@@ -28,14 +28,14 @@ constexpr static size_t ss_distribution[level_count] = {
 constexpr static size_t min_ss_zone_count =
     5; /**< Minimum amount of zones for each LSM-tree level*/
 constexpr static double ss_compact_treshold[level_count]{
-    0.50, 0.45, 0.45, 0.85}; /**< Fraction of lbas that need to be filled to
+    0.50, 0.65, 0.85, 0.85}; /**< Fraction of lbas that need to be filled to
                           trigger compaction for a level.*/
 constexpr static uint64_t max_bytes_sstable_ =
     16 * 1024;  // Based on LevelDBs max_file_size. Be carefull, this will
                 // scale up depending on lba_size!
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
 constexpr static uint64_t max_zone =
-    128; /**< Maximum zone to use for database*/
+    128000; /**< Maximum zone to use for database*/
 constexpr static size_t max_channels =
     0x100; /**< Used to ensure that there is no channel leak. */
 

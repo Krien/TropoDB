@@ -29,7 +29,8 @@ class ZnsVersionSet {
  public:
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
-                const uint64_t lba_size, ZnsTableCache* table_cache);
+                const uint64_t lba_size, const uint64_t zone_size,
+                ZnsTableCache* table_cache);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
   ~ZnsVersionSet();
@@ -80,7 +81,7 @@ class ZnsVersionSet {
   void GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
                  const std::vector<SSZoneMetaData*>& inputs2,
                  InternalKey* smallest, InternalKey* largest);
-  void SetupOtherInputs(ZnsCompaction* c);
+  void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
   ZnsCompaction* PickCompaction();
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
@@ -103,6 +104,7 @@ class ZnsVersionSet {
   ZNSSSTableManager* znssstable_;
   ZnsManifest* manifest_;
   uint64_t lba_size_;
+  uint64_t zone_size_;
   uint64_t last_sequence_;
   uint64_t ss_number_;
   bool logged_;
@@ -140,9 +142,12 @@ class ZnsVersionSet::Builder {
   typedef std::set<SSZoneMetaData*, BySmallestKey> ZoneSet;
   struct LevelState {
     std::set<uint64_t> deleted_ss;
-    std::pair<uint64_t, uint64_t> ss_d_;
     ZoneSet* added_ss;
+    std::vector<SSZoneMetaData*> deleted_ss_pers;
   };
+
+  std::pair<uint64_t, uint64_t> ss_deleted_range_;
+  std::vector<std::pair<uint8_t, Slice>> fragmented_data_;
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;

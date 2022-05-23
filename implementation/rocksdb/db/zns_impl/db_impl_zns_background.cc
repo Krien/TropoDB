@@ -141,8 +141,7 @@ Status DBImplZNS::CompactMemtable() {
     s = FlushL0SSTables(&meta);
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
-      edit.AddSSDefinition(level, meta.number, meta.lba, meta.lba_count,
-                           meta.numbers, meta.smallest, meta.largest);
+      edit.AddSSDefinition(level, meta);
       s = versions_->LogAndApply(&edit);
       s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
     } else {

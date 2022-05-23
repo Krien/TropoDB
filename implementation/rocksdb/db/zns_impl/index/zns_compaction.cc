@@ -16,9 +16,11 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
     : first_level_(first_level),
-      max_lba_count_(((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
-                      vset->lba_size_) *
-                     vset->lba_size_),
+      max_lba_count_(((((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+                        vset->lba_size_) +
+                       vset->zone_size_ - 1) /
+                      vset->zone_size_) *
+                     vset->zone_size_),
       vset_(vset),
       version_(nullptr) {
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
@@ -36,10 +38,15 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const Comparator* cmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
   SSZoneMetaData meta;
-  uint64_t lba_start = DecodeFixed64(file_value.data());
-  uint64_t lba_count = DecodeFixed64(file_value.data() + 8);
-  uint8_t level = DecodeFixed8(file_value.data() + 16);
-  meta.lba = lba_start;
+  meta.LN.lba_regions = DecodeFixed8(file_value.data());
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
+    meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
+  }
+  uint64_t lba_count =
+      DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
+  uint8_t level =
+      DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
   meta.lba_count = lba_count;
   Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
   return iterator;
@@ -60,7 +67,9 @@ static int64_t MaxGrandParentOverlapBytes(uint64_t lba_size) {
 
 bool ZnsCompaction::IsTrivialMove() const {
   // add grandparent stuff level + 2
-  return targets_[0].size() == 1 && targets_[1].size() == 0 &&
+  // Allow for higher levels...
+  return first_level_ == 0 && targets_[0].size() == 1 &&
+         targets_[1].size() == 0 &&
          TotalLbas(grandparents_) <=
              MaxGrandParentOverlapBytes(vset_->lba_size_);
 }
@@ -69,16 +78,16 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   Status s = Status::OK();
   SSZoneMetaData* old_meta = targets_[0][0];
   SSZoneMetaData meta;
-  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, old_meta,
+  s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, *old_meta,
                                       &meta);
   if (!s.ok()) {
     return s;
   }
   meta.number = vset_->NewSSNumber();
-  edit->AddSSDefinition(first_level_ + 1, meta.number, meta.lba, meta.lba_count,
-                        meta.numbers, meta.smallest, meta.largest);
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta.lba,
-         meta.lba_count, s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
+  edit->AddSSDefinition(first_level_ + 1, meta);
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
+         first_level_ == 0 ? meta.L0.lba : meta.LN.lbas[0], meta.lba_count,
+         s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
   return s;
 }
 
@@ -95,7 +104,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
     std::vector<SSZoneMetaData*>::const_iterator base_end = l0ss.end();
     for (; base_iter != base_end; ++base_iter) {
       iterators[iterator_index++] = vset_->znssstable_->NewIterator(
-          0, *base_iter, vset_->icmp_.user_comparator());
+          0, **base_iter, vset_->icmp_.user_comparator());
     }
   }
   // LN
@@ -118,30 +127,34 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     if (base_iter == base_end) {
       continue;
     }
-    uint64_t lba = (*base_iter)->lba;
+    uint64_t lba = (*base_iter)->L0.lba;
     uint64_t number = (*base_iter)->number;
     uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
-      edit->RemoveSSDefinition(i + first_level_, (*base_iter)->number);
+      edit->RemoveSSDefinition(i + first_level_, *(*base_iter));
       if ((*base_iter)->number < number) {
         number = (*base_iter)->number;
-        lba = (*base_iter)->lba;
+        lba = (*base_iter)->L0.lba;
       }
       count += +(*base_iter)->lba_count;
     }
-    // Carry over
-    std::pair<uint64_t, uint64_t> new_deleted_range;
-    if (vset_->current_->ss_d_[first_level_ + i].second != 0) {
-      new_deleted_range = std::make_pair(
-          vset_->current_->ss_d_[first_level_ + i].first,
-          count + vset_->current_->ss_d_[first_level_ + i].second);
-    } else {
-      new_deleted_range = std::make_pair(lba, count);
-    }
 
-    printf("delete range %u %lu %lu \n", first_level_ + i,
-           new_deleted_range.first, new_deleted_range.second);
-    edit->AddDeletedRange(first_level_ + i, new_deleted_range);
+    // Setup deleted range when on L0
+    if (i + first_level_ == 0) {
+      // Carry over (move head of deleted range)
+      std::pair<uint64_t, uint64_t> new_deleted_range;
+      if (vset_->current_->ss_deleted_range_.second != 0) {
+        new_deleted_range =
+            std::make_pair(vset_->current_->ss_deleted_range_.first,
+                           count + vset_->current_->ss_deleted_range_.second);
+      } else {
+        // No deleted range yet, so create one.
+        new_deleted_range = std::make_pair(lba, count);
+      }
+      printf("delete range %u %lu %lu \n", first_level_ + i,
+             new_deleted_range.first, new_deleted_range.second);
+      edit->AddDeletedRange(new_deleted_range);
+    }
   }
 }
 
@@ -152,12 +165,10 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->lba,
+  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
          meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
   if (s.ok()) {
-    edit->AddSSDefinition(first_level_ + 1, meta->number, meta->lba,
-                          meta->lba_count, meta->numbers, meta->smallest,
-                          meta->largest);
+    edit->AddSSDefinition(first_level_ + 1, *meta);
   }
   delete current_builder;
   current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
@@ -239,13 +250,17 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         // add
         if (drop) {
         } else {
-          s = builder->Apply(key, value);
-          if (builder->GetSize() / vset_->lba_size_ >= max_lba_count_) {
+          // estimate if flush before would be better...
+          if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
+               vset_->lba_size_ - 1) /
+                  vset_->lba_size_ >=
+              max_lba_count_) {
             s = FlushSSTable(&builder, edit, &meta);
             if (!s.ok()) {
               break;
             }
           }
+          s = builder->Apply(key, value);
         }
       }
       if (s.ok() && builder->GetSize() > 0) {
