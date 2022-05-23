@@ -79,6 +79,9 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       forced_schedule_(false) {}
 
 void DBImplZNS::IODiagnostics() {
+  printf("SSTable layout:..........\n");
+  std::cout << versions_->DebugString();
+  printf(".........................\n");
   printf("IO diagnostics:..........\n");
   struct ZNSDiagnostics totaldiag = {
       .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
@@ -101,9 +104,13 @@ void DBImplZNS::IODiagnostics() {
     totaldiag.zones_erased_ += diag.zones_erased_;
   }
   printf(
-      "TOTAL :\n\tWritten %lu bytes\n\tRead %lu bytes\n\tReset %lu "
+      "TOTAL :\n\tWritten %lu bytes / %lu K %lu M\n\tRead %lu bytes / "
+      "%lu K %lu M\n\tReset %lu "
       "zones\n",
-      totaldiag.bytes_written_, totaldiag.bytes_read_, totaldiag.zones_erased_);
+      totaldiag.bytes_written_, totaldiag.bytes_written_ / 1024,
+      totaldiag.bytes_written_ / 1024 / 1024, totaldiag.bytes_read_,
+      totaldiag.bytes_read_ / 1024, totaldiag.bytes_read_ / 1024 / 1024,
+      totaldiag.zones_erased_);
   printf(".........................\n");
 }
 
@@ -114,7 +121,6 @@ DBImplZNS::~DBImplZNS() {
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
-  std::cout << versions_->DebugString();
 
   IODiagnostics();
 

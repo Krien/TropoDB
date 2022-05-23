@@ -170,8 +170,16 @@ void ZnsVersionSet::RecalculateScore() {
   double best_score = -1;
   double score;
   for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-    score =
-        znssstable_->GetFractionFilled(i) / ZnsConfig::ss_compact_treshold[i];
+    score = znssstable_->GetFractionFilled(i) /
+            ZnsConfig::ss_compact_treshold_force[i];
+    // not forced, but we might want compaction anyway
+    if (score < 1 &&
+        current_->ss_[i].size() > ZnsConfig::ss_compact_treshold[i]) {
+      score = 1;
+    } else {
+      // ensures full tables are preferred.
+      score *= 2;
+    }
     if (score > best_score) {
       best_score = score;
       best_level = i;
