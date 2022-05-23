@@ -227,7 +227,7 @@ int main(int argc, char **argv) {
   ret = allocate_myrocks_context(ctx_shadow);
   assert(ret == 0 && ctx_shadow != nullptr);
 
-  ctx_test->uri = "zns://0000:00:04.0";
+  ctx_test->uri = "zns://0000:00:08.0";
   // ctx_test->uri = "posix:///tmp/shadow2db";
   // ctx_shadow->uri = "zenfs://dev:nvme1n1";
   ctx_shadow->uri = "posix:///tmp/shadowdb";

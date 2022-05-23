@@ -4,6 +4,7 @@
 #define ZNS_SSTABLE_MANAGER_H
 
 #include "db/zns_impl/config.h"
+#include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/ref_counter.h"
@@ -59,6 +60,7 @@ class ZNSSSTableManager : public RefCounter {
   static size_t FindSSTableIndex(const Comparator* icmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
+  ZNSDiagnostics IODiagnostics();
 
  private:
   using RangeArray =

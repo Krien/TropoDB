@@ -72,6 +72,7 @@ class DBImplZNS : public DB {
   DBImplZNS(const DBImplZNS&) = delete;
   DBImplZNS& operator=(const DBImplZNS&) = delete;
 
+  void IODiagnostics();
   ~DBImplZNS() override;
 
   static Status ValidateOptions(const DBOptions& db_options);

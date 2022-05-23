@@ -176,6 +176,23 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
   return s;
 }
 
+template <std::size_t N>
+ZNSDiagnostics ZnsWALManager<N>::IODiagnostics() {
+  struct ZNSDiagnostics totaldiag = {
+      .bytes_written_ = 0, .bytes_read_ = 0, .zones_erased_ = 0};
+  for (size_t i = 0; i < N; i++) {
+    ZNSDiagnostics diag = wals_[i]->GetDiagnostics();
+    printf(
+        "WAL %lu has:\n\tWritten %lu bytes\n\tRead %lu bytes\n\tReset %lu "
+        "zones\n",
+        i, diag.bytes_written_, diag.bytes_read_, diag.zones_erased_);
+    totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.zones_erased_ += diag.zones_erased_;
+  }
+  return totaldiag;
+}
+
 }  // namespace ROCKSDB_NAMESPACE
 
 #endif
