@@ -264,6 +264,8 @@ Status DBImplZNS::Recover() {
   // If there is no version to be recovered, we assume there is no valid DB.
   if (!s.ok()) {
     return options_.create_if_missing ? ResetZNSDevice() : s;
+    // TODO: this is not enough when version is corrupt, then device WILL be
+    // reset, but metadata still points to corrupt.
   }
   // TODO: currently this still writes a new version... if not an identical
   // one.

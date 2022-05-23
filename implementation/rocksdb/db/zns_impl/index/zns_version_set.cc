@@ -482,6 +482,7 @@ Status ZnsVersionSet::Recover() {
   ZnsVersionEdit edit;
   s = DecodeFrom(manifest_data, &edit);
   if (!s.ok()) {
+    printf("Corrupt manifest \n");
     return s;
   }
 
@@ -490,7 +491,9 @@ Status ZnsVersionSet::Recover() {
 
   // Install recovered edit
   if (s.ok()) {
-    LogAndApply(&edit);
+    s = LogAndApply(&edit);
+  } else {
+    printf("Corrupt fragmented data \n");
   }
 
   if (edit.has_last_sequence_) {
@@ -501,6 +504,7 @@ Status ZnsVersionSet::Recover() {
   }
 
   if (!s.ok()) {
+    printf("Error setting edit to current \n");
     return s;
   }
 

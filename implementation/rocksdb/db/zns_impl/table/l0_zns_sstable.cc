@@ -42,6 +42,7 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   }
   meta->L0.lba = log_.GetWriteHead();
   Status s = committer_.SafeCommit(content, &meta->lba_count);
+  // printf("Writing L0 %lu %lu \n", meta->L0.lba, meta->lba_count);
   return s;
 }
 
@@ -103,6 +104,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   ZnsCommitReader reader;
   s = committer_.GetCommitReader(request_read_queue(), meta.L0.lba,
                                  meta.L0.lba + meta.lba_count, &reader);
+
+  // printf("reading L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
   if (!s.ok()) {
     release_read_queue();
     return s;
@@ -127,6 +130,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
+  printf("Invalidating L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
   return FromStatus(
       log_.ConsumeTail(meta.L0.lba, meta.L0.lba + meta.lba_count));
 }

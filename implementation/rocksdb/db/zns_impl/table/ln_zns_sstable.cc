@@ -116,7 +116,7 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
-    printf("size %u count %u \n", size, count);
+    printf("size %u count %u lba size %lu\n", size, count, lba_size_);
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

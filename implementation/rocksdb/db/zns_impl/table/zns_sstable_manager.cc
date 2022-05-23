@@ -151,6 +151,7 @@ Status ZNSSSTableManager::Recover(
   // Recover L0
   s = dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
   if (!s.ok()) {
+    printf("Error recovering L0\n");
     return s;
   }
   // Recover LN
@@ -162,6 +163,7 @@ Status ZNSSSTableManager::Recover(
     s = dynamic_cast<LNZnsSSTable*>(sstable_level_[level])
             ->Recover(fragdata.second);
     if (!s.ok()) {
+      printf("Error recovering L%u \n", level);
       return s;
     }
   }

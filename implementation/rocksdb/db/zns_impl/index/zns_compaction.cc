@@ -67,7 +67,9 @@ static int64_t MaxGrandParentOverlapBytes(uint64_t lba_size) {
 
 bool ZnsCompaction::IsTrivialMove() const {
   // add grandparent stuff level + 2
-  return targets_[0].size() == 1 && targets_[1].size() == 0 &&
+  // Allow for higher levels...
+  return first_level_ == 0 && targets_[0].size() == 1 &&
+         targets_[1].size() == 0 &&
          TotalLbas(grandparents_) <=
              MaxGrandParentOverlapBytes(vset_->lba_size_);
 }
