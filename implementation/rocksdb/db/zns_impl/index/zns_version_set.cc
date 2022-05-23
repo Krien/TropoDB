@@ -98,7 +98,7 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   // TODO: LN
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
-      printf("  deleting ln \n");
+      // printf("  deleting ln \n");
       s = znssstable_->DeleteLNTable(i, *current_->ss_d_[i][j]);
       if (!s.ok()) {
         printf("Error deleting ln table \n");

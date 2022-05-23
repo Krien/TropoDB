@@ -85,9 +85,9 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   }
   meta.number = vset_->NewSSNumber();
   edit->AddSSDefinition(first_level_ + 1, meta);
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
-         first_level_ == 0 ? meta.L0.lba : meta.LN.lbas[0], meta.lba_count,
-         s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
+  // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
+  //        first_level_ == 0 ? meta.L0.lba : meta.LN.lbas[0], meta.lba_count,
+  //        s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
   return s;
 }
 
@@ -165,8 +165,8 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   s = current_builder->Flush();
-  printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
-         meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
+  // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
+  //        meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
   if (s.ok()) {
     edit->AddSSDefinition(first_level_ + 1, *meta);
   }
