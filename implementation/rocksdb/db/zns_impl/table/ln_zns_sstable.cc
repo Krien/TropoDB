@@ -52,8 +52,8 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   }
   meta->LN.lba_regions = 0;
   for (auto ptr : ptrs) {
-    meta->LN.lbas[meta->LN.lba_regions] = ptr.first * zone_size_;
-    meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_size_;
+    meta->LN.lbas[meta->LN.lba_regions] = ptr.first * zone_cap_;
+    meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_cap_;
     meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
     meta->LN.lba_regions++;
   }
@@ -76,7 +76,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       return Status::Corruption("Invalid metadata");
     }
     // printf("reading %lu %lu \n", from, blocks);
-    ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
+    ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
   }
 
   char* buffer = new char[meta.lba_count * lba_size_];
@@ -99,7 +99,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     if (from > max_zone_head_ || from < min_zone_head_) {
       return Status::Corruption("Invalid metadata");
     }
-    ptrs.push_back(std::make_pair(from / zone_size_, blocks / zone_size_));
+    ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
   }
   return FromStatus(log_.Reset(ptrs));
 }

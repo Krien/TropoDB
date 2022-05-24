@@ -66,7 +66,7 @@ class ZnsCommitter {
   }
 
  private:
-  const uint64_t zone_size_;
+  const uint64_t zone_cap_;
   const uint64_t lba_size_;
   const uint64_t zasl_;
   const uint8_t number_of_readers_;

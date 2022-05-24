@@ -18,9 +18,9 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
     : first_level_(first_level),
       max_lba_count_(((((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
                         vset->lba_size_) +
-                       vset->zone_size_ - 1) /
-                      vset->zone_size_) *
-                     vset->zone_size_),
+                       vset->zone_cap_ - 1) /
+                      vset->zone_cap_) *
+                     vset->zone_cap_),
       vset_(vset),
       version_(nullptr) {
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {

@@ -73,7 +73,7 @@ class ZnsSSTableManagerInternal {
     return sstable->max_zone_head_;
   }
   static inline uint64_t GetZoneSize(L0ZnsSSTable* sstable) {
-    return sstable->zone_size_;
+    return sstable->zone_cap_;
   }
   static inline uint64_t GetLbaSize(L0ZnsSSTable* sstable) {
     return sstable->lba_size_;

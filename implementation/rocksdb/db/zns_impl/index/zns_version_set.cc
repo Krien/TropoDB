@@ -17,14 +17,14 @@ namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
                              ZNSSSTableManager* znssstable,
                              ZnsManifest* manifest, const uint64_t lba_size,
-                             uint64_t zone_size, ZnsTableCache* table_cache)
+                             uint64_t zone_cap, ZnsTableCache* table_cache)
     : dummy_versions_(this),
       current_(nullptr),
       icmp_(icmp),
       znssstable_(znssstable),
       manifest_(manifest),
       lba_size_(lba_size),
-      zone_size_(zone_size),
+      zone_cap_(zone_cap),
       ss_number_(0),
       logged_(false),
       table_cache_(table_cache) {

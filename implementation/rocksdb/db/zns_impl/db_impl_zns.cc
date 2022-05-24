@@ -234,7 +234,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
                                    ss_manager_);
 
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
-                                device_info.lba_size, device_info.zone_size,
+                                device_info.lba_size, device_info.zone_cap,
                                 table_cache_);
 
   return Status::OK();

@@ -21,7 +21,7 @@ static void InitTypeCrc(
 
 ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
                            bool keep_buffer)
-    : zone_size_(info.zone_size),
+    : zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
       number_of_readers_(log->GetNumberOfReaders()),
@@ -118,9 +118,9 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   }
   do {
     uint64_t write_head = log_->GetWriteHead();
-    uint64_t zone_head = (write_head / zone_size_) * zone_size_;
+    uint64_t zone_head = (write_head / zone_cap_) * zone_cap_;
     // determine next fragment part.
-    size_t avail = ((zone_head + zone_size_) - write_head) * lba_size_;
+    size_t avail = ((zone_head + zone_cap_) - write_head) * lba_size_;
     avail = (avail > zasl_ ? zasl_ : avail);
     avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;

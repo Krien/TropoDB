@@ -26,7 +26,7 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
     : wal_head_(0), wal_tail_(N - 1), current_wal_(nullptr) {
   assert((max_zone_nr - min_zone_nr) % N == 0);
   uint64_t wal_range = (max_zone_nr - min_zone_nr) / N;
-  assert(wal_range % info.zone_size == 0);
+  assert(wal_range % info.zone_cap_ == 0);
   uint64_t wal_walker = min_zone_nr;
 
   for (size_t i = 0; i < N; ++i) {

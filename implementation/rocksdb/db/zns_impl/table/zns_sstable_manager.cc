@@ -15,7 +15,7 @@ namespace ROCKSDB_NAMESPACE {
 ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                                      const SZD::DeviceInfo& info,
                                      const RangeArray& ranges)
-    : zone_size_(info.zone_size),
+    : zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
       ranges_(ranges),
       channel_factory_(channel_factory) {
@@ -30,8 +30,8 @@ ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
   }
   // Increase ranges
   for (size_t level = 0; level < ZnsConfig::level_count; level++) {
-    ranges_[level].first *= info.zone_size;
-    ranges_[level].second *= info.zone_size;
+    ranges_[level].first *= info.zone_cap;
+    ranges_[level].second *= info.zone_cap;
   }
 }
 
@@ -91,7 +91,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
   uint64_t written_tail = sstable_level_[0]->GetTail();
 
   meta.L0.lba = *live_tail;
-  uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_size_) * zone_size_;
+  uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_cap_) * zone_cap_;
   meta.lba_count = nexthead - meta.L0.lba;
 
   // printf("test %lu %lu %lu \n", meta.L0.lba, meta.lba_count, written_tail);

@@ -13,14 +13,14 @@ static constexpr const size_t current_preamble_size = strlen(current_preamble);
 ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
                          const SZD::DeviceInfo& info,
                          const uint64_t min_zone_nr, const uint64_t max_zone_nr)
-    : current_lba_(min_zone_nr * info.zone_size),
-      manifest_start_(max_zone_nr * info.zone_size),  // enforce corruption
-      manifest_end_(min_zone_nr * info.zone_size),    // enforce corruption
+    : current_lba_(min_zone_nr * info.zone_cap),
+      manifest_start_(max_zone_nr * info.zone_cap),  // enforce corruption
+      manifest_end_(min_zone_nr * info.zone_cap),    // enforce corruption
       log_(channel_factory, info, min_zone_nr, max_zone_nr, 1),
       committer_(&log_, info, true),
-      min_zone_head_(min_zone_nr * info.zone_size),
-      max_zone_head_(max_zone_nr * info.zone_size),
-      zone_size_(info.zone_size),
+      min_zone_head_(min_zone_nr * info.zone_cap),
+      max_zone_head_(max_zone_nr * info.zone_cap),
+      zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
       channel_factory_(channel_factory) {
   assert(max_zone_head_ < info.lba_cap);
@@ -72,7 +72,7 @@ Status ZnsManifest::SetCurrent(uint64_t current) {
   // printf("current %lu tail %lu new tail %lu, max %lu min %lu, head %lu\n",
   //        current, tail, new_tail, max_zone_head_, min_zone_head_,
   //        log_.GetWriteHead());
-  new_tail = (new_tail / zone_size_) * zone_size_;
+  new_tail = (new_tail / zone_cap_) * zone_cap_;
   if (new_tail != 0 && manifest_start_ != manifest_end_) {
     // printf("tail %lu new tail %lu \n", tail, new_tail);
     s = FromStatus(log_.ConsumeTail(tail, tail + new_tail));

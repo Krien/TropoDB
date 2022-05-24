@@ -69,7 +69,7 @@ class ZNSSSTableManager : public RefCounter {
 
   ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);
-  const uint64_t zone_size_;
+  const uint64_t zone_cap_;
   const uint64_t lba_size_;
   // sstables
   RangeArray ranges_;

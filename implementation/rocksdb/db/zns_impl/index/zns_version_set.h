@@ -29,7 +29,7 @@ class ZnsVersionSet {
  public:
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
-                const uint64_t lba_size, const uint64_t zone_size,
+                const uint64_t lba_size, const uint64_t zone_cap,
                 ZnsTableCache* table_cache);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
@@ -105,7 +105,7 @@ class ZnsVersionSet {
   ZNSSSTableManager* znssstable_;
   ZnsManifest* manifest_;
   uint64_t lba_size_;
-  uint64_t zone_size_;
+  uint64_t zone_cap_;
   uint64_t last_sequence_;
   uint64_t ss_number_;
   bool logged_;
