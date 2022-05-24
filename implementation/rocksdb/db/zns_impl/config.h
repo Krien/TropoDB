@@ -18,7 +18,7 @@ namespace ZnsConfig {
 constexpr static uint8_t level_count =
     4; /**< Amount of LSM-tree levels L0 up to LN */
 constexpr static size_t manifest_zones =
-    10; /**< Amount of zones to reserve for metadata*/
+    16; /**< Amount of zones to reserve for metadata*/
 constexpr static size_t zones_foreach_wal =
     3;                                 /**< Amount of zones for each WAL*/
 constexpr static size_t wal_count = 5; /**< Maximum amount of concurrent WALS*/

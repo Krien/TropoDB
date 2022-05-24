@@ -169,6 +169,8 @@ void ZnsVersionSet::RecalculateScore() {
   uint8_t best_level = ZnsConfig::level_count + 1;
   double best_score = -1;
   double score;
+  // TODO: This is probably a design flaw. This is uninformed and might cause
+  // all sorts of holes and early compactions.
   for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
     score = znssstable_->GetFractionFilled(i) /
             ZnsConfig::ss_compact_treshold_force[i];
@@ -181,6 +183,11 @@ void ZnsVersionSet::RecalculateScore() {
       score *= 2;
     }
     if (score > best_score) {
+      // We have to be carefull... What if the next level is already (close to)
+      // full.
+      if (znssstable_->GetFractionFilled(i + 1) > 0.9) {
+        continue;
+      }
       best_score = score;
       best_level = i;
       // printf("Score %f from level %d\n", best_score, best_level);
