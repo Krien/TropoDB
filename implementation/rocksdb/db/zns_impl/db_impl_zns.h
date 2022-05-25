@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/io/szd_port.h"
@@ -345,6 +346,10 @@ class DBImplZNS : public DB {
   bool bg_compaction_scheduled_;
   Status bg_error_;
   bool forced_schedule_;
+
+  // diagnostics
+  uint64_t flushes_;
+  std::array<uint64_t, ZnsConfig::level_count - 1> compactions_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

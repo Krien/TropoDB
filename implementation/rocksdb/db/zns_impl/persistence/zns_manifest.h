@@ -28,10 +28,13 @@ class ZnsManifest : public RefCounter {
     return s;
   }
   inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {.name_ = "Manifest",
-                                  .bytes_written_ = log_.GetBytesWritten(),
-                                  .bytes_read_ = log_.GetBytesRead(),
-                                  .zones_erased_ = log_.GetZonesReset()};
+    struct ZNSDiagnostics diag = {
+        .name_ = "Manifest",
+        .bytes_written_ = log_.GetBytesWritten(),
+        .append_operations_ = log_.GetAppendOperations(),
+        .bytes_read_ = log_.GetBytesRead(),
+        .read_operations_ = log_.GetReadOperations(),
+        .zones_erased_ = log_.GetZonesReset()};
     return diag;
   }
   inline ZNSDiagnostics IODiagnostics() {

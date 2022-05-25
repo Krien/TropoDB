@@ -41,10 +41,13 @@ class ZNSWAL : public RefCounter {
     return log_.SpaceLeft(data.size() + pos_);
   }
   inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {.name_ = "WAL",
-                                  .bytes_written_ = log_.GetBytesWritten(),
-                                  .bytes_read_ = log_.GetBytesRead(),
-                                  .zones_erased_ = log_.GetZonesReset()};
+    struct ZNSDiagnostics diag = {
+        .name_ = "WAL",
+        .bytes_written_ = log_.GetBytesWritten(),
+        .append_operations_ = log_.GetAppendOperations(),
+        .bytes_read_ = log_.GetBytesRead(),
+        .read_operations_ = log_.GetReadOperations(),
+        .zones_erased_ = log_.GetZonesReset()};
     return diag;
   }
 

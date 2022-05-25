@@ -52,6 +52,7 @@ class ZnsVersion : public RefCounter {
   void GetOverlappingInputs(uint8_t level, const InternalKey* begin,
                             const InternalKey* end,
                             std::vector<SSZoneMetaData*>* inputs);
+  inline uint8_t CompactionLevel() const { return compaction_level_; }
 
  private:
   friend class ZnsVersionSet;

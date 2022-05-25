@@ -77,24 +77,40 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       bg_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false),
       bg_error_(Status::OK()),
-      forced_schedule_(false) {}
+      forced_schedule_(false),
+      // diag
+      flushes_(0) {
+  for (uint8_t i = 0; i < ZnsConfig::level_count - 1; i++) {
+    compactions_[i] = 0;
+  }
+}
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
   std::cout << std::left << std::setw(10) << diag.name_ << std::right
-            << std::setw(25) << diag.bytes_written_ << std::setw(25)
-            << diag.bytes_read_ << std::setw(16) << diag.zones_erased_ << "\n";
+            << std::setw(15) << diag.append_operations_ << std::setw(25)
+            << diag.bytes_written_ << std::setw(15) << diag.read_operations_
+            << std::setw(25) << diag.bytes_read_ << std::setw(16)
+            << diag.zones_erased_ << "\n";
 }
 
 void DBImplZNS::IODiagnostics() {
   std::cout << "==== Summary ====\n";
+  std::cout << "Background operations: \n";
+  std::cout << "\tFlushes:" << flushes_ << "\n";
+  for (uint8_t level = 0; level < ZnsConfig::level_count - 1; level++) {
+    std::cout << "\tCompaction to " << (level + 1) << ":" << compactions_[level]
+              << "\n";
+  }
   std::cout << "SSTable layout: \n";
   std::cout << versions_->DebugString();
   std::cout << "==== raw IO metrics ==== \n";
   std::cout << std::left << std::setw(10) << "Metric " << std::right
-            << std::setw(25) << "Written (Bytes)" << std::setw(25)
-            << "Read (Bytes)" << std::setw(16) << "Reset (zones)"
+            << std::setw(15) << "Append (ops)" << std::setw(25)
+            << "Written (Bytes)" << std::setw(15) << "Read (ops)"
+            << std::setw(25) << "Read (Bytes)" << std::setw(16)
+            << "Reset (zones)"
             << "\n";
-  std::cout << std::setfill('_') << std::setw(77) << "\n" << std::setfill(' ');
+  std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
   struct ZNSDiagnostics totaldiag = {.name_ = "Total",
                                      .bytes_written_ = 0,
                                      .bytes_read_ = 0,
@@ -125,7 +141,7 @@ void DBImplZNS::IODiagnostics() {
     totaldiag.zones_erased_ += diag.zones_erased_;
   }
   PrintIOColumn(totaldiag);
-  std::cout << std::setfill('_') << std::setw(77) << "\n" << std::setfill(' ');
+  std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
 }
 
 DBImplZNS::~DBImplZNS() {
@@ -202,10 +218,19 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   uint64_t zone_head = device_info.min_lba / device_info.zone_size;
   uint64_t zone_step = 0;
 
+  std::cout << "==== Zone division ====\n";
+  std::cout << std::left << std::setw(15) << "Structure" << std::right
+            << std::setw(25) << "Begin (zone nr)" << std::setw(25)
+            << "End (zone nr)"
+            << "\n";
+  std::cout << std::setfill('_') << std::setw(76) << "\n" << std::setfill(' ');
   zone_step = ZnsConfig::manifest_zones;
   manifest_ = new ZnsManifest(channel_factory_, device_info, zone_head,
                               zone_head + zone_step);
   manifest_->Ref();
+  std::cout << std::left << std::setw(15) << "Manifest" << std::right
+            << std::setw(25) << zone_head << std::setw(25)
+            << zone_head + zone_step << "\n";
   zone_head += zone_step;
 
   zone_step = ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal;
@@ -224,6 +249,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
     return Status::Corruption();
   }
   ss_manager_->Ref();
+  std::cout << std::setfill('_') << std::setw(76) << "\n" << std::setfill(' ');
   zone_head = device_info.max_lba / device_info.zone_size;
 
   mem_ = new ZNSMemTable(options, this->internal_comparator_);

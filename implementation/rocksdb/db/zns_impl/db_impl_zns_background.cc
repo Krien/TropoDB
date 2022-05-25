@@ -118,6 +118,9 @@ void DBImplZNS::BackgroundCompaction() {
     printf("ERROR during compaction A!!!\n");
     return;
   }
+  // Diag
+  compactions_[versions_->current()->CompactionLevel()]++;
+  // Apply
   s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   s = s.ok() ? RemoveObsoleteZones() : s;
@@ -162,6 +165,7 @@ Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
   ss_manager_->Ref();
   s = ss_manager_->FlushMemTable(imm_, meta);
   ss_manager_->Unref();
+  flushes_++;
   return s;
 }
 

@@ -39,10 +39,13 @@ class L0ZnsSSTable : public ZnsSSTable {
   uint64_t GetHead() const override { return log_.GetWriteHead(); }
 
   inline ZNSDiagnostics GetDiagnostics() const override {
-    struct ZNSDiagnostics diag = {.name_ = "L0",
-                                  .bytes_written_ = log_.GetBytesWritten(),
-                                  .bytes_read_ = log_.GetBytesRead(),
-                                  .zones_erased_ = log_.GetZonesReset()};
+    struct ZNSDiagnostics diag = {
+        .name_ = "L0",
+        .bytes_written_ = log_.GetBytesWritten(),
+        .append_operations_ = log_.GetAppendOperations(),
+        .bytes_read_ = log_.GetBytesRead(),
+        .read_operations_ = log_.GetReadOperations(),
+        .zones_erased_ = log_.GetZonesReset()};
     return diag;
   }
 

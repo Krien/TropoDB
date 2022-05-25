@@ -1,5 +1,8 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 
+#include <iomanip>
+#include <iostream>
+
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -289,12 +292,19 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
                     ? ZnsConfig::min_ss_zone_count
                     : zone_step;
     ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
+    std::cout << std::left << "L" << std::setw(14) << i << std::right
+              << std::setw(25) << ranges[i].first << std::setw(25)
+              << ranges[i].second << "\n";
     zone_head += zone_step;
   }
   // Last zone will also get the remainer.
   zone_step = max_zone - zone_head;
   ranges[ZnsConfig::level_count - 1] =
       std::make_pair(zone_head, zone_head + zone_step);
+  std::cout << std::left << "L" << std::setw(14) << (ZnsConfig::level_count - 1)
+            << std::right << std::setw(25)
+            << ranges[ZnsConfig::level_count - 1].first << std::setw(25)
+            << ranges[ZnsConfig::level_count - 1].second << "\n";
   zone_head += zone_step;
   assert(zone_head == max_zone);
   // Create

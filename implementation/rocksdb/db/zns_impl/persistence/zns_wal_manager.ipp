@@ -3,6 +3,9 @@
 #ifndef ZNS_WAL_MANAGER_IPP
 #define ZNS_WAL_MANAGER_IPP
 
+#include <iomanip>
+#include <iostream>
+
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -32,7 +35,9 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
   for (size_t i = 0; i < N; ++i) {
     ZNSWAL* newwal =
         new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range);
-    printf("WAL range %lu %lu\n", wal_walker, wal_walker + wal_range);
+    std::cout << std::left << "WAL" << std::setw(12) << i << std::right
+              << std::setw(25) << wal_walker << std::setw(25)
+              << wal_walker + wal_range << "\n";
     newwal->Ref();
     wals_[i] = newwal;
     wal_walker += wal_range;
