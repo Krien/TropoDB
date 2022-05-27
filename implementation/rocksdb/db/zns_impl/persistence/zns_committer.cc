@@ -45,7 +45,7 @@ ZnsCommitter::~ZnsCommitter() {
 }
 
 bool ZnsCommitter::SpaceEnough(const Slice& data) const {
-  size_t fragcount = data.size() / zasl_ + 1;
+  size_t fragcount = data.size() / lba_size_ + 1;
   size_t size_needed = fragcount * kZnsHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
   return log_->SpaceLeft(size_needed);
@@ -103,7 +103,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   const char* ptr = data.data();
   size_t left = data.size();
 
-  if (!(s = FromStatus(write_buffer_.ReallocBuffer(zasl_))).ok()) {
+  if (!(s = FromStatus(write_buffer_.ReallocBuffer(lba_size_))).ok()) {
     return s;
   }
   char* fragment;
@@ -121,7 +121,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     uint64_t zone_head = (write_head / zone_cap_) * zone_cap_;
     // determine next fragment part.
     size_t avail = ((zone_head + zone_cap_) - write_head) * lba_size_;
-    avail = (avail > zasl_ ? zasl_ : avail);
+    avail = (avail > lba_size_ ? lba_size_ : avail);
     avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 
@@ -136,7 +136,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     } else {
       type = ZnsRecordType::kMiddleType;
     }
-    memset(fragment, 0, zasl_);  // Ensure no stale bits.
+    memset(fragment, 0, lba_size_);  // Ensure no stale bits.
     memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);  // new body.
     // Build header
     fragment[4] = static_cast<char>(fragment_length & 0xffu);
@@ -184,7 +184,8 @@ Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
   reader->commit_ptr = reader->commit_start;
   reader->reader_nr = reader_number;
   reader->scratch = ZnsConfig::deadbeef;
-  if (!FromStatus(read_buffer_[reader->reader_nr]->ReallocBuffer(zasl_)).ok()) {
+  if (!FromStatus(read_buffer_[reader->reader_nr]->ReallocBuffer(lba_size_))
+           .ok()) {
     return Status::MemoryLimit();
   }
 
@@ -207,8 +208,8 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
   while (reader.commit_ptr < reader.commit_end &&
          reader.commit_ptr >= reader.commit_start) {
     const size_t to_read =
-        (reader.commit_end - reader.commit_ptr) * lba_size_ > zasl_
-            ? zasl_
+        (reader.commit_end - reader.commit_ptr) * lba_size_ > lba_size_
+            ? lba_size_
             : (reader.commit_end - reader.commit_ptr) * lba_size_;
     // first read header (prevents reading too much)
     log_->Read(reader.commit_ptr, *(&read_buffer_[reader.reader_nr]), 0,

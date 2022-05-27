@@ -113,14 +113,18 @@ void DBImplZNS::IODiagnostics() {
   std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
   struct ZNSDiagnostics totaldiag = {.name_ = "Total",
                                      .bytes_written_ = 0,
+                                     .append_operations_ = 0,
                                      .bytes_read_ = 0,
+                                     .read_operations_ = 0,
                                      .zones_erased_ = 0};
   {
     std::vector<ZNSDiagnostics> diags = wal_man_->IODiagnostics();
     for (auto& diag : diags) {
       PrintIOColumn(diag);
       totaldiag.bytes_written_ += diag.bytes_written_;
+      totaldiag.append_operations_ += diag.append_operations_;
       totaldiag.bytes_read_ += diag.bytes_read_;
+      totaldiag.read_operations_ += diag.read_operations_;
       totaldiag.zones_erased_ += diag.zones_erased_;
     }
   }
@@ -129,7 +133,9 @@ void DBImplZNS::IODiagnostics() {
     for (auto& diag : diags) {
       PrintIOColumn(diag);
       totaldiag.bytes_written_ += diag.bytes_written_;
+      totaldiag.append_operations_ += diag.append_operations_;
       totaldiag.bytes_read_ += diag.bytes_read_;
+      totaldiag.read_operations_ += diag.read_operations_;
       totaldiag.zones_erased_ += diag.zones_erased_;
     }
   }
@@ -137,7 +143,9 @@ void DBImplZNS::IODiagnostics() {
     ZNSDiagnostics diag = manifest_->IODiagnostics();
     PrintIOColumn(diag);
     totaldiag.bytes_written_ += diag.bytes_written_;
+    totaldiag.append_operations_ += diag.append_operations_;
     totaldiag.bytes_read_ += diag.bytes_read_;
+    totaldiag.read_operations_ += diag.read_operations_;
     totaldiag.zones_erased_ += diag.zones_erased_;
   }
   PrintIOColumn(totaldiag);
