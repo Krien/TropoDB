@@ -78,10 +78,10 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   ZnsVersionEdit edit;
 
   // Reclaim L0
+  GetLiveZoneRange(0, &range);
+  uint64_t new_deleted_range_lba = current_->ss_deleted_range_.first;
+  uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
   if (current_->ss_deleted_range_.second != 0) {
-    GetLiveZoneRange(0, &range);
-    uint64_t new_deleted_range_lba = current_->ss_deleted_range_.first;
-    uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
     s = znssstable_->SetValidRangeAndReclaim(&new_deleted_range_lba,
                                              &new_deleted_range_count);
     // printf("Move deleted range from %lu %lu to %lu %lu \n",
@@ -91,9 +91,9 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     if (!s.ok()) {
       return s;
     }
-    edit.AddDeletedRange(
-        std::make_pair(new_deleted_range_lba, new_deleted_range_count));
   }
+  edit.AddDeletedRange(
+      std::make_pair(new_deleted_range_lba, new_deleted_range_count));
 
   // TODO: LN
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
@@ -211,10 +211,9 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   // Write
   Slice result = version_data.append(closer);
   uint64_t current_lba;
-  s = manifest_->GetCurrentWriteHead(&current_lba);
   s = manifest_->NewManifest(result);
   if (s.ok()) {
-    s = manifest_->SetCurrent(current_lba);
+    s = manifest_->SetCurrent();
   }
   if (!s.ok()) {
     printf("Error commiting\n");

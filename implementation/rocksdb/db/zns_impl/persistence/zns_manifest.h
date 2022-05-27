@@ -19,12 +19,12 @@ class ZnsManifest : public RefCounter {
   ~ZnsManifest();
   Status NewManifest(const Slice& record);
   Status ReadManifest(std::string* manifest);
-  Status GetCurrentWriteHead(uint64_t* current);
-  Status SetCurrent(uint64_t current_lba);
+  Status SetCurrent();
   Status Recover();
   inline Status Reset() {
     Status s = FromStatus(log_.ResetAll());
-    current_lba_ = min_zone_head_;
+    deleted_range_begin_ = min_zone_head_;
+    deleted_range_blocks_ = 0;
     return s;
   }
   inline ZNSDiagnostics GetDiagnostics() const {
@@ -44,15 +44,23 @@ class ZnsManifest : public RefCounter {
 
  private:
   inline Status RecoverLog() { return FromStatus(log_.RecoverPointers()); }
-  Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest);
+  Status TryGetCurrent(uint64_t* start_manifest, uint64_t* end_manifest,
+                       uint64_t* start_manifest_delete,
+                       uint64_t* end_manifest_delete);
   Status TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
+                         uint64_t* end_manifest,
+                         uint64_t* start_manifest_delete,
+                         uint64_t* end_manifest_delete,
                          ZnsCommitReader& reader);
   Status ValidateManifestPointers() const;
 
   // State
-  uint64_t current_lba_;
   uint64_t manifest_start_;
-  uint64_t manifest_end_;
+  uint64_t manifest_blocks_;
+  uint64_t manifest_start_new_;
+  uint64_t manifest_blocks_new_;
+  uint64_t deleted_range_begin_;
+  uint64_t deleted_range_blocks_;
   // Log
   SZD::SZDCircularLog log_;
   ZnsCommitter committer_;

@@ -13,9 +13,12 @@ static constexpr const size_t current_preamble_size = strlen(current_preamble);
 ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
                          const SZD::DeviceInfo& info,
                          const uint64_t min_zone_nr, const uint64_t max_zone_nr)
-    : current_lba_(min_zone_nr * info.zone_cap),
-      manifest_start_(max_zone_nr * info.zone_cap),  // enforce corruption
-      manifest_end_(min_zone_nr * info.zone_cap),    // enforce corruption
+    : manifest_start_(max_zone_nr * info.zone_cap),  // enforce corruption
+      manifest_blocks_(0),                           // enforce corruption
+      manifest_start_new_(0),
+      manifest_blocks_new_(0),
+      deleted_range_begin_(0),
+      deleted_range_blocks_(0),
       log_(channel_factory, info, min_zone_nr, max_zone_nr, 1),
       committer_(&log_, info, true),
       min_zone_head_(min_zone_nr * info.zone_cap),
@@ -33,60 +36,60 @@ ZnsManifest::~ZnsManifest() { channel_factory_->Unref(); }
 
 Status ZnsManifest::NewManifest(const Slice& record) {
   if (!committer_.SpaceEnough(record)) {
-    printf("Not enough space in Manifest\n");
+    printf("Not enough space in Manifest: needed %lu available %lu\n",
+           record.size() / lba_size_, log_.SpaceAvailable() / lba_size_);
     return Status::NoSpace();
   }
-  return committer_.SafeCommit(record);
+  manifest_start_new_ = log_.GetWriteHead();
+  Status s = committer_.SafeCommit(record, &manifest_blocks_new_);
+  return s;
 }
 
-Status ZnsManifest::GetCurrentWriteHead(uint64_t* current) {
-  *current = log_.GetWriteHead();
-  return Status::OK();
-}
-
-Status ZnsManifest::SetCurrent(uint64_t current) {
+Status ZnsManifest::SetCurrent() {
   assert(current > min_zone_head_ && current < max_zone_head_);
   Status s;
-  int64_t tmp_manifest_start = current;
-  uint64_t tmp_manifest_end = log_.GetWriteHead();
+  // Reclaim old space
+  uint64_t delete_blocks_ = (deleted_range_blocks_ / zone_cap_) * zone_cap_;
+  if (delete_blocks_ != 0) {
+    // printf("tail %lu new tail %lu \n", tail, new_tail);
+    s = FromStatus(log_.ConsumeTail(deleted_range_begin_,
+                                    deleted_range_begin_ + delete_blocks_));
+    if (!s.ok()) {
+      printf("log eagain %lu %lu %lu\n", log_.GetWriteTail(),
+             deleted_range_begin_, delete_blocks_);
+    }
+  }
+
+  deleted_range_begin_ = log_.GetWriteTail();
+  deleted_range_blocks_ =
+      deleted_range_blocks_ - delete_blocks_ + manifest_blocks_;
+
   // then install on storage
   std::string current_name = current_preamble;
-  PutFixed64(&current_name, current);
+  PutFixed64(&current_name, manifest_start_new_);
+  PutFixed64(&current_name, manifest_blocks_new_);
+  PutFixed64(&current_name, deleted_range_begin_);
+  PutFixed64(&current_name, deleted_range_blocks_);
+  // printf("Set new current %lu %lu %lu %lu %lu %lu\n", manifest_start_new_,
+  //        manifest_blocks_new_, deleted_range_begin_, deleted_range_blocks_,
+  //        log_.SpaceAvailable() / lba_size_, (max_zone_head_ -
+  //        min_zone_head_));
   s = committer_.SafeCommit(Slice(current_name));
   if (!s.ok()) {
     printf("error setting current\n");
     return s;
   }
-  // Reclaim old space
-  uint64_t tail = log_.GetWriteTail();
-  uint64_t new_tail = 0;
-  // wraparound
-  if (current - 1 < tail) {
-    new_tail += max_zone_head_ - tail;
-    if (current > min_zone_head_) {
-      new_tail += current - min_zone_head_ - 1;
-    }
-  } else {
-    new_tail += current - tail - 1;
-  }
-  // printf("current %lu tail %lu new tail %lu, max %lu min %lu, head %lu\n",
-  //        current, tail, new_tail, max_zone_head_, min_zone_head_,
-  //        log_.GetWriteHead());
-  new_tail = (new_tail / zone_cap_) * zone_cap_;
-  if (new_tail != 0 && manifest_start_ != manifest_end_) {
-    // printf("tail %lu new tail %lu \n", tail, new_tail);
-    s = FromStatus(log_.ConsumeTail(tail, tail + new_tail));
-    if (!s.ok()) {
-      printf("log eagain %lu %lu %lu\n", tail, new_tail, log_.GetWriteHead());
-    }
-  }
+
   // Only install locally if succesful
-  manifest_start_ = current_lba_ = tmp_manifest_start;
-  manifest_end_ = tmp_manifest_end;
+  manifest_start_ = manifest_start_new_;
+  manifest_blocks_ = manifest_blocks_new_;
   return s;
 }
 
 Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
+                                    uint64_t* end_manifest,
+                                    uint64_t* start_manifest_delete,
+                                    uint64_t* end_manifest_delete,
                                     ZnsCommitReader& reader) {
   Slice potential;
   committer_.GetCommitReader(0, slba, slba + 1, &reader);
@@ -101,18 +104,27 @@ Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
     return Status::Corruption("CURRENT", "Broken header");
   }
   const char* current_text_header = potential.data() + current_preamble_size;
-  Slice current_text_header_slice(current_text_header, sizeof(uint64_t) + 1);
-  if (!GetFixed64(&current_text_header_slice, start_manifest)) {
+  Slice current_text_header_slice(current_text_header,
+                                  sizeof(uint64_t) * 4 + 1);
+  if (!(GetFixed64(&current_text_header_slice, start_manifest) &&
+        GetFixed64(&current_text_header_slice, end_manifest) &&
+        GetFixed64(&current_text_header_slice, start_manifest_delete) &&
+        GetFixed64(&current_text_header_slice, end_manifest_delete))) {
     return Status::Corruption("CURRENT", "Corrupt pointers");
   }
-  if (*start_manifest < min_zone_head_ || *start_manifest > max_zone_head_) {
+  // printf("Gotten current %lu %lu %lu %lu \n", *start_manifest, *end_manifest,
+  //        *start_manifest_delete, *end_manifest_delete);
+  if (*start_manifest < min_zone_head_ || *start_manifest > max_zone_head_ ||
+      *end_manifest > (max_zone_head_ - min_zone_head_)) {
     return Status::Corruption("CURRENT", "Invalid pointers");
   }
   return Status::OK();
 }
 
 Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
-                                  uint64_t* end_manifest) {
+                                  uint64_t* end_manifest,
+                                  uint64_t* start_manifest_delete,
+                                  uint64_t* end_manifest_delete) {
   if (log_.Empty()) {
     *start_manifest = *end_manifest = 0;
     return Status::NotFound("No current when empty");
@@ -126,9 +138,9 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
                       : log_.GetWriteHead() - 1;
   for (; slba != log_.GetWriteTail();
        slba = slba == min_zone_head_ ? max_zone_head_ - 1 : slba - 1) {
-    if (TryParseCurrent(slba, start_manifest, reader).ok()) {
-      current_lba_ = slba;
-      *end_manifest = current_lba_;
+    if (TryParseCurrent(slba, start_manifest, end_manifest,
+                        start_manifest_delete, end_manifest_delete, reader)
+            .ok()) {
       found = true;
       break;
     }
@@ -147,8 +159,13 @@ Status ZnsManifest::Recover() {
   if (!s.ok()) {
     return s;
   }
-  s = TryGetCurrent(&manifest_start_, &manifest_end_);
+  s = TryGetCurrent(&manifest_start_, &manifest_blocks_, &deleted_range_begin_,
+                    &deleted_range_blocks_);
   if (!s.ok()) return s;
+  // printf(
+  //     "Manifest start %lu Manifest end %lu deleted range begin %lu end %lu
+  //     \n", manifest_start_, manifest_blocks_, deleted_range_begin_,
+  //     deleted_range_blocks_);
   return s;
 }
 
@@ -156,13 +173,16 @@ Status ZnsManifest::ValidateManifestPointers() const {
   const uint64_t write_head_ = log_.GetWriteHead();
   const uint64_t zone_tail_ = log_.GetWriteTail();
   if (write_head_ > zone_tail_) {
-    if (manifest_start_ > write_head_ || manifest_end_ > write_head_ ||
-        manifest_start_ < zone_tail_ || manifest_end_ < zone_tail_) {
+    if (manifest_start_ > write_head_ ||
+        manifest_start_ + manifest_blocks_ > write_head_ ||
+        manifest_start_ < zone_tail_ ||
+        manifest_start_ + manifest_blocks_ < zone_tail_) {
       return Status::Corruption("manifest pointers");
     }
   } else {
     if ((manifest_start_ > write_head_ && manifest_start_ < zone_tail_) ||
-        (manifest_end_ > write_head_ && manifest_end_ < zone_tail_)) {
+        (manifest_start_ + manifest_blocks_ > write_head_ &&
+         manifest_start_ + manifest_blocks_ < zone_tail_)) {
       return Status::Corruption("manifest pointers");
     }
   }
@@ -175,14 +195,15 @@ Status ZnsManifest::ReadManifest(std::string* manifest) {
   if (!s.ok()) {
     return s;
   }
-  if (manifest_start_ == manifest_end_) {
+  if (manifest_blocks_ == 0) {
     return Status::IOError();
   }
 
   Slice record;
   // Read data from commits. If necessary wraparound from end to start.
   ZnsCommitReader reader;
-  s = committer_.GetCommitReader(0, manifest_start_, manifest_end_, &reader);
+  s = committer_.GetCommitReader(0, manifest_start_,
+                                 manifest_start_ + manifest_blocks_, &reader);
   if (!s.ok()) {
     return s;
   }

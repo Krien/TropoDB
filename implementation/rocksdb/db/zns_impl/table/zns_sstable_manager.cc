@@ -106,6 +106,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
   if (s.ok()) {
     *blocks -= meta.lba_count;
     *live_tail = sstable_level_[0]->GetTail();
+    // printf("New tail %lu \n", *live_tail);
   } else {
     printf("Error reclaiming L0? %lu %lu, true %lu\n", meta.L0.lba,
            meta.lba_count, written_tail);

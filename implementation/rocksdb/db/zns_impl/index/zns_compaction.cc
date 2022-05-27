@@ -143,7 +143,7 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     if (i + first_level_ == 0) {
       // Carry over (move head of deleted range)
       std::pair<uint64_t, uint64_t> new_deleted_range;
-      if (vset_->current_->ss_deleted_range_.second != 0) {
+      if (vset_->current_->ss_deleted_range_.first != 0) {
         new_deleted_range =
             std::make_pair(vset_->current_->ss_deleted_range_.first,
                            count + vset_->current_->ss_deleted_range_.second);
