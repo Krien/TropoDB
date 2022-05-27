@@ -51,6 +51,8 @@ class ZNSWAL : public RefCounter {
     return diag;
   }
 
+  inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
+
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
 
  private:

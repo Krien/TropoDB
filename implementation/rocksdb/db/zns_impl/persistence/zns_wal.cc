@@ -76,7 +76,11 @@ Status ZNSWAL::Append(const Slice& data) {
   return DirectAppend(data);
 }
 
-Status ZNSWAL::Close() { return Sync(); }
+Status ZNSWAL::Close() {
+  Status s = Sync();
+  s = MarkInactive();
+  return s;
+}
 
 Status ZNSWAL::Sync() {
   Status s = Status::OK();
