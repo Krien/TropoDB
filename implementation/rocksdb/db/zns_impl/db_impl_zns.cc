@@ -90,7 +90,14 @@ static void PrintIOColumn(const ZNSDiagnostics& diag) {
             << std::setw(15) << diag.append_operations_ << std::setw(25)
             << diag.bytes_written_ << std::setw(15) << diag.read_operations_
             << std::setw(25) << diag.bytes_read_ << std::setw(16)
-            << diag.zones_erased_ << "\n";
+            << diag.zones_erased_counter_ << "\n";
+}
+
+static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
+                                   std::ostringstream& os) {
+  for (uint64_t r : diag.zones_erased_) {
+    os << r << ",";
+  }
 }
 
 void DBImplZNS::IODiagnostics() {
@@ -116,7 +123,9 @@ void DBImplZNS::IODiagnostics() {
                                      .append_operations_ = 0,
                                      .bytes_read_ = 0,
                                      .read_operations_ = 0,
-                                     .zones_erased_ = 0};
+                                     .zones_erased_counter_ = 0};
+  std::ostringstream hotzones;
+  hotzones << "[";
   {
     std::vector<ZNSDiagnostics> diags = wal_man_->IODiagnostics();
     for (auto& diag : diags) {
@@ -125,7 +134,8 @@ void DBImplZNS::IODiagnostics() {
       totaldiag.append_operations_ += diag.append_operations_;
       totaldiag.bytes_read_ += diag.bytes_read_;
       totaldiag.read_operations_ += diag.read_operations_;
-      totaldiag.zones_erased_ += diag.zones_erased_;
+      totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
+      AddToJSONHotZoneStream(diag, hotzones);
     }
   }
   {
@@ -136,7 +146,8 @@ void DBImplZNS::IODiagnostics() {
       totaldiag.append_operations_ += diag.append_operations_;
       totaldiag.bytes_read_ += diag.bytes_read_;
       totaldiag.read_operations_ += diag.read_operations_;
-      totaldiag.zones_erased_ += diag.zones_erased_;
+      totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
+      AddToJSONHotZoneStream(diag, hotzones);
     }
   }
   {
@@ -146,10 +157,14 @@ void DBImplZNS::IODiagnostics() {
     totaldiag.append_operations_ += diag.append_operations_;
     totaldiag.bytes_read_ += diag.bytes_read_;
     totaldiag.read_operations_ += diag.read_operations_;
-    totaldiag.zones_erased_ += diag.zones_erased_;
+    totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
+    AddToJSONHotZoneStream(diag, hotzones);
   }
   PrintIOColumn(totaldiag);
   std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
+  std::cout << "Hot zones as a raw list"
+            << "\n";
+  std::cout << hotzones.str() << "]\n";
 }
 
 DBImplZNS::~DBImplZNS() {

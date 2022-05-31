@@ -431,6 +431,9 @@ enum Tickers : uint32_t {
   NON_LAST_LEVEL_READ_BYTES,
   NON_LAST_LEVEL_READ_COUNT,
 
+  // Used for raw IO numbers
+  FS_BYTES_WRITTEN,
+
   TICKER_ENUM_MAX
 };
 

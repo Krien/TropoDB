@@ -45,6 +45,7 @@ class L0ZnsSSTable : public ZnsSSTable {
         .append_operations_ = log_.GetAppendOperations(),
         .bytes_read_ = log_.GetBytesRead(),
         .read_operations_ = log_.GetReadOperations(),
+        .zones_erased_counter_ = log_.GetZonesResetCounter(),
         .zones_erased_ = log_.GetZonesReset()};
     return diag;
   }
