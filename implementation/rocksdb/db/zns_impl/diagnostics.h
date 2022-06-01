@@ -12,11 +12,12 @@ namespace ROCKSDB_NAMESPACE {
 struct ZNSDiagnostics {
   std::string name_;
   uint64_t bytes_written_;
-  uint64_t append_operations_;
+  uint64_t append_operations_counter_;
   uint64_t bytes_read_;
-  uint64_t read_operations_;
+  uint64_t read_operations_counter_;
   uint64_t zones_erased_counter_;
   std::vector<uint64_t> zones_erased_;
+  std::vector<uint64_t> append_operations_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

@@ -42,11 +42,12 @@ class L0ZnsSSTable : public ZnsSSTable {
     struct ZNSDiagnostics diag = {
         .name_ = "L0",
         .bytes_written_ = log_.GetBytesWritten(),
-        .append_operations_ = log_.GetAppendOperations(),
+        .append_operations_counter_ = log_.GetAppendOperationsCounter(),
         .bytes_read_ = log_.GetBytesRead(),
-        .read_operations_ = log_.GetReadOperations(),
+        .read_operations_counter_ = log_.GetReadOperationsCounter(),
         .zones_erased_counter_ = log_.GetZonesResetCounter(),
-        .zones_erased_ = log_.GetZonesReset()};
+        .zones_erased_ = log_.GetZonesReset(),
+        .append_operations_ = log_.GetAppendOperations()};
     return diag;
   }
 
