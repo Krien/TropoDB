@@ -155,6 +155,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
       *lbas += lbas_iter;
     }
     if (!s.ok()) {
+      printf("Fatal append error\n");
       return s;
     }
     ptr += fragment_length;
@@ -169,6 +170,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
 
 Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   if (!SpaceEnough(data)) {
+    printf("No space left\n");
     return Status::IOError("No space left");
   }
   return Commit(data, lbas);

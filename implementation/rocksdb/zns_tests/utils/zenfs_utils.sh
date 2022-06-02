@@ -13,6 +13,8 @@ print_help() {
     echo "Options:"
     echo "  mkfs: Create filesystem"
     echo "  setup: Setup environment for testing"
+    echo "  create: setup + mkfs"
+    echo "  destroy: destroy context"
     echo ""
 }
 
@@ -29,6 +31,7 @@ mkf_zenfs() {
         echo ""
         echo "Not enough arguments given, please provide device name"
         echo ""
+        exit 1
     fi
     # /dev/nvme1n1 /tmp/zenfs-aux
     rm -rf /tmp/zenfs-aux
@@ -41,8 +44,21 @@ setup() {
         echo "Not enough arguments given, please provide a device name \
         such as nvme2n2..."
         echo ""
+        exit 1
     fi
     echo deadline | sudo tee "/sys/block/$1/queue/scheduler"
+}
+
+create() {
+    if [[ $# -lt 1 ]] ; then
+        echo ""
+        echo "Not enough arguments given, please provide a device name \
+        such as nvme2n2..."
+        echo ""
+        exit 1
+    fi
+    setup $1
+    mkf_zenfs $1
 }
 
 destroy() {
@@ -72,6 +88,11 @@ case $1 in
     "destroy")
         shift
         destroy $*
+        exit $?
+    ;;
+    "create")
+        shift
+        create $*
         exit $?
     ;;
     *)

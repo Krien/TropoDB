@@ -38,6 +38,7 @@ uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
+    printf("Out of space L0\n");
     return Status::IOError("Not enough space available for L0");
   }
   meta->L0.lba = log_.GetWriteHead();

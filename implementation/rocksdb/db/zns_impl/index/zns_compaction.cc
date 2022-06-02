@@ -23,6 +23,10 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
                      vset->zone_cap_),
       vset_(vset),
       version_(nullptr) {
+  // printf(
+  //     "Max compaction size %lu %lu %lu %lu\n", ZnsConfig::max_bytes_sstable_,
+  //     ((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+  //     vset->lba_size_), max_lba_count_, vset->zone_cap_);
   for (size_t i = 0; i < ZnsConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
@@ -175,7 +179,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
 
   *builder = current_builder;
   if (!s.ok()) {
-    printf("error flushing table\n");
+    printf("error writing table\n");
   }
   return s;
 }

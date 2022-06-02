@@ -48,6 +48,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
   if (!FromStatus(log_.Append(content.data(), content.size(), ptrs, false))
            .ok()) {
+    printf("Error appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
   }
   meta->LN.lba_regions = 0;

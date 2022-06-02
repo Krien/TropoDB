@@ -21,6 +21,7 @@ print_help() {
     echo "Options:"
     echo "  mkfs: Create filesystem"
     echo "  setup: Setup environment for testing"
+    echo "  create: Setup + mkfs"
     echo "  destroy: Unmounts the filesystem and resets the device"
     echo ""
 }
@@ -34,7 +35,7 @@ if [[ $# -eq 0 ]] ; then
 fi
 
 mkf_f2fs() {
-    # /mnt/f2fs /dev/nvme4n1 /dev/nvme1n1
+    # /mnt/f2fs nvme4n1 nvme1n1
     if [[ $# -lt 3 ]] ; then
         echo ""
         echo "Not enough arguments given, please provide mnt path, device name 1, device name 2 "
@@ -63,6 +64,20 @@ setup() {
         exit 1
     fi
     echo mq-deadline | sudo tee "/sys/block/$1/queue/scheduler"
+}
+
+create() {
+    if [[ $# -lt 3 ]] ; then
+        echo ""
+        echo "Not enough arguments given, please provide mnt path, device name 1, device name 2 "
+        echo ""
+        exit 1
+    fi
+    mnt=$1
+    devzns=$2
+    devnvme=$3
+    setup $devzns
+    mkf_f2fs $mnt $devzns $devnvme
 }
 
 destroy() {
@@ -94,6 +109,11 @@ case $1 in
     "destroy")
         shift
         destroy $*
+        exit $?
+    ;;
+    "create")
+        shift
+        create $*
         exit $?
     ;;
     *)

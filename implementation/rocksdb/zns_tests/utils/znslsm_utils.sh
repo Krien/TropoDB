@@ -4,6 +4,7 @@ set -e
 print_help() {
     echo "Options:"
     echo "  setup: Setup environment for testing"
+	echo "	create: alias for setup"
 	echo "	destroy: Destroy all SPDK bindings and return control to host"
     echo ""
 }
@@ -53,6 +54,11 @@ destroy() {
 
 case $1 in 
     "setup")
+        shift
+        setup $*
+        exit $?
+    ;;
+	"create")
         shift
         setup $*
         exit $?
