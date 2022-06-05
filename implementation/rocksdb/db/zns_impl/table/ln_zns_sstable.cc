@@ -15,7 +15,14 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t min_zone_nr,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr) {}
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr,
+           number_of_concurrent_ln_readers),
+      cv_(&mutex_) {
+  // unset
+  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+    read_queue_[i] = 0;
+  }
+}
 
 LNZnsSSTable::~LNZnsSSTable() = default;
 
@@ -63,6 +70,41 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   return Status::OK();
 }
 
+// TODO: this is better than locking around the entire read, but we have to
+// investigate the performance.
+uint8_t LNZnsSSTable::request_read_queue() {
+  uint8_t picked_reader = number_of_concurrent_ln_readers;
+  mutex_.Lock();
+  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+    if (read_queue_[i] == 0) {
+      picked_reader = i;
+      break;
+    }
+  }
+  while (picked_reader >= number_of_concurrent_ln_readers) {
+    cv_.Wait();
+    for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+      if (read_queue_[i] == 0) {
+        picked_reader = i;
+        break;
+      }
+    }
+  }
+  // printf("Claimed reader %u \n", picked_reader);
+  read_queue_[picked_reader] = 1;
+  mutex_.Unlock();
+  return picked_reader;
+}
+
+void LNZnsSSTable::release_read_queue(uint8_t reader) {
+  mutex_.Lock();
+  assert(reader < number_of_concurrent_ln_readers && read_queue_[reader] != 0);
+  // printf("Released reader %u \n", reader);
+  read_queue_[reader] = 0;
+  cv_.SignalAll();
+  mutex_.Unlock();
+}
+
 Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (meta.LN.lba_regions > 8) {
@@ -81,9 +123,12 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   }
 
   char* buffer = new char[meta.lba_count * lba_size_];
-  mutex_.Lock();
-  s = FromStatus(log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true));
-  mutex_.Unlock();
+  // mutex_.Lock();
+  uint8_t readernr = request_read_queue();
+  s = FromStatus(
+      log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true, readernr));
+  release_read_queue(readernr);
+  // mutex_.Unlock();
   if (!s.ok()) {
     delete[] buffer;
     return s;
