@@ -216,6 +216,7 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
     // first read header (prevents reading too much)
     log_->Read(reader.commit_ptr, *(&read_buffer_[reader.reader_nr]), 0,
                lba_size_, true, reader.reader_nr);
+    // printf("Reading with reader %u \n", reader.reader_nr);
     // parse header
     const char* header;
     read_buffer_[reader.reader_nr]->GetBuffer((void**)&header);

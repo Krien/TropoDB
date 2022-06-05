@@ -608,6 +608,15 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   return s;
 }
 
+Status DBImplZNS::Get(const ReadOptions& options,
+                      ColumnFamilyHandle* column_family, const Slice& key,
+                      PinnableSlice* value, std::string* timestamp) {
+  std::string* val = new std::string;
+  Status s = Get(options, key, val);
+  *value = PinnableSlice(val);
+  return s;
+}
+
 int DBImplZNS::NumberLevels(ColumnFamilyHandle* column_family) {
   return ZnsConfig::level_count;
 }
