@@ -98,7 +98,7 @@ run_bench() {
     TEST_OUT="./output/${BENCHMARKS}_${TARGET}"
 
     # db configs
-    NUM=2000000     # Please set to > 80% of device
+    NUM=1000000     # Please set to > 80% of device
     KSIZE=16        # default
     VSIZE=1000      # Taken from ZenFS benchmarks
     ZONE_CAP=512    # Alter for device

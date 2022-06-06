@@ -15,7 +15,8 @@
 namespace ROCKSDB_NAMESPACE {
 class ZNSMemTable : public RefCounter {
  public:
-  ZNSMemTable(const DBOptions& options, const InternalKeyComparator& ikc);
+  ZNSMemTable(const DBOptions& options, const InternalKeyComparator& ikc,
+              const size_t buffer_size);
   ~ZNSMemTable();
   Status Write(const WriteOptions& options, WriteBatch* updates);
   bool Get(const ReadOptions& options, const LookupKey& key, std::string* value,
@@ -29,7 +30,7 @@ class ZNSMemTable : public RefCounter {
 
  private:
   // Meta
-  const Options options_;
+  Options options_;
   const ImmutableOptions ioptions_;
   const size_t write_buffer_size_;
   WriteBufferManager wb_;

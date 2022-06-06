@@ -37,6 +37,7 @@ class ZNSWAL : public RefCounter {
   }
   inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
   inline bool Empty() { return log_.Empty() && pos_ == 0; }
+  inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline bool SpaceLeft(const Slice& data) {
     return log_.SpaceLeft(data.size() + pos_);
   }

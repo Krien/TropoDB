@@ -242,7 +242,9 @@ Status DBImplZNS::ResetZNSDevice() {
   return s.ok() ? Status::OK() : Status::IOError("Error resetting device");
 }
 
-Status DBImplZNS::InitDB(const DBOptions& options) {
+Status DBImplZNS::InitDB(const DBOptions& options,
+                         const size_t max_write_buffer_size) {
+  max_write_buffer_size_ = max_write_buffer_size;
   assert(zns_device_ != nullptr);
   SZD::DeviceInfo device_info;
   zns_device_->GetInfo(&device_info);
@@ -283,7 +285,7 @@ Status DBImplZNS::InitDB(const DBOptions& options) {
   std::cout << std::setfill('_') << std::setw(76) << "\n" << std::setfill(' ');
   zone_head = device_info.max_lba / device_info.zone_size;
 
-  mem_ = new ZNSMemTable(options, this->internal_comparator_);
+  mem_ = new ZNSMemTable(options, internal_comparator_, max_write_buffer_size_);
   mem_->Ref();
 
   Options opts(options, ColumnFamilyOptions());
@@ -304,7 +306,8 @@ Status DBImplZNS::InitWAL() {
   if (!wal_man_->WALAvailable()) {
     if (mem_->GetInternalSize() > 0) {
       imm_ = mem_;
-      mem_ = new ZNSMemTable(options_, internal_comparator_);
+      mem_ = new ZNSMemTable(options_, internal_comparator_,
+                             max_write_buffer_size_);
       mem_->Ref();
     }
     MaybeScheduleCompaction(true);
@@ -329,10 +332,17 @@ Status DBImplZNS::Open(
   }
   // We do not support column families, so we just clear them
   handles->clear();
+
+  size_t max_write_buffer_size = 0;
+  for (auto cf : column_families) {
+    max_write_buffer_size =
+        std::max(max_write_buffer_size, cf.options.write_buffer_size);
+  }
+
   DBImplZNS* impl = new DBImplZNS(db_options, name);
   s = impl->OpenZNSDevice("ZNSLSM");
   if (!s.ok()) return s;
-  s = impl->InitDB(db_options);
+  s = impl->InitDB(db_options, max_write_buffer_size);
   if (!s.ok()) return s;
   // setup WAL (WAL DIR)
   impl->mutex_.Lock();
@@ -396,7 +406,7 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   DBImplZNS* impl = new DBImplZNS(options, dbname);
   s = impl->OpenZNSDevice("ZNSLSM");
   if (!s.ok()) return s;
-  s = impl->InitDB(options);
+  s = impl->InitDB(options, options.write_buffer_size);
   if (!s.ok()) return s;
   s = impl->ResetZNSDevice();
   if (!s.ok()) return s;
@@ -456,7 +466,8 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       // printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
-      mem_ = new ZNSMemTable(options_, internal_comparator_);
+      mem_ = new ZNSMemTable(options_, internal_comparator_,
+                             max_write_buffer_size_);
       mem_->Ref();
       MaybeScheduleCompaction(false);
     }
@@ -476,9 +487,14 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
   // Allow the group to grow up to a maximum size, but if the
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
-  size_t max_size = 1 << 20;
-  if (size <= (128 << 10)) {
-    max_size = size + (128 << 10);
+  size_t max_size =
+      max_write_buffer_size_ -
+      512;  // TODO: if max_write_buffer_size_ < 512 then all hell breaks loose!
+  // if (size <= (128 << 10)) {
+  //   max_size = size + (128 << 10);
+  // }
+  if (max_size > wal_->SpaceAvailable()) {
+    max_size = wal_->SpaceAvailable();
   }
 
   *last_writer = first;
@@ -538,6 +554,9 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       // buffering does not really make sense at the moment.
       // later we might decide to implement "FSync" or "ZoneSync", then it
       // should be reinstagated.
+      printf("writing %lu/%lu  %lu\n", mem_->GetInternalSize(),
+             max_write_buffer_size_,
+             WriteBatchInternal::Contents(write_batch).size());
       if (true) {
         s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch));
       } else {
@@ -548,6 +567,9 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       assert(this->mem_ != nullptr);
       if (s.ok()) {
         s = mem_->Write(options, write_batch);
+        if (!s.ok()) {
+          printf("Error writing to memtable %s\n", s.getState());
+        }
       }
       mutex_.Lock();
       wal_->Unref();

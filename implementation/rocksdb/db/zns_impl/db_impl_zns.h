@@ -88,7 +88,7 @@ class DBImplZNS : public DB {
   Status OpenZNSDevice(const std::string dbname);
   Status ResetZNSDevice();
 
-  Status InitDB(const DBOptions& options);
+  Status InitDB(const DBOptions& options, const size_t max_write_buffer_size);
   Status InitWAL();
 
   virtual Status Close() override;
@@ -335,6 +335,7 @@ class DBImplZNS : public DB {
   ZnsTableCache* table_cache_;
   ZnsWALManager<ZnsConfig::wal_count>* wal_man_;
   ZnsVersionSet* versions_;
+  size_t max_write_buffer_size_;
 
   // Dynamic data objects, protected by mutex
   ZNSWAL* wal_;

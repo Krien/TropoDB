@@ -8,15 +8,20 @@
 
 namespace ROCKSDB_NAMESPACE {
 ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
-                         const InternalKeyComparator& ikc)
+                         const InternalKeyComparator& ikc,
+                         const size_t buffer_size)
     : options_(db_options, ColumnFamilyOptions()),
       ioptions_(options_),
-      write_buffer_size_(options_.write_buffer_size),
-      wb_(options_.db_write_buffer_size),
+      write_buffer_size_(buffer_size),
+      wb_(buffer_size),
       arena_() {
+  // printf("Write bufsize %lu \n", write_buffer_size_);
+  options_.write_buffer_size = write_buffer_size_;
+  MutableCFOptions cfopts = MutableCFOptions(options_);
+  printf("SIZE OF MEM %lu \n", cfopts.write_buffer_size);
   mem_ = new ColumnFamilyMemTablesDefault(
-      new MemTable(ikc, ioptions_, MutableCFOptions(options_), &wb_,
-                   kMaxSequenceNumber, 0 /* column_family_id */));
+      new MemTable(ikc, ioptions_, cfopts, &wb_, kMaxSequenceNumber,
+                   0 /* column_family_id */));
   mem_->GetMemTable()->Ref();
 }
 
