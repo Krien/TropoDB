@@ -216,6 +216,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
       merger->SeekToFirst();
       if (!merger->Valid()) {
         delete merger;
+        printf("Invalid merger\n");
         return Status::Corruption("No valid merging iterator");
       }
       ParsedInternalKey ikey;

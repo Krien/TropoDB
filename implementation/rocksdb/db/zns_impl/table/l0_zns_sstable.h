@@ -55,7 +55,7 @@ class L0ZnsSSTable : public ZnsSSTable {
   friend class ZnsSSTableManagerInternal;
 
   uint8_t request_read_queue();
-  void release_read_queue();
+  void release_read_queue(uint8_t reader);
 
   SZD::SZDCircularLog log_;
   ZnsCommitter committer_;
@@ -63,7 +63,7 @@ class L0ZnsSSTable : public ZnsSSTable {
   // concurrently.
   port::Mutex mutex_;
   port::CondVar cv_;
-  uint8_t read_queue_;
+  std::array<uint8_t, number_of_concurrent_readers> read_queue_;
 };
 
 /**

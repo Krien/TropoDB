@@ -98,20 +98,20 @@ run_bench() {
     TEST_OUT="./output/${BENCHMARKS}_${TARGET}"
 
     # db configs
-    NUM=1000        # Please set to > 80% of device
+    NUM=2000000     # Please set to > 80% of device
     KSIZE=16        # default
     VSIZE=1000      # Taken from ZenFS benchmarks
     ZONE_CAP=512    # Alter for device
     TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100)) 
     # ^ Taken from ZenFS?
     WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+    threads=3
 
     echo "Starting benchmark $BENCHMARKS at $TARGET" > $TEST_OUT
     ../db_bench $EXTRA_DB_BENCH_ARGS                \
         --num=$NUM                                  \
         --compression_type=None                     \
-        --value_size=$KSIZE --key_size=$VSIZE       \
-        --use_existing_db                           \
+        --value_size=$VSIZE --key_size=$KSIZE       \
         --use_direct_io_for_flush_and_compaction    \
         --use_direct_reads                          \
         --max_bytes_for_level_multiplier=4          \
@@ -119,9 +119,13 @@ run_bench() {
         --target_file_size_base=$ZONE_CAP           \
         --write_buffer_size=$WB_SIZE                \
         --histogram                                 \
-        --benchmarks=$BENCHMARKS >> $TEST_OUT
+        --threads=$threads                          \
+        --benchmarks=$BENCHMARKS # >> $TEST_OUT
+        #--use_existing_db                          \
     return $?
 }
+
+
 
 clean_bench() {
 case $1 in

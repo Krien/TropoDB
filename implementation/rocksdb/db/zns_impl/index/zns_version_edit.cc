@@ -56,7 +56,14 @@ void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
   }
 }
 
+// For debugging
+// #define VERSION_LEAK 1
+
 void ZnsVersionEdit::EncodeTo(std::string* dst) const {
+#ifdef VERSION_LEAK
+  uint64_t debug_version_leak_ = 0;
+  uint64_t debug_ss_leak_ = 0;
+#endif
   // comparator
   if (has_comparator_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kComparator));
@@ -73,6 +80,11 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, ss_number);
   }
 
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size();
+  printf("DEBUG LEAK begin data %lu \n", debug_version_leak_);
+#endif
+
   // compaction pointers
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kCompactPointer));
@@ -80,12 +92,22 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
   }
 
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size() - debug_version_leak_;
+  printf("DEBUG LEAK compaction pointers %lu \n", debug_version_leak_);
+#endif
+
   // deleted ranges
   if (has_deleted_range_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedRange));
     PutVarint64(dst, deleted_range_.first);   // range first
     PutVarint64(dst, deleted_range_.second);  // range last
   }
+
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size() - debug_version_leak_;
+  printf("DEBUG LEAK begin deleted ranges %lu \n", debug_version_leak_);
+#endif
 
   // deleted LN
   for (auto del : deleted_ss_pers_) {
@@ -105,11 +127,25 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutLengthPrefixedSlice(dst, m.largest.Encode());
   }
 
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size() - debug_version_leak_;
+  printf("DEBUG LEAK deleted LN %lu \n", debug_version_leak_);
+#endif
+
   // new files
+  DeletedZoneSet::iterator it;
   for (size_t i = 0; i < new_ss_.size(); i++) {
     const SSZoneMetaData& m = new_ss_[i].second;
+    const uint64_t level = new_ss_[i].first;
+    if (deleted_ss_.count(std::make_pair(level, m.number)) > 0) {
+      continue;
+    }
+// printf("added %lu %lu \n", level, m.number);
+#ifdef VERSION_LEAK
+    debug_ss_leak_ = dst->size();
+#endif
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
-    PutFixed8(dst, new_ss_[i].first);  // level
+    PutFixed8(dst, level);  // level
     PutVarint64(dst, m.number);
     if (new_ss_[i].first == 0) {
       PutVarint64(dst, m.L0.lba);
@@ -124,7 +160,16 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.lba_count);
     PutLengthPrefixedSlice(dst, m.smallest.Encode());
     PutLengthPrefixedSlice(dst, m.largest.Encode());
+#ifdef VERSION_LEAK
+    debug_ss_leak_ = dst->size() - debug_ss_leak_;
+    printf("DEBUG LEAK file  %lu \n", debug_ss_leak_);
+#endif
   }
+
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size() - debug_version_leak_;
+  printf("DEBUG LEAK new files %lu \n", debug_version_leak_);
+#endif
 
   // Fragmented logs
   for (auto frag : fragmented_data_) {
@@ -132,6 +177,11 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutFixed8(dst, frag.first);
     PutLengthPrefixedSlice(dst, frag.second);
   }
+
+#ifdef VERSION_LEAK
+  debug_version_leak_ = dst->size() - debug_version_leak_;
+  printf("DEBUG LEAK fragmented logs %lu \n", debug_version_leak_);
+#endif
 }
 
 static bool GetInternalKey(Slice* input, InternalKey* dst) {
@@ -230,6 +280,8 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &number_second)) {
           deleted_range_ = std::make_pair(number, number_second);
           has_deleted_range_ = true;
+          // printf("Retrieved deleted range %lu %lu \n", deleted_range_.first,
+          //        deleted_range_.second);
         } else {
           msg = "deleted sstable range";
         }

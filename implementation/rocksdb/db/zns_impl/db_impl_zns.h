@@ -128,6 +128,9 @@ class DBImplZNS : public DB {
              std::string* value) override;
   Status Get(const ReadOptions& options, ColumnFamilyHandle* column_family,
              const Slice& key, PinnableSlice* value) override;
+  Status Get(const ReadOptions& options, ColumnFamilyHandle* column_family,
+             const Slice& key, PinnableSlice* value,
+             std::string* timestamp) override;
 
   Status GetMergeOperands(const ReadOptions& options,
                           ColumnFamilyHandle* column_family, const Slice& key,

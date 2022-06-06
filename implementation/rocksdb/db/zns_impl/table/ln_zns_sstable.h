@@ -12,6 +12,9 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+static constexpr uint8_t number_of_concurrent_ln_readers = 4;
+
 class LNZnsSSTable : public ZnsSSTable {
  public:
   LNZnsSSTable(SZD::SZDChannelFactory* channel_factory_,
@@ -49,8 +52,13 @@ class LNZnsSSTable : public ZnsSSTable {
   }
 
  private:
+  uint8_t request_read_queue();
+  void release_read_queue(uint8_t reader);
+
   SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
+  port::CondVar cv_;
+  std::array<uint8_t, number_of_concurrent_ln_readers> read_queue_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 
