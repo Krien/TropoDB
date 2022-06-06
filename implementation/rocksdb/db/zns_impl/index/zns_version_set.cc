@@ -50,40 +50,68 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
+  // TODO: Add some define around, this should not be in prod.
+  static uint64_t debug_number = 0;
+  debug_number++;
+  v->debug_nr_ = debug_number;
+  // printf("added version %lu \n", debug_number);
 }
 
-void ZnsVersionSet::GetLiveZoneRange(const uint8_t level,
-                                     std::pair<uint64_t, uint64_t>* range) {
-  *range = std::make_pair<uint64_t, uint64_t>(0, 0);
-  bool ran_set = false;
+void ZnsVersionSet::GetLiveZones(const uint8_t level,
+                                 std::set<uint64_t>& live) {
   for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
     const std::vector<SSZoneMetaData*>& metas = v->ss_[level];
-    std::pair temp_ran = std::make_pair<uint64_t, uint64_t>(0, 0);
-    znssstable_->GetRange(level, metas, &temp_ran);
-    if (!ran_set) {
-      *range = temp_ran;
-      ran_set = true;
-      // printf("range %lu %lu \n", ran.first, ran.second);
-    } else if (temp_ran.first != temp_ran.second) {
-      range->first = temp_ran.first;
+    for (auto& meta : metas) {
+      live.insert(meta->number);
+    }
+  }
+}
+
+void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
+                                       std::pair<uint64_t, uint64_t>* range) {
+  *range = std::make_pair<uint64_t, uint64_t>(0, 0);
+  bool first = true;
+  for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
+       v = v->next_) {
+    // printf("V %lu %lu %lu %lu\n", v->debug_nr_, v->ss_deleted_range_.first,
+    //        v->ss_deleted_range_.second, v->ss_[0].size());
+    // There can be a couple of cases:
+    //  1. The version does not have a deleted range (0,0). skip
+    //  2. The version starts at a different range than current_. Immediately
+    //  return, we can not delete. This happens when a reader uses an old
+    //  version.
+    //  3. The version has a smaller range. Pick this one as we can only delete
+    //  the smallest range.
+    if (current_->ss_deleted_range_.first != v->ss_deleted_range_.first &&
+        v->ss_deleted_range_.first != 0) {
+      *range = std::make_pair<uint64_t, uint64_t>(0, 0);
+      return;
+    }
+    if (first || v->ss_deleted_range_.second < range->second) {
+      *range = v->ss_deleted_range_;
+      first = false;
+      // printf("potential %lu %lu \n", v->ss_deleted_range_.first,
+      //        v->ss_deleted_range_.second);
     }
   }
 }
 
 Status ZnsVersionSet::ReclaimStaleSSTables() {
-  //("reclaiming....\n");
+  // printf("reclaiming....\n");
   Status s = Status::OK();
-  std::pair<uint64_t, uint64_t> range;
   ZnsVersionEdit edit;
 
   // Reclaim L0
-  GetLiveZoneRange(0, &range);
+  std::pair<uint64_t, uint64_t> safe_delete_range;
+  GetSaveDeleteRange(0, &safe_delete_range);
   uint64_t new_deleted_range_lba = current_->ss_deleted_range_.first;
   uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
-  if (current_->ss_deleted_range_.second != 0) {
+
+  if (safe_delete_range.second != 0) {
     s = znssstable_->SetValidRangeAndReclaim(&new_deleted_range_lba,
-                                             &new_deleted_range_count);
+                                             &new_deleted_range_count,
+                                             safe_delete_range.second);
     // printf("Move deleted range from %lu %lu to %lu %lu \n",
     //        current_->ss_deleted_range_.first,
     //        current_->ss_deleted_range_.second, new_deleted_range_lba,
@@ -97,15 +125,24 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
 
   // TODO: LN
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
+    std::set<uint64_t> live_zones;
+    std::vector<SSZoneMetaData*> new_deleted;
+    GetLiveZones(i, live_zones);
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
       // printf("  deleting ln \n");
-      s = znssstable_->DeleteLNTable(i, *current_->ss_d_[i][j]);
-      if (!s.ok()) {
-        printf("Error deleting ln table \n");
-        return s;
+      SSZoneMetaData* todelete = current_->ss_d_[i][j];
+      if (live_zones.count(todelete->number) != 0) {
+        new_deleted.push_back(todelete);
+      } else {
+        // printf("deleting %lu \n", todelete->number);
+        s = znssstable_->DeleteLNTable(i, *todelete);
+        if (!s.ok()) {
+          printf("Error deleting ln table \n");
+          return s;
+        }
       }
     }
-    current_->ss_d_[i].clear();
+    current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);
   return s;
@@ -383,6 +420,11 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   c->edit_.SetCompactPointer(level, largest);
 }
 
+bool ZnsVersionSet::OnlyNeedDeletes() {
+  uint8_t level = current_->compaction_level_;
+  return current_->ss_[level].size() < 3;
+}
+
 ZnsCompaction* ZnsVersionSet::PickCompaction() {
   ZnsCompaction* c;
   uint8_t level;
@@ -408,8 +450,14 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   }
   if (c->targets_[0].empty()) {
     // Wrap-around to the beginning of the key space
-    c->targets_[0].push_back(current_->ss_[level][0]);
-    max_lba_c -= current_->ss_[level][0]->lba_count;
+    if (current_->ss_[level].size() > 0) {
+      c->targets_[0].push_back(current_->ss_[level][0]);
+      max_lba_c -= current_->ss_[level][0]->lba_count;
+    } else {
+      // This should not happen
+      printf("Compacting from empty level?\n");
+      return c;
+    }
   }
   c->version_ = current_;
   c->version_->Ref();
@@ -439,7 +487,6 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   }
 
   SetupOtherInputs(c, max_lba_c);
-
   return c;
 }
 

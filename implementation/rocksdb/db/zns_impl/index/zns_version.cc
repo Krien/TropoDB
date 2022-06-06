@@ -20,7 +20,8 @@ ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
       next_(this),
       prev_(this),
       compaction_score_(-1),
-      compaction_level_(ZnsConfig::level_count + 1) {}
+      compaction_level_(ZnsConfig::level_count + 1),
+      debug_nr_(0) {}
 
 ZnsVersion::~ZnsVersion() {
   assert(refs_ == 0);
@@ -38,6 +39,7 @@ ZnsVersion::~ZnsVersion() {
       }
     }
   }
+  // printf("Removed version %lu\n", debug_nr_);
 }
 
 void ZnsVersion::Clear() {}

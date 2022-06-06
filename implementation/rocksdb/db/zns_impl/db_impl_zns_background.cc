@@ -95,9 +95,25 @@ void DBImplZNS::BackgroundCompaction() {
   }
   // Compaction itself does not require a lock. only once the changes become
   // visible.
+  if (versions_->current()->CompactionLevel() >= ZnsConfig::level_count) {
+    mutex_.Unlock();
+    return;
+  }
   mutex_.Unlock();
   ZnsVersionEdit edit;
-  {
+  // This happens when a lot of readers interfere
+  if (versions_->OnlyNeedDeletes()) {
+    // TODO: we should probably wait a while instead of spamming reset requests.
+    // Then probably all clients are done with their reads on old versions.
+    mutex_.Lock();
+    s = RemoveObsoleteZones();
+    versions_->RecalculateScore();
+    if (!s.ok()) {
+      printf("ERROR during reclaiming!!!\n");
+    }
+    // printf("Only reclaimed\n");
+    return;
+  } else {
     // printf("  Compact LN...\n");
     ZnsCompaction* c = versions_->PickCompaction();
     // printf("Picked compact\n");
@@ -112,6 +128,9 @@ void DBImplZNS::BackgroundCompaction() {
       s = c->DoCompaction(&edit);
       // printf("\t\tnormal compaction\n");
     }
+    // Note if this delete is not reached, a stale version will remain in memory
+    // for the rest of this session.
+    delete c;
   }
   mutex_.Lock();
   if (!s.ok()) {

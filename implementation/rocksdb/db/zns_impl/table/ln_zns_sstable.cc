@@ -107,6 +107,7 @@ void LNZnsSSTable::release_read_queue(uint8_t reader) {
 
 Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
+  // printf("Reading %lu \n", meta.number);
   if (meta.LN.lba_regions > 8) {
     return Status::Corruption("Invalid metadata");
   }

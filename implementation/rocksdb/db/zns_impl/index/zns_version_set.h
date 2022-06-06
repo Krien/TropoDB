@@ -40,8 +40,9 @@ class ZnsVersionSet {
   void RecalculateScore();
   Status RemoveObsoleteZones(ZnsVersionEdit* edit);
 
-  void GetLiveZoneRange(const uint8_t level,
-                        std::pair<uint64_t, uint64_t>* range);
+  void GetLiveZones(const uint8_t level, std::set<uint64_t>& live);
+  void GetSaveDeleteRange(const uint8_t level,
+                          std::pair<uint64_t, uint64_t>* range);
   Status ReclaimStaleSSTables();
 
   inline ZnsVersion* current() const { return current_; }
@@ -83,6 +84,7 @@ class ZnsVersionSet {
                  const std::vector<SSZoneMetaData*>& inputs2,
                  InternalKey* smallest, InternalKey* largest);
   void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
+  bool OnlyNeedDeletes();
   ZnsCompaction* PickCompaction();
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.

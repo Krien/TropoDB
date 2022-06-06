@@ -87,17 +87,19 @@ Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
   return sstable_level_[level]->InvalidateSSZone(meta);
 }
 
-Status ZNSSSTableManager::SetValidRangeAndReclaim(uint64_t* live_tail,
-                                                  uint64_t* blocks) const {
+Status ZNSSSTableManager::SetValidRangeAndReclaim(
+    uint64_t* live_tail, uint64_t* blocks, uint64_t blocks_to_delete) const {
   // TODO: move to sstable
   SSZoneMetaData meta;
   uint64_t written_tail = sstable_level_[0]->GetTail();
 
   meta.L0.lba = *live_tail;
-  uint64_t nexthead = ((meta.L0.lba + *blocks) / zone_cap_) * zone_cap_;
+  uint64_t nexthead =
+      ((meta.L0.lba + blocks_to_delete) / zone_cap_) * zone_cap_;
   meta.lba_count = nexthead - meta.L0.lba;
 
-  // printf("test %lu %lu %lu \n", meta.L0.lba, meta.lba_count, written_tail);
+  // printf("test %lu %lu %lu %lu %lu\n", meta.L0.lba, meta.lba_count,
+  //        written_tail, *blocks, blocks_to_delete);
 
   Status s = Status::OK();
   if (meta.lba_count != 0) {

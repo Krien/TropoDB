@@ -92,7 +92,7 @@ uint8_t L0ZnsSSTable::request_read_queue() {
       }
     }
   }
-  // printf("Claimed reader %u \n", picked_reader);
+  // printf("Claimed readerL0 %u \n", picked_reader);
   read_queue_[picked_reader] = 1;
   mutex_.Unlock();
   return picked_reader;
@@ -101,7 +101,7 @@ uint8_t L0ZnsSSTable::request_read_queue() {
 void L0ZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
   assert(reader < number_of_concurrent_readers && read_queue_[reader] != 0);
-  // printf("Released reader %u \n", reader);
+  // printf("Released readerL0 %u \n", reader);
   read_queue_[reader] = 0;
   cv_.SignalAll();
   mutex_.Unlock();
@@ -125,7 +125,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   s = committer_.GetCommitReader(readernr, meta.L0.lba,
                                  meta.L0.lba + meta.lba_count, &reader);
 
-  // printf("reading L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
+  // printf("reading L0 %lu %lu from reader %u \n", meta.L0.lba, meta.lba_count,
+  //        readernr);
   if (!s.ok()) {
     release_read_queue(readernr);
     // mutex_.Unlock();

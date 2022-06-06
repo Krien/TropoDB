@@ -59,6 +59,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (!s.ok()) {
+    printf("Error getting iterator\n");
     return NewErrorIterator(s);
   }
 
@@ -78,7 +79,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
     if (it->Valid()) {
       ParsedInternalKey parsed_key;
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-        printf("corrupt key in cache\n");
+        printf("corrupt key in table cache\n");
       }
       if (parsed_key.type == kTypeDeletion) {
         *status = EntryStatus::deleted;

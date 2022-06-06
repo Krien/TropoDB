@@ -280,8 +280,8 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &number_second)) {
           deleted_range_ = std::make_pair(number, number_second);
           has_deleted_range_ = true;
-          printf("Retrieved deleted range %lu %lu \n", deleted_range_.first,
-                 deleted_range_.second);
+          // printf("Retrieved deleted range %lu %lu \n", deleted_range_.first,
+          //        deleted_range_.second);
         } else {
           msg = "deleted sstable range";
         }
