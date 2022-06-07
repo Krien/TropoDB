@@ -30,7 +30,8 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
 }
 
 ZNSWAL::~ZNSWAL() {
-  Close();
+  Sync();
+  // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
   channel_factory_->Unref();
   delete[] buf_;
 }
@@ -40,7 +41,10 @@ Status ZNSWAL::DirectAppend(const Slice& data) {
   std::memcpy(buf + sizeof(uint32_t), data.data(), data.size());
   EncodeFixed32(buf, data.size() + sizeof(uint32_t));
   EncodeFixed32(buf + data.size() + sizeof(uint32_t), 0);
-  return committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint32_t)));
+  Status s =
+      committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint32_t)));
+  // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
+  return s;
 }
 
 // See LevelDB env_posix. This is similar, but slightly different as we store
@@ -102,6 +106,7 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   Slice record;
   // Iterate over all batches and apply them to the memtable
   ZnsCommitReader reader;
+  // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
   committer_.GetCommitReader(0, log_.GetWriteTail(), log_.GetWriteHead(),
                              &reader);
   while (committer_.SeekCommitReader(reader, &record)) {

@@ -189,6 +189,7 @@ DBImplZNS::~DBImplZNS() {
   if (mem_ != nullptr) mem_->Unref();
   if (imm_ != nullptr) imm_->Unref();
   if (tmp_batch_ != nullptr) delete tmp_batch_;
+  if (wal_ != nullptr) wal_->Unref();
   if (wal_man_ != nullptr) wal_man_->Unref();
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
@@ -460,6 +461,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
     } else {
       // create new WAL
       wal_->Sync();
+      wal_->Close();
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
       wal_->Ref();
@@ -554,9 +556,9 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       // buffering does not really make sense at the moment.
       // later we might decide to implement "FSync" or "ZoneSync", then it
       // should be reinstagated.
-      printf("writing %lu/%lu  %lu\n", mem_->GetInternalSize(),
-             max_write_buffer_size_,
-             WriteBatchInternal::Contents(write_batch).size());
+      // printf("writing %lu/%lu  %lu\n", mem_->GetInternalSize(),
+      //        max_write_buffer_size_,
+      //        WriteBatchInternal::Contents(write_batch).size());
       if (true) {
         s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch));
       } else {

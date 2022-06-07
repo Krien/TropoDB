@@ -48,7 +48,7 @@ template <std::size_t N>
 ZnsWALManager<N>::~ZnsWALManager() {
   for (auto i = wals_.begin(); i != wals_.end(); ++i) {
     if ((*i) != nullptr) {
-      (*i)->Close();
+      (*i)->Sync();
       (*i)->Unref();
     }
   }

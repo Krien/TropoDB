@@ -18,7 +18,7 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
   // printf("Write bufsize %lu \n", write_buffer_size_);
   options_.write_buffer_size = write_buffer_size_;
   MutableCFOptions cfopts = MutableCFOptions(options_);
-  printf("SIZE OF MEM %lu \n", cfopts.write_buffer_size);
+  // printf("SIZE OF MEM %lu \n", cfopts.write_buffer_size);
   mem_ = new ColumnFamilyMemTablesDefault(
       new MemTable(ikc, ioptions_, cfopts, &wb_, kMaxSequenceNumber,
                    0 /* column_family_id */));
