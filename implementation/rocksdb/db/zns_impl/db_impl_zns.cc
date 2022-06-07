@@ -641,6 +641,32 @@ Status DBImplZNS::Get(const ReadOptions& options,
   return s;
 }
 
+Iterator* DBImplZNS::NewIterator(const ReadOptions& options,
+                                 ColumnFamilyHandle* column_family) {
+  return NULL;
+  // mutex_.Lock();
+  // SequenceNumber latest_snapshot = versions_->LastSequence();
+  // std::vector<Iterator*> list;
+  // // Memtables
+  // list.push_back(mem_->NewIterator());
+  // mem_->Ref();
+  // if (imm_ != nullptr) {
+  //   list.push_back(imm_->NewIterator());
+  //   imm_->Ref();
+  // }
+  // // Version
+  // versions_->current()->AddIterators(options, &list);
+  // versions_->current()->Ref();
+  // // Join iter
+  // Iterator* internal_iter =
+  //     NewMergingIterator(&internal_comparator_, &list[0], list.size());
+  // mutex_.Unlock();
+  // // Go to db iter
+  // return NewDBIterator(this, user_comparator(), internal_iter,
+  // latest_snapsshot,
+  //                      0);
+}
+
 int DBImplZNS::NumberLevels(ColumnFamilyHandle* column_family) {
   return ZnsConfig::level_count;
 }

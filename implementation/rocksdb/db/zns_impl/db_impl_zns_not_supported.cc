@@ -75,10 +75,6 @@ Status DBImplZNS::Get(const ReadOptions& options,
   return Status::NotSupported("Column families not supported");
 }
 
-Iterator* DBImplZNS::NewIterator(const ReadOptions& options,
-                                 ColumnFamilyHandle* column_family) {
-  return NULL;
-}
 Status DBImplZNS::NewIterators(
     const ReadOptions& options,
     const std::vector<ColumnFamilyHandle*>& column_families,

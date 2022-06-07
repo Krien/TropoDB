@@ -52,6 +52,9 @@ class ZnsVersion : public RefCounter {
   void GetOverlappingInputs(uint8_t level, const InternalKey* begin,
                             const InternalKey* end,
                             std::vector<SSZoneMetaData*>* inputs);
+  static Iterator* GetLNIterator(void* arg, const Slice& file_value,
+                                 const Comparator* cmp);
+  void AddIterators(const ReadOptions& options, std::vector<Iterator*>* iters);
   inline uint8_t CompactionLevel() const { return compaction_level_; }
 
  private:

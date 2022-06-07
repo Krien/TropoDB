@@ -118,6 +118,45 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   return Status::NotFound("No matching table");
 }
 
+Iterator* ZnsVersion::GetLNIterator(void* arg, const Slice& file_value,
+                                    const Comparator* cmp) {
+  ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
+  SSZoneMetaData meta;
+  meta.LN.lba_regions = DecodeFixed8(file_value.data());
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
+    meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
+  }
+  uint64_t lba_count =
+      DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
+  uint8_t level =
+      DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
+  meta.lba_count = lba_count;
+  Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
+  return iterator;
+}
+
+void ZnsVersion::AddIterators(const ReadOptions& options,
+                              std::vector<Iterator*>* iters) {
+  // Merge all level zero files together since they may overlap
+  for (size_t i = 0; i < ss_[0].size(); i++) {
+    iters->push_back(vset_->znssstable_->NewIterator(
+        0, *ss_[0][i], vset_->icmp_.user_comparator()));
+  }
+
+  // For levels > 0, we can use a concatenating iterator that sequentially
+  // walks through the non-overlapping files in the level, opening them
+  // lazily.
+  for (int level = 1; level < ZnsConfig::level_count; level++) {
+    if (!ss_[level].empty()) {
+      iters->push_back(new LNIterator(
+          new LNZoneIterator(vset_->icmp_.user_comparator(), &ss_[level],
+                             level),
+          &GetLNIterator, vset_->znssstable_, vset_->icmp_.user_comparator()));
+    }
+  }
+}
+
 void ZnsVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
                                       const InternalKey* end,
                                       std::vector<SSZoneMetaData*>* inputs) {

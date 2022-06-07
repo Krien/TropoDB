@@ -64,6 +64,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   }
 
   Iterator* it = reinterpret_cast<Iterator*>(cache_->Value(handle));
+
   return it;
 }
 
