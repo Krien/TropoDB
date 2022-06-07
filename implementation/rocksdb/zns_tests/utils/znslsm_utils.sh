@@ -28,9 +28,15 @@ setup() {
 	if [[ -f $SPDK_DIR/scripts/setup.sh ]]; then
 		# /dev/nvme4n1
 		dev=$1
+		# Prevents reading corrupt data
+		reset_zones="nvme zns reset-zone /dev/$dev -a"
+    	$reset_zones
+		# Make sure SPDK does not already bind
 		reset="$SPDK_DIR/scripts/setup.sh reset"
 		$reset
-		export PCI_ALLOWED=$1
+		# ZNSLSM uses trids,
+		trid=`ls -l /sys/block/$dev/device/device | awk '{split($11,dev,"/"); print dev[4]}'`
+		export PCI_ALLOWED=$trid
 		$SPDK_DIR/scripts/setup.sh
 	else
 		echo ""
