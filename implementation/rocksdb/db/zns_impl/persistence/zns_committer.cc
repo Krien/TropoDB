@@ -101,9 +101,23 @@ Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
 Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();
+#ifdef DIRECT_COMMIT
+  size_t walker = 0;
+#endif
   size_t left = data.size();
 
-  if (!(s = FromStatus(write_buffer_.ReallocBuffer(lba_size_))).ok()) {
+  size_t fragcount = data.size() / lba_size_ + 1;
+  size_t size_needed = fragcount * kZnsHeaderSize + data.size();
+  size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
+
+  if (!(s = FromStatus(write_buffer_.ReallocBuffer(
+#ifdef DIRECT_COMMIT
+            size_needed
+#else
+            lba_size_
+#endif
+            )))
+           .ok()) {
     return s;
   }
   char* fragment;
@@ -136,18 +150,29 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     } else {
       type = ZnsRecordType::kMiddleType;
     }
-    memset(fragment, 0, lba_size_);  // Ensure no stale bits.
-    memcpy(fragment + kZnsHeaderSize, ptr, fragment_length);  // new body.
+    size_t frag_begin_addr = 0;
+#ifdef DIRECT_COMMIT
+    frag_begin_addr = walker;
+#endif
+
+    memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
+    memcpy(fragment + frag_begin_addr + kZnsHeaderSize, ptr,
+           fragment_length);  // new body.
     // Build header
-    fragment[4] = static_cast<char>(fragment_length & 0xffu);
-    fragment[5] = static_cast<char>((fragment_length >> 8) & 0xffu);
-    fragment[6] = static_cast<char>((fragment_length >> 16) & 0xffu);
-    fragment[7] = static_cast<char>(type);
+    fragment[frag_begin_addr + 4] = static_cast<char>(fragment_length & 0xffu);
+    fragment[frag_begin_addr + 5] =
+        static_cast<char>((fragment_length >> 8) & 0xffu);
+    fragment[frag_begin_addr + 6] =
+        static_cast<char>((fragment_length >> 16) & 0xffu);
+    fragment[frag_begin_addr + 7] = static_cast<char>(type);
     // CRC
     uint32_t crc = crc32c::Extend(type_crc_[static_cast<uint32_t>(type)], ptr,
                                   fragment_length);
     crc = crc32c::Mask(crc);
-    EncodeFixed32(fragment, crc);
+    EncodeFixed32(fragment + frag_begin_addr, crc);
+#ifdef DIRECT_COMMIT
+    walker += fragment_length + kZnsHeaderSize;
+#else
     // Actual commit
     s = FromStatus(log_->Append(
         write_buffer_, 0, fragment_length + kZnsHeaderSize, &lbas_iter, false));
@@ -158,10 +183,20 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
       printf("Fatal append error\n");
       return s;
     }
+#endif
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
+#ifdef DIRECT_COMMIT
+  // printf("SIZE %lu \n", data.size());
+  s = FromStatus(
+      log_->Append(write_buffer_, 0, size_needed, &lbas_iter, false));
+  if (lbas != nullptr) {
+    *lbas += lbas_iter;
+  }
+#endif
+
   if (!keep_buffer_) {
     s = FromStatus(write_buffer_.FreeBuffer());
   }

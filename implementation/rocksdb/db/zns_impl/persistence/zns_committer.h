@@ -3,6 +3,8 @@
 #ifndef ZNS_COMMITER_H
 #define ZNS_COMMITER_H
 
+#define DIRECT_COMMIT
+
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "rocksdb/slice.h"
