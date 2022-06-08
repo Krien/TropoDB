@@ -437,34 +437,59 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
+  max_lba_c = max_lba_c > 8000 ? 8000 : max_lba_c;
 
-  // Pick the first file that comes after compact_pointer_[level]
-  for (size_t i = 0; i < current_->ss_[level].size(); i++) {
-    SSZoneMetaData* m = current_->ss_[level][i];
-    if (compact_pointer_[level].empty() ||
-        icmp_.Compare(m->largest.Encode(), compact_pointer_[level]) > 0) {
-      c->targets_[0].push_back(m);
-      max_lba_c -= m->lba_count;
-      break;
+  // Always pick the tail on L0
+  if (level == 0) {
+    uint64_t number = 0;
+    uint64_t index = 0;
+    bool number_picked = false;
+    for (size_t i = 0; i < current_->ss_[level].size(); i++) {
+      SSZoneMetaData* m = current_->ss_[level][i];
+      if (m->number < number || !number_picked) {
+        number = m->number;
+        index = i;
+        number_picked = true;
+      }
     }
-  }
-  if (c->targets_[0].empty()) {
-    // Wrap-around to the beginning of the key space
-    if (current_->ss_[level].size() > 0) {
-      c->targets_[0].push_back(current_->ss_[level][0]);
-      max_lba_c -= current_->ss_[level][0]->lba_count;
-    } else {
-      // This should not happen
+    if (!number_picked) {
       printf("Compacting from empty level?\n");
       return c;
+    } else {
+      c->targets_[0].push_back(current_->ss_[level][index]);
+    }
+    // Go to compaction pointer on LN
+  } else {
+    for (size_t i = 0; i < current_->ss_[level].size(); i++) {
+      SSZoneMetaData* m = current_->ss_[level][i];
+      if (compact_pointer_[level].empty() ||
+          icmp_.Compare(m->largest.Encode(), compact_pointer_[level]) > 0) {
+        c->targets_[0].push_back(m);
+        max_lba_c -= m->lba_count;
+        break;
+      }
+    }
+    if (c->targets_[0].empty()) {
+      // Wrap-around to the beginning of the key space
+      if (current_->ss_[level].size() > 0) {
+        c->targets_[0].push_back(current_->ss_[level][0]);
+        max_lba_c -= current_->ss_[level][0]->lba_count;
+      } else {
+        // This should not happen
+        printf("Compacting from empty level?\n");
+        return c;
+      }
     }
   }
+
   c->version_ = current_;
   c->version_->Ref();
 
   // Files in level 0 may overlap each other, so pick up all overlapping ones
   // (if it fits in the next level...)
-  if (level == 0) {
+  // TEMP V disable, should be level==0, but this messes with deletes of the
+  // circular log
+  if (false) {
     InternalKey smallest, largest;
     GetRange(c->targets_[0], &smallest, &largest);
     // Note that the next call will discard the file we placed in
@@ -474,6 +499,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
     current_->GetOverlappingInputs(0, &smallest, &largest, &overlapping);
     c->targets_[0].clear();
     max_lba_c = znssstable_->SpaceRemaining(level + 1);
+    max_lba_c = max_lba_c > 8000 ? 8000 : max_lba_c;
     for (auto target : overlapping) {
       if (target->lba_count > max_lba_c) {
         break;
