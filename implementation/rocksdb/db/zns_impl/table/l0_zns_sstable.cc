@@ -17,7 +17,11 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
            number_of_concurrent_readers),
+#ifdef USE_COMMITTER
       committer_(&log_, info, true),
+#endif
+      zasl_(info.zasl),
+      lba_size_(info.lba_size),
       cv_(&mutex_) {
   // unset
   for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
@@ -34,7 +38,11 @@ SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
 }
 
 bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
+#ifdef USE_COMMITTER
   return committer_.SpaceEnough(slice);
+#else
+  return log_.SpaceLeft(slice.size(), false);
+#endif
 }
 
 uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
@@ -45,10 +53,22 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
     printf("Out of space L0\n");
     return Status::IOError("Not enough space available for L0");
   }
+#ifdef USE_COMMITTER
   meta->L0.lba = log_.GetWriteHead();
   Status s = committer_.SafeCommit(content, &meta->lba_count);
-  // printf("Writing L0 %lu %lu \n", meta->L0.lba, meta->lba_count);
   return s;
+#else
+  meta->L0.lba = log_.GetWriteHead();
+  meta->lba_count = 0;
+  uint64_t lbaiter = 0;
+  Status s =
+      FromStatus(log_.Append(content.data(), content.size(), &lbaiter, false));
+  if (!s.ok()) {
+    return s;
+  }
+  meta->lba_count += lbaiter;
+  return s;
+#endif
 }
 
 Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
@@ -113,15 +133,15 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       meta.lba_count > max_zone_head_ - min_zone_head_) {
     return Status::Corruption("Invalid metadata");
   }
-
   sstable->clear();
+  // printf("Reading L0 from %lu \n", meta.L0.lba);
+  // mutex_.Lock();
+  uint8_t readernr = request_read_queue();
+#ifdef USE_COMMITTER
+  ZnsCommitReader reader;
   Slice record;
   std::string* raw_data = new std::string();
   bool succeeded_once = false;
-
-  ZnsCommitReader reader;
-  // mutex_.Lock();
-  uint8_t readernr = request_read_queue();
   s = committer_.GetCommitReader(readernr, meta.L0.lba,
                                  meta.L0.lba + meta.lba_count, &reader);
 
@@ -148,9 +168,16 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   if (!succeeded_once) {
     return Status::Corruption();
   }
-
   *sstable = Slice(raw_data->data(), raw_data->size());
   return Status::OK();
+#else
+  char* data = new char[meta.lba_count * lba_size_];
+  s = FromStatus(
+      log_.Read(meta.L0.lba, data, meta.lba_count * lba_size_, true, readernr));
+  release_read_queue(readernr);
+  *sstable = Slice(data, meta.lba_count * lba_size_);
+  return Status::OK();
+#endif
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
@@ -171,6 +198,7 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    // printf("Reading L0 %u %u \n", size, count);
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

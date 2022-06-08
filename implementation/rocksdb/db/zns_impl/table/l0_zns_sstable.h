@@ -3,6 +3,8 @@
 #ifndef L0_ZNS_SSTABLE_H
 #define L0_ZNS_SSTABLE_H
 
+//#define USE_COMMITTER
+
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/table/zns_sstable.h"
@@ -58,7 +60,11 @@ class L0ZnsSSTable : public ZnsSSTable {
   void release_read_queue(uint8_t reader);
 
   SZD::SZDCircularLog log_;
+#ifdef USE_COMMITTER
   ZnsCommitter committer_;
+#endif
+  uint64_t zasl_;
+  uint64_t lba_size_;
   // light queue inevitable as we can have ONE reader accesssed by ONE thread
   // concurrently.
   port::Mutex mutex_;
