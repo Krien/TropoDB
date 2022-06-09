@@ -628,6 +628,7 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   mem->Unref();
   if (imm != nullptr) imm->Unref();
   current->Unref();
+  // printf("Gotten \n");
 
   return s;
 }

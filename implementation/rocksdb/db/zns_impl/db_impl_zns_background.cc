@@ -141,8 +141,11 @@ void DBImplZNS::BackgroundCompaction() {
   compactions_[versions_->current()->CompactionLevel()]++;
   // Apply
   s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
+  // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
+  // printf("Applied change \n");
   s = s.ok() ? RemoveObsoleteZones() : s;
+  // printf("Removed obsolete zones \n");
   versions_->RecalculateScore();
   if (!s.ok()) {
     printf("ERROR during compaction!!!\n");

@@ -16,15 +16,22 @@ LNZoneIterator::~LNZoneIterator() = default;
 
 Slice LNZoneIterator::value() const {
   assert(Valid());
+  // printf("Encoding %u %lu %lu %u ", (*slist_)[index_]->LN.lba_regions,
+  //        (*slist_)[index_]->number, (*slist_)[index_]->lba_count, level_);
   EncodeFixed8(value_buf_, (*slist_)[index_]->LN.lba_regions);
   for (size_t i = 0; i < (*slist_)[index_]->LN.lba_regions; i++) {
     EncodeFixed64(value_buf_ + 1 + i * 16, (*slist_)[index_]->LN.lbas[i]);
     EncodeFixed64(value_buf_ + 9 + i * 16,
                   (*slist_)[index_]->LN.lba_region_sizes[i]);
+    // printf(" - %lu %lu ", (*slist_)[index_]->LN.lbas[i],
+    //        (*slist_)[index_]->LN.lba_region_sizes[i]);
   }
+  // printf("\n");
   EncodeFixed64(value_buf_ + 1 + 16 * (*slist_)[index_]->LN.lba_regions,
                 (*slist_)[index_]->lba_count);
   EncodeFixed8(value_buf_ + 9 + 16 * (*slist_)[index_]->LN.lba_regions, level_);
+  EncodeFixed64(value_buf_ + 10 + 16 * (*slist_)[index_]->LN.lba_regions,
+                (*slist_)[index_]->number);
   return Slice(value_buf_, sizeof(value_buf_));
 }
 

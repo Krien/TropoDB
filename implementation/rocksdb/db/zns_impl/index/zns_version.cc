@@ -99,6 +99,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
     if (ucmp->Compare(key, m.smallest.user_key()) >= 0 &&
         ucmp->Compare(key, m.largest.user_key()) <= 0) {
       // in_range = level;
+      // printf("Get from LN %u %lu \n", level, m.number);
       s = vset_->table_cache_->Get(options, m, level, internal_key, value,
                                    &status);
       // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,

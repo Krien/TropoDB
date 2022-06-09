@@ -43,15 +43,23 @@ Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
   SSZoneMetaData meta;
   meta.LN.lba_regions = DecodeFixed8(file_value.data());
+  // printf("Decoding :");
   for (size_t i = 0; i < meta.LN.lba_regions; i++) {
     meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
     meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
+    // printf(" %lu %lu - ", meta.LN.lbas[i], meta.LN.lba_region_sizes[i]);
   }
   uint64_t lba_count =
       DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
   uint8_t level =
       DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
+  uint64_t number =
+      DecodeFixed64(file_value.data() + 10 + 16 * meta.LN.lba_regions);
   meta.lba_count = lba_count;
+  meta.number = number;
+  // printf("%u %lu %lu %u \n", meta.LN.lba_regions, meta.number,
+  // meta.lba_count,
+  //        level);
   Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
   return iterator;
 }
@@ -84,11 +92,12 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   SSZoneMetaData meta;
   s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, *old_meta,
                                       &meta);
+  meta.number = vset_->NewSSNumber();
   if (!s.ok()) {
     return s;
   }
-  meta.number = vset_->NewSSNumber();
   edit->AddSSDefinition(first_level_ + 1, meta);
+  // printf("Adding %lu \n", meta.number);
   // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
   //        first_level_ == 0 ? meta.L0.lba : meta.LN.lbas[0], meta.lba_count,
   //        s.getState(), s.ok() ? "OK trivial" : "NOK trivial");
@@ -140,7 +149,7 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
         number = (*base_iter)->number;
         lba = (*base_iter)->L0.lba;
       }
-      count += +(*base_iter)->lba_count;
+      count += (*base_iter)->lba_count;
     }
 
     // Setup deleted range when on L0
@@ -171,6 +180,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   s = current_builder->Flush();
   // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
   //        meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
+
   if (s.ok()) {
     edit->AddSSDefinition(first_level_ + 1, *meta);
   }

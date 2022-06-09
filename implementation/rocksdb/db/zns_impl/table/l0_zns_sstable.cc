@@ -59,14 +59,10 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   return s;
 #else
   meta->L0.lba = log_.GetWriteHead();
-  meta->lba_count = 0;
-  uint64_t lbaiter = 0;
-  Status s =
-      FromStatus(log_.Append(content.data(), content.size(), &lbaiter, false));
-  if (!s.ok()) {
-    return s;
-  }
-  meta->lba_count += lbaiter;
+  Status s = FromStatus(
+      log_.Append(content.data(), content.size(), &meta->lba_count, false));
+  // printf("Added L0 %lu %lu %lu \n", meta->L0.lba, meta->lba_count,
+  //        content.size());
   return s;
 #endif
 }
@@ -131,6 +127,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (meta.L0.lba > max_zone_head_ || meta.L0.lba < min_zone_head_ ||
       meta.lba_count > max_zone_head_ - min_zone_head_) {
+    printf("Invalid metadata?\n");
     return Status::Corruption("Invalid metadata");
   }
   sstable->clear();
@@ -176,6 +173,10 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
       log_.Read(meta.L0.lba, data, meta.lba_count * lba_size_, true, readernr));
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
+  if (!s.ok()) {
+    printf("Error reading L0 table at location %lu %lu\n", meta.L0.lba,
+           meta.lba_count);
+  }
   return Status::OK();
 #endif
 }
@@ -190,15 +191,17 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
                                     const Comparator* cmp) {
   Status s;
   Slice sstable;
+  // printf("Reading L0, meta: %lu %lu \n", meta.L0.lba, meta.lba_count);
   s = ReadSSTable(&sstable, meta);
   if (!s.ok()) {
+    printf("Error reading L0\n");
     return nullptr;
   }
   char* data = (char*)sstable.data();
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
-    // printf("Reading L0 %u %u \n", size, count);
+    // printf("Reading header %u %u \n", size, count);
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

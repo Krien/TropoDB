@@ -134,7 +134,6 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
       if (live_zones.count(todelete->number) != 0) {
         new_deleted.push_back(todelete);
       } else {
-        // printf("deleting %lu \n", todelete->number);
         s = znssstable_->DeleteLNTable(i, *todelete);
         if (!s.ok()) {
           printf("Error deleting ln table \n");
@@ -437,7 +436,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
-  max_lba_c = max_lba_c > 8000 ? 8000 : max_lba_c;
+  max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
 
   // Always pick the tail on L0
   if (level == 0) {
@@ -499,7 +498,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
     current_->GetOverlappingInputs(0, &smallest, &largest, &overlapping);
     c->targets_[0].clear();
     max_lba_c = znssstable_->SpaceRemaining(level + 1);
-    max_lba_c = max_lba_c > 8000 ? 8000 : max_lba_c;
+    max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
     for (auto target : overlapping) {
       if (target->lba_count > max_lba_c) {
         break;

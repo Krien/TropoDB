@@ -66,7 +66,7 @@ Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
   Status s;
   Slice original;
   s = ReadSSTable(level1, &original, meta);
-  if (!s.ok()) {
+  if (!s.ok() || original.size() == 0) {
     return s;
   }
   *new_meta = SSZoneMetaData(meta);
@@ -98,11 +98,10 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(
       ((meta.L0.lba + blocks_to_delete) / zone_cap_) * zone_cap_;
   meta.lba_count = nexthead - meta.L0.lba;
 
-  // printf("test %lu %lu %lu %lu %lu\n", meta.L0.lba, meta.lba_count,
-  //        written_tail, *blocks, blocks_to_delete);
-
   Status s = Status::OK();
   if (meta.lba_count != 0) {
+    // printf("test %lu %lu %lu %lu %lu\n", meta.L0.lba, meta.lba_count,
+    //        written_tail, *blocks, blocks_to_delete);
     s = sstable_level_[0]->InvalidateSSZone(meta);
   }
   if (s.ok()) {
