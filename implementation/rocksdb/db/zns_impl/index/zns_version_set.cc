@@ -103,33 +103,43 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   ZnsVersionEdit edit;
 
   // Reclaim L0
-  std::pair<uint64_t, uint64_t> safe_delete_range;
-  GetSaveDeleteRange(0, &safe_delete_range);
-  uint64_t new_deleted_range_lba = current_->ss_deleted_range_.first;
-  uint64_t new_deleted_range_count = current_->ss_deleted_range_.second;
-
-  if (safe_delete_range.second != 0) {
-    s = znssstable_->SetValidRangeAndReclaim(&new_deleted_range_lba,
-                                             &new_deleted_range_count,
-                                             safe_delete_range.second);
-    // printf("Move deleted range from %lu %lu to %lu %lu \n",
-    //        current_->ss_deleted_range_.first,
-    //        current_->ss_deleted_range_.second, new_deleted_range_lba,
-    //        new_deleted_range_count);
+  {
+    // Get all of the files that can be deleted as no reader uses it.
+    std::set<uint64_t> live_zones;
+    std::vector<SSZoneMetaData*> tmp;
+    GetLiveZones(0, live_zones);
+    for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
+      SSZoneMetaData* todelete = current_->ss_d_[0][j];
+      if (live_zones.count(todelete->number) == 0) {
+        // printf("Safe to delete %lu \n", todelete->number);
+        tmp.push_back(todelete);
+      }
+    }
+    // Sort on circular log order
+    if (!tmp.empty()) {
+      // in_range = 0;
+      std::sort(tmp.begin(), tmp.end(),
+                [](SSZoneMetaData* a, SSZoneMetaData* b) {
+                  return a->number < b->number;
+                });
+    } else {
+    }
+    std::vector<SSZoneMetaData*> new_deleted_ss_l0;
+    s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
+    current_->ss_d_[0].clear();
+    current_->ss_d_[0] = new_deleted_ss_l0;
     if (!s.ok()) {
+      printf("error reclaiming L0\n");
       return s;
     }
   }
-  edit.AddDeletedRange(
-      std::make_pair(new_deleted_range_lba, new_deleted_range_count));
 
-  // TODO: LN
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
     std::set<uint64_t> live_zones;
     std::vector<SSZoneMetaData*> new_deleted;
     GetLiveZones(i, live_zones);
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
-      // printf("  deleting ln \n");
+      // printf("  deleting ln %lu \n", current_->ss_d_[i][j]->number);
       SSZoneMetaData* todelete = current_->ss_d_[i][j];
       if (live_zones.count(todelete->number) != 0) {
         new_deleted.push_back(todelete);
@@ -144,6 +154,7 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);
+  // printf("DONE reclaiming \n");
   return s;
 }
 
@@ -165,14 +176,17 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   }
   // Deleted range
   edit.AddDeletedRange(version->ss_deleted_range_);
+  // Deleted zones
+  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+    for (auto del : version->ss_d_[level]) {
+      edit.AddDeletedSSTable(level, *del);
+    }
+  }
   // Fragmented logs
   for (uint8_t level = 1; level < ZnsConfig::level_count; level++) {
     std::string data = znssstable_->GetFragmentedLogData(level);
     Slice sdata = Slice(data.data(), data.size());
     edit.AddFragmentedData(level, sdata);
-    for (auto del : version->ss_d_[level]) {
-      edit.AddDeletedSSTable(level, *del);
-    }
   }
   edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);
@@ -219,8 +233,8 @@ void ZnsVersionSet::RecalculateScore() {
       score *= 2;
     }
     if (score > best_score) {
-      // We have to be carefull... What if the next level is already (close to)
-      // full.
+      // We have to be carefull... What if the next level is already (close
+      // to) full.
       if (znssstable_->GetFractionFilled(i + 1) > 0.9) {
         continue;
       }
@@ -363,7 +377,8 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 // }
 
 // static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
-//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size)
+//   *
 //                lba_size);
 // }
 
@@ -387,8 +402,8 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   // if (!c->targets_[1].empty()) {
   //   std::vector<SSZoneMetaData*> expanded0;
   //   current_->GetOverlappingInputs(level, &all_start, &all_limit,
-  //   &expanded0); AddBoundaryInputs(icmp_, current_->ss_[level], &expanded0);
-  //   const int64_t inputs0_size = TotalLbas(c->targets_[0]);
+  //   &expanded0); AddBoundaryInputs(icmp_, current_->ss_[level],
+  //   &expanded0); const int64_t inputs0_size = TotalLbas(c->targets_[0]);
   //   const int64_t inputs1_size = TotalLbas(c->targets_[1]);
   //   const int64_t expanded0_size = TotalLbas(expanded0);
   //   if (expanded0.size() > c->targets_[0].size() &&
@@ -421,7 +436,8 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
 
 bool ZnsVersionSet::OnlyNeedDeletes() {
   uint8_t level = current_->compaction_level_;
-  return current_->ss_[level].size() < 3;
+  return level == 0 ? current_->ss_[level].size() == 0
+                    : current_->ss_[level].size() < 3;
 }
 
 ZnsCompaction* ZnsVersionSet::PickCompaction() {
@@ -432,13 +448,15 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   c = new ZnsCompaction(this, level);
 
   // printf("Compacting from <%d because score is %f, from %f>\n", level,
-  //        current_->compaction_score_, znssstable_->GetFractionFilled(level));
+  //        current_->compaction_score_,
+  //        znssstable_->GetFractionFilled(level));
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
   max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
 
   // Always pick the tail on L0
+  uint64_t L0index;
   if (level == 0) {
     uint64_t number = 0;
     uint64_t index = 0;
@@ -457,6 +475,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
     } else {
       c->targets_[0].push_back(current_->ss_[level][index]);
     }
+    L0index = number;
     // Go to compaction pointer on LN
   } else {
     for (size_t i = 0; i < current_->ss_[level].size(); i++) {
@@ -488,7 +507,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   // (if it fits in the next level...)
   // TEMP V disable, should be level==0, but this messes with deletes of the
   // circular log
-  if (false) {
+  if (level == 0) {
     InternalKey smallest, largest;
     GetRange(c->targets_[0], &smallest, &largest);
     // Note that the next call will discard the file we placed in
@@ -496,10 +515,13 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
     // which will include the picked file.
     std::vector<SSZoneMetaData*> overlapping;
     current_->GetOverlappingInputs(0, &smallest, &largest, &overlapping);
-    c->targets_[0].clear();
-    max_lba_c = znssstable_->SpaceRemaining(level + 1);
-    max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
+    // c->targets_[0].clear();
+    // max_lba_c = znssstable_->SpaceRemaining(level + 1);
+    // max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
     for (auto target : overlapping) {
+      if (target->number == L0index) {
+        continue;
+      }
       if (target->lba_count > max_lba_c) {
         break;
       }
@@ -512,6 +534,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction() {
   }
 
   SetupOtherInputs(c, max_lba_c);
+
   return c;
 }
 

@@ -34,6 +34,8 @@ class L0ZnsSSTable : public ZnsSSTable {
              EntryStatus* entry) override;
   Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta);
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
+  Status TryInvalidateSSZones(const std::vector<SSZoneMetaData*>& metas,
+                              std::vector<SSZoneMetaData*>& remaining_metas);
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
   Status Recover() override;
@@ -65,6 +67,7 @@ class L0ZnsSSTable : public ZnsSSTable {
 #endif
   uint64_t zasl_;
   uint64_t lba_size_;
+  uint64_t zone_size_;
   // light queue inevitable as we can have ONE reader accesssed by ONE thread
   // concurrently.
   port::Mutex mutex_;

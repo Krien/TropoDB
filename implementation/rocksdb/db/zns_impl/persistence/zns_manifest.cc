@@ -40,8 +40,10 @@ Status ZnsManifest::NewManifest(const Slice& record) {
            record.size() / lba_size_, log_.SpaceAvailable() / lba_size_);
     return Status::NoSpace();
   }
+  // printf("Space available %lu %lu\n", log_.SpaceAvailable(), record.size());
   manifest_start_new_ = log_.GetWriteHead();
   Status s = committer_.SafeCommit(record, &manifest_blocks_new_);
+  // printf("MANIFEST BLOCKS %lu \n", manifest_blocks_new_);
   return s;
 }
 
@@ -50,19 +52,25 @@ Status ZnsManifest::SetCurrent() {
   Status s;
   // Reclaim old space
   uint64_t delete_blocks_ = (deleted_range_blocks_ / zone_cap_) * zone_cap_;
+  // printf("DELETING IN MAN %lu %lu %lu \n", delete_blocks_,
+  //        deleted_range_blocks_, zone_cap_);
   if (delete_blocks_ != 0) {
-    // printf("tail %lu new tail %lu \n", tail, new_tail);
     s = FromStatus(log_.ConsumeTail(deleted_range_begin_,
                                     deleted_range_begin_ + delete_blocks_));
     if (!s.ok()) {
       printf("log eagain %lu %lu %lu\n", log_.GetWriteTail(),
              deleted_range_begin_, delete_blocks_);
     }
+
+    deleted_range_blocks_ -= delete_blocks_;
+    // printf("Space available after delete %lu %lu %lu\n",
+    // log_.SpaceAvailable(),
+    //        deleted_range_blocks_, delete_blocks_);
   }
 
   deleted_range_begin_ = log_.GetWriteTail();
-  deleted_range_blocks_ =
-      deleted_range_blocks_ - delete_blocks_ + manifest_blocks_;
+  // +1 because of previous current
+  deleted_range_blocks_ += manifest_blocks_ + 1;
 
   // then install on storage
   std::string current_name = current_preamble;

@@ -87,6 +87,17 @@ Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
   return sstable_level_[level]->InvalidateSSZone(meta);
 }
 
+Status ZNSSSTableManager::DeleteL0Table(
+    const std::vector<SSZoneMetaData*>& metas,
+    std::vector<SSZoneMetaData*>& remaining_metas) const {
+  // Error handling
+  if (metas.size() == 0) {
+    return Status::OK();
+  }
+  return dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])
+      ->TryInvalidateSSZones(metas, remaining_metas);
+}
+
 Status ZNSSSTableManager::SetValidRangeAndReclaim(
     uint64_t* live_tail, uint64_t* blocks, uint64_t blocks_to_delete) const {
   // TODO: move to sstable

@@ -51,13 +51,12 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
 void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
                                         const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
-  if (level != 0) {
-    deleted_ss_pers_.push_back(std::make_pair(level, meta));
-  }
+  deleted_ss_pers_.push_back(std::make_pair(level, meta));
 }
 
 // For debugging
 // #define VERSION_LEAK 1
+// #define VERSION_LEAK_SS 1
 
 void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 #ifdef VERSION_LEAK
@@ -97,7 +96,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
   printf("DEBUG LEAK compaction pointers %lu \n", debug_version_leak_);
 #endif
 
-  // deleted ranges
+  // deleted range
   if (has_deleted_range_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedRange));
     PutVarint64(dst, deleted_range_.first);   // range first
@@ -116,10 +115,14 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kDeletedSSTable));
     PutFixed8(dst, level);  // level
     PutVarint64(dst, m.number);
-    PutFixed8(dst, m.LN.lba_regions);
-    for (size_t j = 0; j < m.LN.lba_regions; j++) {
-      PutVarint64(dst, m.LN.lbas[j]);
-      PutVarint64(dst, m.LN.lba_region_sizes[j]);
+    if (level == 0) {
+      PutVarint64(dst, m.L0.lba);
+    } else {
+      PutFixed8(dst, m.LN.lba_regions);
+      for (size_t j = 0; j < m.LN.lba_regions; j++) {
+        PutVarint64(dst, m.LN.lbas[j]);
+        PutVarint64(dst, m.LN.lba_region_sizes[j]);
+      }
     }
     PutVarint64(dst, m.numbers);
     PutVarint64(dst, m.lba_count);
@@ -141,7 +144,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
       continue;
     }
 // printf("added %lu %lu \n", level, m.number);
-#ifdef VERSION_LEAK
+#ifdef VERSION_LEAK_SS
     debug_ss_leak_ = dst->size();
 #endif
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kNewSSTable));
@@ -160,7 +163,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.lba_count);
     PutLengthPrefixedSlice(dst, m.smallest.Encode());
     PutLengthPrefixedSlice(dst, m.largest.Encode());
-#ifdef VERSION_LEAK
+#ifdef VERSION_LEAK_SS
     debug_ss_leak_ = dst->size() - debug_ss_leak_;
     printf("DEBUG LEAK file  %lu \n", debug_ss_leak_);
 #endif

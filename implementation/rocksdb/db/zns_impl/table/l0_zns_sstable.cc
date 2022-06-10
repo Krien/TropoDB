@@ -22,6 +22,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
 #endif
       zasl_(info.zasl),
       lba_size_(info.lba_size),
+      zone_size_(info.zone_size),
       cv_(&mutex_) {
   // unset
   for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
@@ -179,6 +180,53 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   }
   return Status::OK();
 #endif
+}
+
+Status L0ZnsSSTable::TryInvalidateSSZones(
+    const std::vector<SSZoneMetaData*>& metas,
+    std::vector<SSZoneMetaData*>& remaining_metas) {
+  if (metas.size() == 0) {
+    return Status::Corruption();
+  }
+  remaining_metas.clear();
+  SSZoneMetaData* prev = metas[0];
+  // GUARANTEE, first deleted is less than write tail
+  uint64_t blocks = prev->L0.lba - (prev->L0.lba / zone_cap_) * zone_cap_;
+  blocks += prev->lba_count;
+
+  uint64_t upto = 0;
+  uint64_t blocks_to_delete = 0;
+  uint64_t i = 1;
+  for (; i < metas.size(); i++) {
+    SSZoneMetaData* m = metas[i];
+    // Get adjacents
+    if (prev->number == m->number) {
+      continue;
+    }
+    if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
+      break;
+    }
+    blocks += m->lba_count;
+    prev = m;
+    if (blocks > zone_cap_) {
+      blocks_to_delete += blocks;
+      upto = i + 1;
+      blocks = 0;
+    }
+  }
+  Status s = Status::OK();
+  blocks_to_delete = (blocks_to_delete / zone_cap_) * zone_cap_;
+  if (blocks_to_delete > 0) {
+    s = FromStatus(log_.ConsumeTail(log_.GetWriteTail(),
+                                    log_.GetWriteTail() + blocks_to_delete));
+  }
+  i = upto;
+  while (i < metas.size()) {
+    SSZoneMetaData* m = metas[i];
+    remaining_metas.push_back(m);
+    i++;
+  }
+  return s;
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {

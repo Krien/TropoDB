@@ -39,6 +39,8 @@ class ZNSSSTableManager : public RefCounter {
              EntryStatus* entry) const;
   Status InvalidateSSZone(const uint8_t level,
                           const SSZoneMetaData& meta) const;
+  Status DeleteL0Table(const std::vector<SSZoneMetaData*>& metas,
+                       std::vector<SSZoneMetaData*>& remaining_metas) const;
   Status SetValidRangeAndReclaim(uint64_t* live_tail, uint64_t* blocks,
                                  uint64_t blocks_to_delete) const;
   Status DeleteLNTable(const uint8_t level, const SSZoneMetaData& meta) const;
