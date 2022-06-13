@@ -20,8 +20,8 @@ constexpr static uint8_t level_count =
 constexpr static size_t manifest_zones =
     32; /**< Amount of zones to reserve for metadata*/
 constexpr static size_t zones_foreach_wal =
-    3;                                 /**< Amount of zones for each WAL*/
-constexpr static size_t wal_count = 5; /**< Maximum amount of concurrent WALS*/
+    4;                                 /**< Amount of zones for each WAL*/
+constexpr static size_t wal_count = 4; /**< Maximum amount of concurrent WALS*/
 constexpr static size_t ss_distribution[level_count] = {
     1, 2, 3, 5}; /**< each level i gets \f$\frac{Xi}{\sum_{i=0}^{N}
                   x}\f$  of the remaining zones*/

@@ -26,10 +26,17 @@ class ZNSWAL : public RefCounter {
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
 
-  Status DirectAppend(const Slice& data);
-  Status Append(const Slice& data);
-  Status Close();
+  Status DirectAppend(const Slice& data, uint64_t seq);
   Status Sync();
+  Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
+
+  // OBSOLETE, uses memory buffer, which we do not want
+  // Status ObsoleteDirectAppend(const Slice& data);
+  // Status ObsoleteAppend(const Slice& data);
+  // Status ObsoleteSync();
+  // Status ObsoleteReplay(ZNSMemTable* mem, SequenceNumber* seq);
+
+  Status Close();
 
   inline Status Reset() {
     pos_ = 0;
@@ -55,8 +62,6 @@ class ZNSWAL : public RefCounter {
   }
 
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
-
-  Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
 
  private:
   // buffer

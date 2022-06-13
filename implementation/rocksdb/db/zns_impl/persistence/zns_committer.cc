@@ -54,12 +54,20 @@ bool ZnsCommitter::SpaceEnough(const Slice& data) const {
 Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
   Status s = Status::OK();
   const char* ptr = in.data();
+  size_t walker = 0;
   size_t left = in.size();
 
+  size_t fragcount = in.size() / lba_size_ + 1;
+  size_t size_needed = fragcount * kZnsHeaderSize + in.size();
+  size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
+
+  char* fragment = new char[size_needed];
+
   bool begin = true;
-  uint64_t lbas_iter = 0;
   do {
-    const size_t avail = lba_size_;
+    // determine next fragment part.
+    size_t avail = lba_size_;
+    avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 
     ZnsRecordType type;
@@ -73,28 +81,29 @@ Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
     } else {
       type = ZnsRecordType::kMiddleType;
     }
+    size_t frag_begin_addr = walker;
+
+    memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
+    memcpy(fragment + frag_begin_addr + kZnsHeaderSize, ptr,
+           fragment_length);  // new body.
     // Build header
-    char header[kZnsHeaderSize];
-    header[4] = static_cast<char>(fragment_length & 0xffu);
-    header[5] = static_cast<char>((fragment_length >> 8) & 0xffu);
-    header[6] = static_cast<char>((fragment_length >> 16) & 0xffu);
-    header[7] = static_cast<char>(type);
+    fragment[frag_begin_addr + 4] = static_cast<char>(fragment_length & 0xffu);
+    fragment[frag_begin_addr + 5] =
+        static_cast<char>((fragment_length >> 8) & 0xffu);
+    fragment[frag_begin_addr + 6] =
+        static_cast<char>((fragment_length >> 16) & 0xffu);
+    fragment[frag_begin_addr + 7] = static_cast<char>(type);
     // CRC
     uint32_t crc = crc32c::Extend(type_crc_[static_cast<uint32_t>(type)], ptr,
                                   fragment_length);
     crc = crc32c::Mask(crc);
-    EncodeFixed32(header, crc);
-    // Actual commit
-    out->append(header, kZnsHeaderSize);
-    out->append(ptr, fragment_length);
-    if (fragment_length + kZnsHeaderSize < lba_size_) {
-      char zeros[lba_size_ - fragment_length - kZnsHeaderSize];
-      out->append(zeros, lba_size_ - fragment_length - kZnsHeaderSize);
-    }
+    EncodeFixed32(fragment + frag_begin_addr, crc);
+    walker += fragment_length + kZnsHeaderSize;
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
+  out->append(fragment, size_needed);
   return s;
 }
 
@@ -131,11 +140,8 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     *lbas = 0;
   }
   do {
-    uint64_t write_head = log_->GetWriteHead();
-    uint64_t zone_head = (write_head / zone_cap_) * zone_cap_;
     // determine next fragment part.
-    size_t avail = ((zone_head + zone_cap_) - write_head) * lba_size_;
-    avail = (avail > lba_size_ ? lba_size_ : avail);
+    size_t avail = lba_size_;
     avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 

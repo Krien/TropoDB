@@ -559,10 +559,12 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       // printf("writing %lu/%lu  %lu\n", mem_->GetInternalSize(),
       //        max_write_buffer_size_,
       //        WriteBatchInternal::Contents(write_batch).size());
-      if (true) {
-        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch));
+      if (!options.sync) {
+        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
+                               last_sequence + 1);
       } else {
-        s = wal_->Append(WriteBatchInternal::Contents(write_batch));
+        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
+                               last_sequence + 1);
         s = wal_->Sync();
       }
       // write to memtable
