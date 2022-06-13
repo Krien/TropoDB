@@ -30,7 +30,6 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
       write_buffer_(0, info.lba_size),
       keep_buffer_(keep_buffer) {
   InitTypeCrc(type_crc_);
-
   read_buffer_ = new SZD::SZDBuffer*[number_of_readers_];
   for (uint8_t i = 0; i < number_of_readers_; i++) {
     read_buffer_[i] = new SZD::SZDBuffer(0, lba_size_);
@@ -61,7 +60,7 @@ Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
   size_t size_needed = fragcount * kZnsHeaderSize + in.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
 
-  char* fragment = new char[size_needed];
+  char fragment[size_needed];
 
   bool begin = true;
   do {

@@ -21,21 +21,17 @@ namespace ROCKSDB_NAMESPACE {
 ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                const uint64_t max_zone_nr)
-    : buffsize_(512),
-      pos_(0),
-      channel_factory_(channel_factory),
+    : channel_factory_(channel_factory),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr, 4),
-      committer_(&log_, info, true) {
+      committer_(&log_, info, false) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
-  buf_ = new char[buffsize_ + 1];
 }
 
 ZNSWAL::~ZNSWAL() {
   Sync();
   // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
   channel_factory_->Unref();
-  delete[] buf_;
 }
 
 Status ZNSWAL::DirectAppend(const Slice& data, uint64_t seq) {

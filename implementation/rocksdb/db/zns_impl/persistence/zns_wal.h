@@ -38,15 +38,12 @@ class ZNSWAL : public RefCounter {
 
   Status Close();
 
-  inline Status Reset() {
-    pos_ = 0;
-    return FromStatus(log_.ResetAll());
-  }
+  inline Status Reset() { return FromStatus(log_.ResetAll()); }
   inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
-  inline bool Empty() { return log_.Empty() && pos_ == 0; }
+  inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline bool SpaceLeft(const Slice& data) {
-    return log_.SpaceLeft(data.size() + pos_);
+    return log_.SpaceLeft(data.size());
   }
   inline ZNSDiagnostics GetDiagnostics() const {
     struct ZNSDiagnostics diag = {
@@ -65,10 +62,10 @@ class ZNSWAL : public RefCounter {
 
  private:
   // buffer
-  const size_t buffsize_;
-  WriteBatch batch_;
-  char* buf_;
-  size_t pos_;
+  // const size_t buffsize_;
+  // WriteBatch batch_;
+  // char* buf_;
+  // size_t pos_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;
