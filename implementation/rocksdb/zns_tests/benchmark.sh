@@ -156,6 +156,70 @@ run_bench_quick_performance() {
     done
 }
 
+run_long_performance() {
+    ZONE_CAP=512    # Alter for device
+    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100)) 
+    # ^ Taken from ZenFS?
+    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+
+    NUM=1000000000
+    NUM=1000000 # < Please comment this line on production
+    VALUE_SIZE=1000
+
+# fill
+    DB_BENCH_PARAMS="$EXTRA_DB_BENCH_ARGS --num=$NUM --compression_type=none --value_size=$VALUE_SIZE --key_size=16 --use_direct_io_for_flush_and_compaction"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --target_file_size_base=$ZONE_CAP --write_buffer_size=$WB_SIZE  --histogram "
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --benchmarks=fillrandom"
+
+    echo "$(tput setaf 3)Running long performance fillrandom $(tput sgr 0)"
+    TEST_OUT="./output/long_fillrandom_${TARGET}"
+    SECONDS=0
+
+    echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    START_SECONDS=$SECONDS
+    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    echo ""
+    echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+
+# Overwrite
+    DB_BENCH_PARAMS="$EXTRA_DB_BENCH_ARGS --num=$NUM --compression_type=none --value_size=$VALUE_SIZE --key_size=16 --use_direct_io_for_flush_and_compaction"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --target_file_size_base=$ZONE_CAP --write_buffer_size=$WB_SIZE  --histogram "
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --benchmarks=overwrite --use_existing_db"
+
+    echo "$(tput setaf 3)Running long performance filloverwrite $(tput sgr 0)"
+    TEST_OUT="./output/long_filloverwrite_${TARGET}"
+    SECONDS=0
+
+    echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    START_SECONDS=$SECONDS
+    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    echo ""
+    echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+
+# Read while writing
+    WRITE_RATE_LIMIT=$((1024 * 1024 * 10))
+    DURATION=$((60 * 60))
+    DURATION=$((60*1)) # Uncomment
+    THREADS=32
+
+    DB_BENCH_PARAMS="$EXTRA_DB_BENCH_ARGS --num=$NUM --compression_type=none --value_size=$VALUE_SIZE --key_size=16 --use_direct_io_for_flush_and_compaction"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --target_file_size_base=$ZONE_CAP --write_buffer_size=$WB_SIZE  --histogram "
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --benchmarks=readwhilewriting --use_existing_db --threads=$THREADS --duration=$DURATION --benchmark_write_rate_limit=$WRITE_RATE_LIMIT"
+
+    echo "$(tput setaf 3)Running long performance readwhilewriting $(tput sgr 0)"
+    TEST_OUT="./output/long_readwhilewriting_${TARGET}"
+    SECONDS=0
+
+    echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    START_SECONDS=$SECONDS
+    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    echo ""
+    echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+}
+
 run_bench() {
     if [[ $# -le 2 ]] ; then
         echo ""
@@ -207,6 +271,9 @@ run_bench() {
     case $BENCHMARKS in
     "quick")
         run_bench_quick_performance
+    ;;
+    "long")
+        run_long_performance
     ;;
     *)
         default_perf
