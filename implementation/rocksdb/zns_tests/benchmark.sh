@@ -52,6 +52,110 @@ case $1 in
 esac
 }
 
+function print_duration() {
+  SECS=$1
+  HRS=$(($SECS / 3600))
+  SECS=$(($SECS % 3600))
+  MINS=$(($SECS / 60))
+  SECS=$(($SECS % 60))
+  echo "$HRS"h "$MINS"m "$SECS"s
+}
+
+default_perf() {
+    # db configs
+    NUM=8000     # Please set to > 80% of device
+    KSIZE=16        # default
+    VSIZE=1000      # Taken from ZenFS benchmarks
+    ZONE_CAP=512    # Alter for device
+    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100)) 
+    # ^ Taken from ZenFS?
+    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+    threads=3
+
+    echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
+    TEST_OUT="./output/default_${BENCHMARKS}_${TARGET}"
+    SECONDS=0
+    START_SECONDS=$SECONDS
+
+    echo "Starting benchmark $BENCHMARKS at $TARGET" > $TEST_OUT
+    ../db_bench $EXTRA_DB_BENCH_ARGS                \
+        --num=$NUM                                  \
+        --compression_type=None                     \
+        --value_size=$VSIZE --key_size=$KSIZE       \
+        --use_direct_io_for_flush_and_compaction    \
+        --use_direct_reads                          \
+        --max_bytes_for_level_multiplier=4          \
+        --max_background_jobs=8                     \
+        --target_file_size_base=$ZONE_CAP           \
+        --write_buffer_size=$WB_SIZE                \
+        --histogram                                 \
+        --threads=$threads                          \
+        --benchmarks=$BENCHMARKS                    \
+        >> $TEST_OUT
+    echo ""
+    echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+}
+
+run_bench_quick_performance() {
+    ZONE_CAP=512    # Alter for device
+    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100)) 
+    # ^ Taken from ZenFS?
+    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+
+    WORKLOAD_SZ=10000000000
+    WORKLOAD_SZ=100000000 # < Please comment this line on production
+
+    echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
+    TEST_OUT="./output/quick_fillseq_${TARGET}"
+    echo "" > $TEST_OUT
+    SECONDS=0
+    BENCHMARKS=fillseq
+    for VALUE_SIZE in 100 200 400 1000 2000 8000; do
+        START_SECONDS=$SECONDS
+        NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
+        ../db_bench $EXTRA_DB_BENCH_ARGS                \
+            --num=$NUM                                  \
+            --compression_type=none                     \
+            --value_size=$VALUE_SIZE --key_size=16      \
+            --use_direct_io_for_flush_and_compaction    \
+            --use_direct_reads                          \
+            --max_bytes_for_level_multiplier=4          \
+            --max_background_jobs=8                     \
+            --target_file_size_base=$ZONE_CAP           \
+            --write_buffer_size=$WB_SIZE                \
+            --histogram                                 \
+            --benchmarks=$BENCHMARKS                    \
+            >> $TEST_OUT
+        echo ""
+        echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+    done
+
+    echo "$(tput setaf 3)Running quick performance fillrandom $(tput sgr 0)"
+    TEST_OUT="./output/quick_fillrandom_${TARGET}"
+    echo "" > $TEST_OUT
+    SECONDS=0
+    BENCHMARKS=fillrandom
+    for VALUE_SIZE in 100 200 400 1000 2000 8000; do
+        START_SECONDS=$SECONDS
+        NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
+        ../db_bench $EXTRA_DB_BENCH_ARGS                \
+            --num=$NUM                                  \
+            --compression_type=none                     \
+            --value_size=$VALUE_SIZE --key_size=16      \
+            --use_direct_io_for_flush_and_compaction    \
+            --use_direct_reads                          \
+            --max_bytes_for_level_multiplier=4          \
+            --max_background_jobs=8                     \
+            --target_file_size_base=$ZONE_CAP           \
+            --write_buffer_size=$WB_SIZE                \
+            --histogram                                 \
+            --benchmarks=$BENCHMARKS                    \
+            >> $TEST_OUT
+        echo ""
+        echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+    done
+}
+
 run_bench() {
     if [[ $# -le 2 ]] ; then
         echo ""
@@ -72,6 +176,10 @@ run_bench() {
     BENCHMARKS=$1
     TARGET=$2
     OPT=$3
+
+    export BENCHMARKS
+    export TARGET
+    export OPT
 
     # Setup db bench args for specific environment
     EXTRA_DB_BENCH_ARGS=""
@@ -94,38 +202,20 @@ run_bench() {
     ;;
     esac
 
-    # Test out
-    TEST_OUT="./output/${BENCHMARKS}_${TARGET}"
+    export EXTRA_DB_BENCH_ARGS
 
-    # db configs
-    NUM=1000000     # Please set to > 80% of device
-    KSIZE=16        # default
-    VSIZE=1000      # Taken from ZenFS benchmarks
-    ZONE_CAP=512    # Alter for device
-    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100)) 
-    # ^ Taken from ZenFS?
-    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
-    threads=3
+    case $BENCHMARKS in
+    "quick")
+        run_bench_quick_performance
+    ;;
+    *)
+        default_perf
+    ;;
+    esac
 
-    echo "Starting benchmark $BENCHMARKS at $TARGET" > $TEST_OUT
-    ../db_bench $EXTRA_DB_BENCH_ARGS                \
-        --num=$NUM                                  \
-        --compression_type=None                     \
-        --value_size=$VSIZE --key_size=$KSIZE       \
-        --use_direct_io_for_flush_and_compaction    \
-        --use_direct_reads                          \
-        --max_bytes_for_level_multiplier=4          \
-        --max_background_jobs=8                     \
-        --target_file_size_base=$ZONE_CAP           \
-        --write_buffer_size=$WB_SIZE                \
-        --histogram                                 \
-        --threads=$threads                          \
-        --benchmarks=$BENCHMARKS # >> $TEST_OUT
-        #--use_existing_db                          \
+
     return $?
 }
-
-
 
 clean_bench() {
 case $1 in
