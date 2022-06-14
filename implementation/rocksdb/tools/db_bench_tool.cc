@@ -37,9 +37,6 @@
 #include <thread>
 #include <unordered_map>
 
-#ifdef ZNS_PLUGIN_ENABLED
-#include "db/zns_impl/db_impl_zns.h"
-#endif
 #include "db/db_impl/db_impl.h"
 #include "db/malloc_stats.h"
 #include "db/version_set.h"
