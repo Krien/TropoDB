@@ -377,8 +377,7 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 // }
 
 // static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
-//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size)
-//   *
+//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
 //                lba_size);
 // }
 
@@ -402,10 +401,14 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   // if (!c->targets_[1].empty()) {
   //   std::vector<SSZoneMetaData*> expanded0;
   //   current_->GetOverlappingInputs(level, &all_start, &all_limit,
-  //   &expanded0); AddBoundaryInputs(icmp_, current_->ss_[level],
-  //   &expanded0); const int64_t inputs0_size = TotalLbas(c->targets_[0]);
+  //   &expanded0); AddBoundaryInputs(icmp_, current_->ss_[level], &expanded0);
+  //   const int64_t inputs0_size = TotalLbas(c->targets_[0]);
   //   const int64_t inputs1_size = TotalLbas(c->targets_[1]);
   //   const int64_t expanded0_size = TotalLbas(expanded0);
+  //   printf("EX %lu %lu %lu %lu %lu\n", expanded0.size(),
+  //   c->targets_[0].size(),
+  //          inputs1_size, expanded0_size,
+  //          ExpandedCompactionLbaSizeLimit(lba_size_));
   //   if (expanded0.size() > c->targets_[0].size() &&
   //       inputs1_size + expanded0_size <
   //           ExpandedCompactionLbaSizeLimit(lba_size_)) {
@@ -584,15 +587,23 @@ Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit) {
 Status ZnsVersionSet::Recover() {
   Status s;
   uint64_t start_manifest, end_manifest;
-  s = manifest_->Recover();
   std::string manifest_data;
-  s = manifest_->ReadManifest(&manifest_data);
-
   ZnsVersionEdit edit;
-  s = DecodeFrom(manifest_data, &edit);
-  if (!s.ok()) {
-    printf("Corrupt manifest \n");
-    return s;
+  s = manifest_->Recover();
+  if (s.ok()) {
+    s = manifest_->ReadManifest(&manifest_data);
+    if (!s.ok()) {
+      printf("error reading manifest \n");
+      return s;
+    }
+  }
+
+  if (s.ok()) {
+    s = DecodeFrom(manifest_data, &edit);
+    if (!s.ok()) {
+      printf("Corrupt manifest \n");
+      return s;
+    }
   }
 
   // Recover log functionalities for L0 to LN.
