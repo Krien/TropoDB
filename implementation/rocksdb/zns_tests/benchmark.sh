@@ -61,6 +61,14 @@ function print_duration() {
   echo "$HRS"h "$MINS"m "$SECS"s
 }
 
+output_smartlog() {
+    if [ $# -lt 1 ]; then
+        echo "Please provide a device such as nvme6n1"
+        return 1
+    fi
+    nvme smart-log -o json "/dev/$1" 
+}
+
 default_perf() {
     # db configs
     NUM=8000     # Please set to > 80% of device
@@ -107,7 +115,7 @@ run_bench_quick_performance() {
 
     echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
     TEST_OUT="./output/quick_fillseq_${TARGET}"
-    echo "" > $TEST_OUT
+    diag_func > $TEST_OUT
     SECONDS=0
     BENCHMARKS=fillseq
     for VALUE_SIZE in 100 200 400 1000 2000 8000; do
@@ -128,11 +136,12 @@ run_bench_quick_performance() {
             >> $TEST_OUT
         echo ""
         echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+        diag_func >> $TEST_OUT
     done
 
     echo "$(tput setaf 3)Running quick performance fillrandom $(tput sgr 0)"
     TEST_OUT="./output/quick_fillrandom_${TARGET}"
-    echo "" > $TEST_OUT
+    diag_func > $TEST_OUT
     SECONDS=0
     BENCHMARKS=fillrandom
     for VALUE_SIZE in 100 200 400 1000 2000 8000; do
@@ -153,6 +162,7 @@ run_bench_quick_performance() {
             >> $TEST_OUT
         echo ""
         echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+        diag_func >> $TEST_OUT
     done
 }
 
@@ -177,9 +187,11 @@ run_long_performance() {
     SECONDS=0
 
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    diag_func >> $TEST_OUT
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
+    diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
 
 # Overwrite
@@ -193,9 +205,11 @@ run_long_performance() {
     SECONDS=0
 
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    diag_func >> $TEST_OUT
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
+    diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
 
 # Read while writing
@@ -214,14 +228,16 @@ run_long_performance() {
     SECONDS=0
 
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
+    diag_func >> $TEST_OUT
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
+    diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
 }
 
 run_bench() {
-    if [[ $# -le 2 ]] ; then
+    if [[ $# -le 3 ]] ; then
         echo ""
         echo "Not enough arguments given, please provide a target and benchmark..."
         echo "F2FS also requires the mounted path, Zenfs requires the device name"
@@ -239,7 +255,8 @@ run_bench() {
     # Set args
     BENCHMARKS=$1
     TARGET=$2
-    OPT=$3
+    DEV=$3
+    OPT=$4
 
     export BENCHMARKS
     export TARGET
@@ -251,14 +268,23 @@ run_bench() {
     "f2fs")
         F2FS_ARGS="--db=$OPT/db0 --wal_dir=$OPT/wal0"
         EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $F2FS_ARGS"
+        diag_func () {
+            output_smartlog $DEV
+        }
     ;;
     "zenfs")
         ZENFS_ARGS="-fs_uri=zenfs://dev:$OPT"
         EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $ZENFS_ARGS"
+        diag_func () {
+            output_smartlog $DEV
+        }
     ;;
     "znslsm")
         ZNSLSM_ARGS="--use_zns=true --db=$OPT"
         EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $ZNSLSM_ARGS"
+        diag_func () {
+            output_smartlog $DEV
+        }
     ;;
     *)
         echo "This target is not known..."
@@ -267,6 +293,7 @@ run_bench() {
     esac
 
     export EXTRA_DB_BENCH_ARGS
+    export -f diag_func
 
     case $BENCHMARKS in
     "quick")
