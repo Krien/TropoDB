@@ -92,8 +92,9 @@ uint8_t LNZnsSSTable::request_read_queue() {
       }
     }
   }
-  // printf("Claimed reader %u \n", picked_reader);
-  read_queue_[picked_reader] = 1;
+  read_queue_[picked_reader] += 1;
+  // printf("Claimed reader %u %u\n", picked_reader,
+  // read_queue_[picked_reader]);
   mutex_.Unlock();
   return picked_reader;
 }
@@ -101,8 +102,8 @@ uint8_t LNZnsSSTable::request_read_queue() {
 void LNZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
   assert(reader < number_of_concurrent_ln_readers && read_queue_[reader] != 0);
-  // printf("Released reader %u \n", reader);
   read_queue_[reader] = 0;
+  // printf("Released reader %u %u\n", reader, read_queue_[reader]);
   cv_.SignalAll();
   mutex_.Unlock();
 }
@@ -126,11 +127,13 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   char* buffer = new char[meta.lba_count * lba_size_];
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
+  // printf("Reading LN %lu \n", meta.LN.lbas[0]);
   s = FromStatus(
       log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true, readernr));
   release_read_queue(readernr);
   // mutex_.Unlock();
   if (!s.ok()) {
+    printf("Error reading LN table\n");
     delete[] buffer;
     return s;
   }
@@ -163,6 +166,9 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    if (size == 0) {
+      printf("SIZE %u COUNT %u \n", size, count);
+    }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

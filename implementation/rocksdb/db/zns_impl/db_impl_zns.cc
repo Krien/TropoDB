@@ -76,6 +76,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       // State
       bg_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false),
+      shutdown_(false),
       bg_error_(Status::OK()),
       forced_schedule_(false),
       // diag
@@ -177,9 +178,11 @@ void DBImplZNS::IODiagnostics() {
 }
 
 DBImplZNS::~DBImplZNS() {
+  printf("Shutdown \n");
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
-    // printf("busy, wait before closing\n");
+    shutdown_ = true;
+    printf("busy, wait before closing\n");
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
@@ -369,6 +372,7 @@ Status DBImplZNS::Close() {
   mutex_.Lock();
   while (bg_compaction_scheduled_) {
     // printf("busy, wait before closing\n");
+    shutdown_ = true;
     bg_work_finished_signal_.Wait();
   }
   mutex_.Unlock();

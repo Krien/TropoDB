@@ -348,6 +348,7 @@ class DBImplZNS : public DB {
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
   bool bg_compaction_scheduled_;
+  bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
 

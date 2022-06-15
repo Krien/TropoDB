@@ -71,8 +71,10 @@ void DBImplZNS::BackgroundCall() {
   }
   bg_compaction_scheduled_ = false;
   forced_schedule_ = false;
-  // cascading.
-  MaybeScheduleCompaction(false);
+  // cascading, but shutdown if ordered
+  if (!shutdown_) {
+    MaybeScheduleCompaction(false);
+  }
   bg_work_finished_signal_.SignalAll();
   // printf("bg done\n");
 }
@@ -139,8 +141,6 @@ void DBImplZNS::BackgroundCompaction() {
   }
   // Diag
   compactions_[versions_->current()->CompactionLevel()]++;
-  // Apply
-  s = s.ok() ? versions_->RemoveObsoleteZones(&edit) : s;
   // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   // printf("Applied change \n");
@@ -194,8 +194,6 @@ Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
 Status DBImplZNS::RemoveObsoleteZones() {
   mutex_.AssertHeld();
   Status s = Status::OK();
-  // // table files
-  std::vector<std::pair<uint64_t, uint64_t>> ranges;
   s = versions_->ReclaimStaleSSTables();
   if (!s.ok()) {
     printf("error reclaiming \n");

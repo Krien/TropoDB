@@ -109,8 +109,9 @@ uint8_t L0ZnsSSTable::request_read_queue() {
       }
     }
   }
-  // printf("Claimed readerL0 %u \n", picked_reader);
-  read_queue_[picked_reader] = 1;
+  read_queue_[picked_reader] += 1;
+  // printf("Claimed readerL0 %u %u\n", picked_reader,
+  // read_queue_[picked_reader]);
   mutex_.Unlock();
   return picked_reader;
 }
@@ -118,8 +119,8 @@ uint8_t L0ZnsSSTable::request_read_queue() {
 void L0ZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
   assert(reader < number_of_concurrent_readers && read_queue_[reader] != 0);
-  // printf("Released readerL0 %u \n", reader);
   read_queue_[reader] = 0;
+  // printf("Released readerL0 %u %u \n", reader, read_queue_[reader]);
   cv_.SignalAll();
   mutex_.Unlock();
 }
@@ -249,7 +250,9 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   if (ZnsConfig::use_sstable_encoding) {
     uint32_t size = DecodeFixed32(data);
     uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
-    // printf("Reading header %u %u \n", size, count);
+    if (size == 0 || count == 0) {
+      printf("Reading corrupt L0 header %u %u \n", size, count);
+    }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint32_t count = DecodeFixed32(data);

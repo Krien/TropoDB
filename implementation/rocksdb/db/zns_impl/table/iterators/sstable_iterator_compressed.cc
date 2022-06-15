@@ -159,6 +159,7 @@ void SSTableIteratorCompressed::CorruptionError() {
   current_ = data_size_;
   restart_index_ = num_restarts_;
   status_ = Status::Corruption("bad entry in block");
+  printf("Corrupt entry in SSTable block \n");
   key_.clear();
   value_.clear();
 }

@@ -11,8 +11,17 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+// Necessary at the moment...
+// TODO: we do not want to lock on a iterator preferably.
+// This is at the moment necessary because of a design flaw.
+struct LockedIterator {
+  port::Mutex mutex_;
+  Iterator* it;
+};
+
 static void DeleteEntry(const Slice& key, void* value) {
-  Iterator* it = reinterpret_cast<Iterator*>(value);
+  LockedIterator* it = reinterpret_cast<LockedIterator*>(value);
+  delete it->it;
   delete it;
 }
 
@@ -43,7 +52,9 @@ Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta,
   if (*handle == nullptr) {
     Iterator* it =
         ssmanager_->NewIterator(level, meta, icmp_.user_comparator());
-    s = cache_->Insert(key, it, 1, &DeleteEntry, handle);
+    LockedIterator* lit = new LockedIterator;
+    lit->it = it;
+    s = cache_->Insert(key, lit, 1, &DeleteEntry, handle);
   }
   return s;
 }
@@ -75,14 +86,19 @@ Status ZnsTableCache::Get(const ReadOptions& options,
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (s.ok()) {
-    Iterator* it = reinterpret_cast<Iterator*>(cache_->Value(handle));
+    LockedIterator* lit =
+        reinterpret_cast<LockedIterator*>(cache_->Value(handle));
+    lit->mutex_.Lock();
+    Iterator* it = lit->it;
     it->Seek(key);
     if (it->Valid()) {
       ParsedInternalKey parsed_key;
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-        printf("corrupt key in table cache\n");
-      }
-      if (parsed_key.type == kTypeDeletion) {
+        *status = EntryStatus::notfound;
+        printf(
+            "corrupt key in table cache, for level %u and table %lu, str %s\n",
+            level, meta.number, it->key().ToString().data());
+      } else if (parsed_key.type == kTypeDeletion) {
         *status = EntryStatus::deleted;
         value->clear();
       } else {
@@ -92,6 +108,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
     } else {
       *status = EntryStatus::notfound;
     }
+    lit->mutex_.Unlock();
     cache_->Release(handle);
   }
   return s;
