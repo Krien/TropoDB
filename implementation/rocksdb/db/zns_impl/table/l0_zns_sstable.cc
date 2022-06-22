@@ -176,8 +176,9 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
   if (!s.ok()) {
-    printf("Error reading L0 table at location %lu %lu\n", meta.L0.lba,
-           meta.lba_count);
+    printf("Error reading L0 table %lu at location %lu %lu\n", meta.number,
+           meta.L0.lba, meta.lba_count);
+    exit(-1);
   }
   return Status::OK();
 #endif
@@ -191,7 +192,18 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   }
   remaining_metas.clear();
   SSZoneMetaData* prev = metas[0];
-  // GUARANTEE, first deleted is less than write tail
+  // GUARANTEE, first deleted is equal to write tail
+  if (log_.GetWriteTail() != prev->L0.lba) {
+    uint64_t i = 0;
+    while (i < metas.size()) {
+      SSZoneMetaData* m = metas[i];
+      // printf("Readding %lu \n", m->number);
+      remaining_metas.push_back(m);
+      i++;
+    }
+    return Status::OK();
+  }
+
   uint64_t blocks = prev->L0.lba - (prev->L0.lba / zone_cap_) * zone_cap_;
   blocks += prev->lba_count;
 
@@ -207,6 +219,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
       break;
     }
+    // printf("Deleting %lu \n", m->number);
     blocks += m->lba_count;
     prev = m;
     if (blocks > zone_cap_) {
@@ -215,15 +228,26 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
       blocks = 0;
     }
   }
+  if (blocks_to_delete % zone_cap_ != 0) {
+    uint64_t safe = (blocks_to_delete / zone_cap_) * zone_cap_;
+    prev->lba_count = blocks_to_delete - safe;
+    blocks_to_delete -= blocks_to_delete - safe;
+    prev->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
+    remaining_metas.push_back(prev);
+    // printf("Mock delete %lu %lu \n", prev->L0.lba, prev->lba_count);
+  }
   Status s = Status::OK();
   blocks_to_delete = (blocks_to_delete / zone_cap_) * zone_cap_;
   if (blocks_to_delete > 0) {
+    // printf("Deleting from L0 %lu %lu \n", log_.GetWriteTail(),
+    //        log_.GetWriteTail() + blocks_to_delete);
     s = FromStatus(log_.ConsumeTail(log_.GetWriteTail(),
                                     log_.GetWriteTail() + blocks_to_delete));
   }
   i = upto;
   while (i < metas.size()) {
     SSZoneMetaData* m = metas[i];
+    // printf("Readding %lu \n", m->number);
     remaining_metas.push_back(m);
     i++;
   }

@@ -111,8 +111,12 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
       SSZoneMetaData* todelete = current_->ss_d_[0][j];
       if (live_zones.count(todelete->number) == 0) {
-        // printf("Safe to delete %lu \n", todelete->number);
+        // printf("Safe to delete %lu %lu %lu\n", todelete->number,
+        //        todelete->L0.lba, todelete->lba_count);
         tmp.push_back(todelete);
+      } else {
+        // printf("we can not delete %lu\n", todelete->number);
+        break;
       }
     }
     // Sort on circular log order
@@ -122,15 +126,15 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
                 [](SSZoneMetaData* a, SSZoneMetaData* b) {
                   return a->number < b->number;
                 });
+      std::vector<SSZoneMetaData*> new_deleted_ss_l0;
+      s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
+      current_->ss_d_[0].clear();
+      current_->ss_d_[0] = new_deleted_ss_l0;
+      if (!s.ok()) {
+        printf("error reclaiming L0\n");
+        return s;
+      }
     } else {
-    }
-    std::vector<SSZoneMetaData*> new_deleted_ss_l0;
-    s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
-    current_->ss_d_[0].clear();
-    current_->ss_d_[0] = new_deleted_ss_l0;
-    if (!s.ok()) {
-      printf("error reclaiming L0\n");
-      return s;
     }
   }
 
@@ -439,8 +443,13 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
 
 bool ZnsVersionSet::OnlyNeedDeletes() {
   uint8_t level = current_->compaction_level_;
-  return level == 0 ? current_->ss_[level].size() == 0
-                    : current_->ss_[level].size() < 3;
+  bool only_need = level == 0 ? current_->ss_[level].size() == 0
+                              : current_->ss_[level].size() < 3;
+  // if (only_need) {
+  //   printf("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
+  //          current_->ss_d_[level].size());
+  // }
+  return only_need;
 }
 
 ZnsCompaction* ZnsVersionSet::PickCompaction() {
