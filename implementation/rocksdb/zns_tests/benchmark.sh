@@ -20,6 +20,9 @@ print_help() {
 #    sudo LD_LIBRARY_PATH="LD_LIBRARY_PATH:/home/user/spdk/dpdk/build/lib" ./benchmark.sh setup zenfs nvme6n1
 #    sudo LD_LIBRARY_PATH="LD_LIBRARY_PATH:/home/user/spdk/dpdk/build/lib" ./benchmark.sh clean zenfs nvme6n1
 
+# Allow a BPF script during diagnostics
+#   BLOCKCNT=/.../.bt
+
 if [[ $# -le 2 ]] ; then
     echo ""
     echo "Not enough arguments given, please provide the function you want to use..."
@@ -116,9 +119,23 @@ run_bench_quick_performance() {
     echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
     TEST_OUT="./output/quick_fillseq_${TARGET}"
     diag_func > $TEST_OUT
+    
+    # BPF setup
+    TEST_BPF_OUT="./output/quick_fillseq_${TARGET}_BPF"
+    if [[ -n $BLOCKCNT ]]; then
+        echo "BPF" > $TEST_BPF_OUT
+    fi
+    
     SECONDS=0
     BENCHMARKS=fillseq
     for VALUE_SIZE in 100 200 400 1000 2000 8000; do
+        # Start bpf 
+        if [[ -n $BLOCKCNT ]]; then
+            echo "VAL $VALUE_SIZE" >> $TEST_BPF_OUT
+            bpftrace $COUNTBLK >> $TEST_BPF_OUT &
+            bpfpid=$!
+        fi
+    
         START_SECONDS=$SECONDS
         NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
         ../db_bench $EXTRA_DB_BENCH_ARGS                \
@@ -137,14 +154,32 @@ run_bench_quick_performance() {
         echo ""
         echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
         diag_func >> $TEST_OUT
+        
+        # end bpf
+        if [[ -n $BLOCKCNT ]]; then
+            kill $bpfpid
+        fi
     done
 
     echo "$(tput setaf 3)Running quick performance fillrandom $(tput sgr 0)"
     TEST_OUT="./output/quick_fillrandom_${TARGET}"
     diag_func > $TEST_OUT
+    
+    TEST_BPF_OUT="./output/quick_fillrandom_${TARGET}_BPF"
+    if [[ -n $BLOCKCNT ]]; then
+        echo "BPF" > $TEST_BPF_OUT
+    fi
+    
     SECONDS=0
     BENCHMARKS=fillrandom
     for VALUE_SIZE in 100 200 400 1000 2000 8000; do
+        # Start bpf 
+        if [[ -n $BLOCKCNT ]]; then
+            echo "VAL $VALUE_SIZE" >> $TEST_BPF_OUT
+            bpftrace $COUNTBLK >> $TEST_BPF_OUT &
+            bpfpid=$!
+        fi
+    
         START_SECONDS=$SECONDS
         NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
         ../db_bench $EXTRA_DB_BENCH_ARGS                \
@@ -163,6 +198,11 @@ run_bench_quick_performance() {
         echo ""
         echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
         diag_func >> $TEST_OUT
+        
+        # end bpf
+        if [[ -n $BLOCKCNT ]]; then
+            kill $bpfpid
+        fi
     done
 }
 
@@ -184,15 +224,26 @@ run_long_performance() {
 
     echo "$(tput setaf 3)Running long performance fillrandom $(tput sgr 0)"
     TEST_OUT="./output/long_fillrandom_${TARGET}"
-    SECONDS=0
-
+    TEST_BPF_OUT="./output/long_fillrandom_${TARGET}_BPF"
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
     diag_func >> $TEST_OUT
+    # BPF setup
+    if [[ -n $BLOCKCNT ]]; then
+        echo "BPF" > $TEST_BPF_OUT
+        bpftrace $COUNTBLK >> $TEST_BPF_OUT &
+        bpfpid=$!
+    fi
+    
+    SECONDS=0
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+    # end bpf
+    if [[ -n $BLOCKCNT ]]; then
+        kill $bpfpid
+    fi
 
 # Overwrite
     DB_BENCH_PARAMS="$EXTRA_DB_BENCH_ARGS --num=$NUM --compression_type=none --value_size=$VALUE_SIZE --key_size=16 --use_direct_io_for_flush_and_compaction"
@@ -202,15 +253,26 @@ run_long_performance() {
 
     echo "$(tput setaf 3)Running long performance filloverwrite $(tput sgr 0)"
     TEST_OUT="./output/long_filloverwrite_${TARGET}"
-    SECONDS=0
-
+    TEST_BPF_OUT="./output/long_filloverwrite_${TARGET}_BPF"
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
     diag_func >> $TEST_OUT
+    # BPF setup
+    if [[ -n $BLOCKCNT ]]; then
+        echo "BPF" > $TEST_BPF_OUT
+        bpftrace $COUNTBLK >> $TEST_BPF_OUT &
+        bpfpid=$!
+    fi
+
+    SECONDS=0
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+    # end bpf
+    if [[ -n $BLOCKCNT ]]; then
+        kill $bpfpid
+    fi
 
 # Read while writing
     WRITE_RATE_LIMIT=$((1024 * 1024 * 10))
@@ -225,15 +287,26 @@ run_long_performance() {
 
     echo "$(tput setaf 3)Running long performance readwhilewriting $(tput sgr 0)"
     TEST_OUT="./output/long_readwhilewriting_${TARGET}"
-    SECONDS=0
-
+    TEST_BPF_OUT="./output/long_readwhilewriting_${TARGET}_BPF"
     echo "# Running db_bench with parameters: $DB_BENCH_PARAMS" > $TEST_OUT
     diag_func >> $TEST_OUT
+    # BPF setup
+    if [[ -n $BLOCKCNT ]]; then
+        echo "BPF" > $TEST_BPF_OUT
+        bpftrace $COUNTBLK >> $TEST_BPF_OUT &
+        bpfpid=$!
+    fi
+
+    SECONDS=0
     START_SECONDS=$SECONDS
     ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+    # end bpf
+    if [[ -n $BLOCKCNT ]]; then
+        kill $bpfpid
+    fi
 }
 
 run_bench() {
