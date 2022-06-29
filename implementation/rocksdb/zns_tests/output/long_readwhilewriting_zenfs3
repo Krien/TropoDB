@@ -1,0 +1,105 @@
+# Running db_bench with parameters:  -fs_uri=zenfs://dev:nvme0n2 --num=1000000000 --compression_type=none --value_size=1000 --key_size=16 --use_direct_io_for_flush_and_compaction --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8 --target_file_size_base=1129316352 --write_buffer_size=2147483648  --histogram  --benchmarks=readwhilewriting --use_existing_db --threads=32 --duration=3600 --benchmark_write_rate_limit=10485760
+{
+  "critical_warning" : 0,
+  "temperature" : 319,
+  "avail_spare" : 100,
+  "spare_thresh" : 10,
+  "percent_used" : 0,
+  "endurance_grp_critical_warning_summary" : 0,
+  "data_units_read" : 356360245,
+  "data_units_written" : 389576975,
+  "host_read_commands" : 1818130227,
+  "host_write_commands" : 5079744535,
+  "controller_busy_time" : 19314,
+  "power_cycles" : 2,
+  "power_on_hours" : 5909,
+  "unsafe_shutdowns" : 0,
+  "media_errors" : 0,
+  "num_err_log_entries" : 4676,
+  "warning_temp_time" : 0,
+  "critical_comp_time" : 0,
+  "temperature_sensor_1" : 316,
+  "temperature_sensor_2" : 315,
+  "temperature_sensor_3" : 320,
+  "thm_temp1_trans_count" : 0,
+  "thm_temp2_trans_count" : 0,
+  "thm_temp1_total_time" : 0,
+  "thm_temp2_total_time" : 0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     1000 bytes each (500 bytes after compression)
+Entries:    1000000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    968933.1 MB (estimated)
+FileSize:   492095.9 MB (estimated)
+Write rate: 10485760 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+DB path: [rocksdbtest/dbbench]
+readwhilewriting :     710.627 micros/op 45026 ops/sec;   27.6 MB/s (3200073 of 5061999 found)
+
+Microseconds per read:
+Count: 162127968 Average: 710.6288  StdDev: 23.45
+Min: 3  Median: 667.6757  Max: 24820
+Percentiles: P25 498.92 P50: 667.68 P75: 835.74 P99: 2030.84 P99.9: 3053.67 P99.99: 4326.67 P99.999 6182.68 P99.9999 6824.24
+------------------------------------------------------
+(       2,       3 ]       13   0.000%   0.000% 
+(       3,       4 ]      247   0.000%   0.000% 
+(       4,       6 ]     7762   0.005%   0.005% 
+(       6,      10 ]    94987   0.059%   0.064% 
+(      10,      15 ]    66827   0.041%   0.105% 
+(      15,      22 ]    16103   0.010%   0.115% 
+(      22,      34 ]     3476   0.002%   0.117% 
+(      34,      51 ]      341   0.000%   0.117% 
+(      51,      76 ]       34   0.000%   0.117% 
+(      76,     110 ]      107   0.000%   0.117% 
+(     110,     170 ]   988962   0.610%   0.727% 
+(     170,     250 ]   726292   0.448%   1.175% 
+(     250,     380 ] 10192907   6.287%   7.462% #
+(     380,     580 ] 47821164  29.496%  36.958% ######
+(     580,     870 ] 69939319  43.138%  80.096% #########
+(     870,    1300 ] 23356846  14.406%  94.503% ###
+(    1300,    1900 ]  7074306   4.363%  98.866% #
+(    1900,    2900 ]  1658533   1.023%  99.889% 
+(    2900,    4400 ]   171934   0.106%  99.995% 
+(    4400,    6600 ]     7635   0.005% 100.000% 
+(    6600,    9900 ]      160   0.000% 100.000% 
+(    9900,   14000 ]        3   0.000% 100.000% 
+(   14000,   22000 ]        5   0.000% 100.000% 
+(   22000,   33000 ]        5   0.000% 100.000% 
+
+{
+  "critical_warning" : 0,
+  "temperature" : 315,
+  "avail_spare" : 100,
+  "spare_thresh" : 10,
+  "percent_used" : 0,
+  "endurance_grp_critical_warning_summary" : 0,
+  "data_units_read" : 362805580,
+  "data_units_written" : 390931392,
+  "host_read_commands" : 2389926197,
+  "host_write_commands" : 5080815865,
+  "controller_busy_time" : 19374,
+  "power_cycles" : 2,
+  "power_on_hours" : 5910,
+  "unsafe_shutdowns" : 0,
+  "media_errors" : 0,
+  "num_err_log_entries" : 4676,
+  "warning_temp_time" : 0,
+  "critical_comp_time" : 0,
+  "temperature_sensor_1" : 312,
+  "temperature_sensor_2" : 311,
+  "temperature_sensor_3" : 316,
+  "thm_temp1_trans_count" : 0,
+  "thm_temp2_trans_count" : 0,
+  "thm_temp1_total_time" : 0,
+  "thm_temp2_total_time" : 0
+}
+Test duration 1h 0m 14s
