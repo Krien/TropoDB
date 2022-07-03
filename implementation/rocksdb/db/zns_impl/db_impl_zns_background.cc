@@ -50,7 +50,7 @@ void DBImplZNS::MaybeScheduleFlush() {
     return;
   }
   bg_flush_scheduled_ = true;
-  printf("Scheduled flush\n");
+  // printf("Scheduled flush\n");
   env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
 }
 
@@ -83,7 +83,7 @@ void DBImplZNS::BackgroundFlush() {
   Status s;
 
   if (imm_ != nullptr) {
-    printf("  Compact memtable...\n");
+    // printf("  Compact memtable...\n");
     s = CompactMemtable();
     if (!s.ok()) {
       printf("error during flushing\n");
@@ -100,8 +100,11 @@ void DBImplZNS::BackgroundFlush() {
 Status DBImplZNS::CompactMemtable() {
   mutex_.AssertHeld();
   // We can not do a flush...
-  if (imm_->GetInternalSize() * 1.2 > ss_manager_->SpaceRemaining(0)) {
+  if (imm_->GetInternalSize() * 1.2 > ss_manager_->SpaceRemainingInBytes(0)) {
     MaybeScheduleCompaction(true);
+    // printf("WAITING, can not flush %f %f \n",
+    //        (float)imm_->GetInternalSize() / 1024. / 1024.,
+    //        (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
     bg_work_finished_signal_.Wait();
   }
   assert(imm_ != nullptr);
@@ -127,7 +130,7 @@ Status DBImplZNS::CompactMemtable() {
     // wal
     s = wal_man_->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
-    printf("Flushed!!\n");
+    // printf("Flushed!!\n");
   }
   return s;
 }
@@ -151,7 +154,7 @@ void DBImplZNS::MaybeScheduleCompaction(bool force) {
   }
   forced_schedule_ = force;
   bg_compaction_scheduled_ = true;
-  printf("Scheduled compaction\n");
+  // printf("Scheduled compaction\n");
   env_->Schedule(&DBImplZNS::BGCompactionWork, this, rocksdb::Env::LOW);
 }
 
@@ -175,7 +178,7 @@ void DBImplZNS::BackgroundCompactionCall() {
     MaybeScheduleCompaction(false);
   }
   bg_work_finished_signal_.SignalAll();
-  printf("bg done\n");
+  // printf("bg done\n");
 }
 
 void DBImplZNS::BackgroundCompaction() {

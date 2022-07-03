@@ -206,9 +206,14 @@ double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   return fract;
 }
 
+uint64_t ZNSSSTableManager::SpaceRemainingInBytes(const uint8_t level) const {
+  assert(level < ZnsConfig::level_count);
+  return sstable_level_[level]->SpaceAvailable();
+}
+
 uint64_t ZNSSSTableManager::SpaceRemaining(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->SpaceAvailable() / lba_size_;
+  return SpaceRemainingInBytes(level) / lba_size_;
 }
 
 void ZNSSSTableManager::GetDefaultRange(

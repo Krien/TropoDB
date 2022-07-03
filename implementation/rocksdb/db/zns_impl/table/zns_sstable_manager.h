@@ -54,6 +54,8 @@ class ZNSSSTableManager : public RefCounter {
   // Used for compaction
   double GetFractionFilled(const uint8_t level) const;
   uint64_t SpaceRemaining(const uint8_t level) const;
+  uint64_t SpaceRemainingInBytes(const uint8_t level) const;
+
   // Used for cleaning
   void GetDefaultRange(const uint8_t level,
                        std::pair<uint64_t, uint64_t>* range) const;
