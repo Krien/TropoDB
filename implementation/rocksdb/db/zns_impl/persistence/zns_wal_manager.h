@@ -3,6 +3,8 @@
 #ifndef ZNS_WAL_MANAGER_H
 #define ZNS_WAL_MANAGER_H
 
+#define WAL_MANAGER_MANAGES_CHANNELS
+
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -35,6 +37,10 @@ class ZnsWALManager : public RefCounter {
 
  private:
   std::array<ZNSWAL*, N> wals_;
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  SZD::SZDChannelFactory* channel_factory_;
+  SZD::SZDChannel** write_channels_;
+#endif
   size_t wal_head_;
   size_t wal_tail_;
   ZNSWAL* current_wal_;

@@ -22,6 +22,8 @@ constexpr static size_t manifest_zones =
 constexpr static size_t zones_foreach_wal =
     4;                                 /**< Amount of zones for each WAL*/
 constexpr static size_t wal_count = 4; /**< Maximum amount of concurrent WALS*/
+constexpr static size_t wal_concurrency =
+    16; /**< Maximum number of concurrent WAL writerts */
 constexpr static size_t ss_distribution[level_count] = {
     1, 2, 3, 5}; /**< each level i gets \f$\frac{Xi}{\sum_{i=0}^{N}
                   x}\f$  of the remaining zones*/

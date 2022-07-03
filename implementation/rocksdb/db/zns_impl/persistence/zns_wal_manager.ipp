@@ -26,15 +26,36 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                                 const SZD::DeviceInfo& info,
                                 const uint64_t min_zone_nr,
                                 const uint64_t max_zone_nr)
-    : wal_head_(0), wal_tail_(N - 1), current_wal_(nullptr) {
+    :
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+      channel_factory_(channel_factory),
+#endif
+      wal_head_(0),
+      wal_tail_(N - 1),
+      current_wal_(nullptr) {
   assert((max_zone_nr - min_zone_nr) % N == 0);
   uint64_t wal_range = (max_zone_nr - min_zone_nr) / N;
   assert(wal_range % info.zone_cap_ == 0);
   uint64_t wal_walker = min_zone_nr;
 
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  // WalManager is the boss of the channels. Prevents stale channels.
+  write_channels_ = new SZD::SZDChannel*[ZnsConfig::wal_concurrency];
+  channel_factory_->Ref();
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+    channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
+                                       max_zone_nr);
+  }
+#endif
   for (size_t i = 0; i < N; ++i) {
     ZNSWAL* newwal =
-        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range);
+        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+                   ZnsConfig::wal_concurrency, write_channels_
+#else
+                   ZnsConfig::wal_concurrency / N, nullptr
+#endif
+        );
     std::cout << std::left << "WAL" << std::setw(12) << i << std::right
               << std::setw(25) << wal_walker << std::setw(25)
               << wal_walker + wal_range << "\n";
@@ -52,6 +73,12 @@ ZnsWALManager<N>::~ZnsWALManager() {
       (*i)->Unref();
     }
   }
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+    channel_factory_->unregister_channel(write_channels_[i]);
+  }
+  channel_factory_->Unref();
+#endif
 }
 
 template <std::size_t N>
