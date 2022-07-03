@@ -75,7 +75,9 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       tmp_batch_(new WriteBatch),
       // State
       bg_work_finished_signal_(&mutex_),
+      bg_flush_work_finished_signal_(&mutex_),
       bg_compaction_scheduled_(false),
+      bg_flush_scheduled_(false),
       shutdown_(false),
       bg_error_(Status::OK()),
       forced_schedule_(false),
@@ -85,6 +87,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
     compactions_[i] = 0;
   }
   env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
@@ -180,10 +183,15 @@ void DBImplZNS::IODiagnostics() {
 DBImplZNS::~DBImplZNS() {
   printf("Shutdown \n");
   mutex_.Lock();
-  while (bg_compaction_scheduled_) {
+  while (bg_compaction_scheduled_ || bg_flush_scheduled_) {
     shutdown_ = true;
     printf("busy, wait before closing\n");
-    bg_work_finished_signal_.Wait();
+    if (bg_compaction_scheduled_) {
+      bg_work_finished_signal_.Wait();
+    }
+    if (bg_flush_scheduled_) {
+      bg_flush_work_finished_signal_.Wait();
+    }
   }
   mutex_.Unlock();
 
@@ -315,6 +323,7 @@ Status DBImplZNS::InitWAL() {
                              max_write_buffer_size_);
       mem_->Ref();
     }
+    MaybeScheduleFlush();
     MaybeScheduleCompaction(true);
     while (!wal_man_->WALAvailable()) {
       bg_work_finished_signal_.Wait();
@@ -357,6 +366,7 @@ Status DBImplZNS::Open(
   }
   if (s.ok()) {
     // impl->RemoveObsoleteZones();
+    impl->MaybeScheduleFlush();
     impl->MaybeScheduleCompaction(false);
   }
   impl->mutex_.Unlock();
@@ -456,13 +466,13 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
-      bg_work_finished_signal_.Wait();
+      bg_flush_work_finished_signal_.Wait();
     } else if (versions_->NeedsFlushing()) {
       // printf("waiting for compaction\n");
-      MaybeScheduleCompaction(false);
-      bg_work_finished_signal_.Wait();
+      MaybeScheduleFlush();
+      bg_flush_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
-      bg_work_finished_signal_.Wait();
+      bg_flush_work_finished_signal_.Wait();
     } else {
       // create new WAL
       wal_->Sync();
@@ -476,7 +486,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       mem_ = new ZNSMemTable(options_, internal_comparator_,
                              max_write_buffer_size_);
       mem_->Ref();
-      MaybeScheduleCompaction(false);
+      MaybeScheduleFlush();
     }
   }
   return Status::OK();

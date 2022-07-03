@@ -203,9 +203,13 @@ class DBImplZNS : public DB {
       CompactionJobInfo* compaction_job_info = nullptr) override;
 
   Status MakeRoomForWrite(Slice log_entry);
+  void MaybeScheduleFlush();
   void MaybeScheduleCompaction(bool force);
-  static void BGWork(void* db);
-  void BackgroundCall();
+  static void BGFlushWork(void* db);
+  static void BGCompactionWork(void* db);
+  void BackgroundFlushCall();
+  void BackgroundFlush();
+  void BackgroundCompactionCall();
   void BackgroundCompaction();
   Status CompactMemtable();
   Status FlushL0SSTables(SSZoneMetaData* meta);
@@ -347,7 +351,9 @@ class DBImplZNS : public DB {
   // Threading variables
   port::Mutex mutex_;
   port::CondVar bg_work_finished_signal_;
+  port::CondVar bg_flush_work_finished_signal_;
   bool bg_compaction_scheduled_;
+  bool bg_flush_scheduled_;
   bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
