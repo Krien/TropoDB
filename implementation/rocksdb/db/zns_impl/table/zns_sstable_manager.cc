@@ -27,20 +27,19 @@ ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
   // Create tables
   sstable_level_[0] = new L0ZnsSSTable(channel_factory_, info, ranges[0].first,
                                        ranges[0].second);
-  for (size_t level = 1; level < ZnsConfig::level_count; level++) {
-    sstable_level_[level] = new LNZnsSSTable(
-        channel_factory_, info, ranges[level].first, ranges[level].second);
-  }
+  sstable_level_[1] = new LNZnsSSTable(channel_factory_, info, ranges[1].first,
+                                       ranges[ranges.size() - 1].second);
   // Increase ranges
-  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
-    ranges_[level].first *= info.zone_cap;
-    ranges_[level].second *= info.zone_cap;
-  }
+  ranges_[0] = std::make_pair(ranges_[0].first * info.zone_cap,
+                              ranges_[0].second * info.zone_cap);
+  ranges_[1] =
+      std::make_pair(ranges_[1].first * info.zone_cap,
+                     ranges_[ranges.size() - 1].second * info.zone_cap);
 }
 
 ZNSSSTableManager::~ZNSSSTableManager() {
   // printf("Deleting SSTable manager.\n");
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+  for (size_t i = 0; i < 2; i++) {
     if (sstable_level_[i] != nullptr) delete sstable_level_[i];
   }
   channel_factory_->Unref();
@@ -56,35 +55,53 @@ Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
                                        const Slice& content,
                                        SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->WriteSSTable(content, meta);
+  return sstable_level_[level ? 1 : 0]->WriteSSTable(content, meta);
 }
 
 Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
                                       const uint8_t level2,
                                       const SSZoneMetaData& meta,
                                       SSZoneMetaData* new_meta) const {
-  Status s;
-  Slice original;
-  s = ReadSSTable(level1, &original, meta);
-  if (!s.ok() || original.size() == 0) {
+  Status s = Status::OK();
+  // We do not have to rewrite, all tables are in LN!!!
+  if (level1 != 0) {
+    *new_meta = SSZoneMetaData(meta);
     return s;
+  } else {
+    // Read and copy to LN
+    Slice original;
+    s = ReadSSTable(level1 ? 1 : 0, &original, meta);
+    if (!s.ok() || original.size() == 0) {
+      return s;
+    }
+    *new_meta = SSZoneMetaData(meta);
+
+    s = sstable_level_[level2 ? 1 : 0]->WriteSSTable(original, new_meta);
+    delete[] original.data();
   }
-  *new_meta = SSZoneMetaData(meta);
-  s = sstable_level_[level2]->WriteSSTable(original, new_meta);
-  delete[] original.data();
+
   return s;
+}
+
+uint64_t ZNSSSTableManager::GetBytesInLevel(
+    const std::vector<SSZoneMetaData*>& metas) {
+  uint64_t total = 0;
+  for (const auto& meta : metas) {
+    total += meta->lba_count * lba_size_;
+  }
+  return total;
 }
 
 bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
                                              const Slice& slice) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->EnoughSpaceAvailable(slice);
+  return sstable_level_[level ? 1 : 0]->EnoughSpaceAvailable(slice);
 }
 
 Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
                                            const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->InvalidateSSZone(meta);
+  return sstable_level_[level ? 1 : 0]->InvalidateSSZone(meta);
 }
 
 Status ZNSSSTableManager::DeleteL0Table(
@@ -128,7 +145,7 @@ Status ZNSSSTableManager::SetValidRangeAndReclaim(
 
 Status ZNSSSTableManager::DeleteLNTable(const uint8_t level,
                                         const SSZoneMetaData& meta) const {
-  Status s = sstable_level_[level]->InvalidateSSZone(meta);
+  Status s = sstable_level_[level ? 1 : 0]->InvalidateSSZone(meta);
   return s;
 }
 
@@ -138,13 +155,14 @@ Status ZNSSSTableManager::Get(const uint8_t level,
                               const SSZoneMetaData& meta,
                               EntryStatus* status) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->Get(icmp, key_ptr, value_ptr, meta, status);
+  return sstable_level_[level ? 1 : 0]->Get(icmp, key_ptr, value_ptr, meta,
+                                            status);
 }
 
 Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
                                       const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->ReadSSTable(sstable, meta);
+  return sstable_level_[level ? 1 : 0]->ReadSSTable(sstable, meta);
 }
 
 L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
@@ -155,51 +173,52 @@ Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
                                          const SSZoneMetaData& meta,
                                          const Comparator* cmp) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->NewIterator(meta, cmp);
+  return sstable_level_[level ? 1 : 0]->NewIterator(meta, cmp);
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
                                               SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->NewBuilder(meta);
+  return sstable_level_[level ? 1 : 0]->NewBuilder(meta);
 }
 
-Status ZNSSSTableManager::Recover(
-    const std::vector<std::pair<uint8_t, std::string>>& frag) {
+Status ZNSSSTableManager::Recover() {
   Status s = Status::OK();
   // Recover L0
   s = dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
   if (!s.ok()) {
     printf("Error recovering L0\n");
-    return s;
-  }
-  // Recover LN
-  for (auto fragdata : frag) {
-    uint8_t level = fragdata.first;
-    if (level == 0 || level > ZnsConfig::level_count) {
-      return Status::Corruption();
-    }
-    s = dynamic_cast<LNZnsSSTable*>(sstable_level_[level])
-            ->Recover(fragdata.second);
-    if (!s.ok()) {
-      printf("Error recovering L%u \n", level);
-      return s;
-    }
   }
   return s;
 }
 
-std::string ZNSSSTableManager::GetFragmentedLogData(const uint8_t level) {
+Status ZNSSSTableManager::Recover(const std::string& frag) {
+  Status s = Recover();
+  if (!s.ok()) {
+    return s;
+  }
+  // Recover LN
+  s = dynamic_cast<LNZnsSSTable*>(sstable_level_[1])->Recover(frag);
+  if (!s.ok()) {
+    printf("Error recovering > L%u \n", 1);
+    return s;
+  }
+
+  return s;
+}
+
+std::string ZNSSSTableManager::GetFragmentedLogData() {
   assert(level > 0);  // L0 does not work!!
-  LNZnsSSTable* table = dynamic_cast<LNZnsSSTable*>(sstable_level_[level]);
+  LNZnsSSTable* table = dynamic_cast<LNZnsSSTable*>(sstable_level_[1]);
   return table->Encode();
 }
 
 double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
   uint64_t space_available =
-      sstable_level_[level]->SpaceAvailable() / lba_size_;
-  uint64_t total_space = ranges_[level].second - ranges_[level].first;
+      sstable_level_[level ? 1 : 0]->SpaceAvailable() / lba_size_;
+  uint64_t total_space =
+      ranges_[level ? 1 : 0].second - ranges_[level ? 1 : 0].first;
   // printf("Space available %lu, Total space %lu \n", space_available,
   //        total_space);
   double fract = (double)(total_space - space_available) / (double)total_space;
@@ -208,56 +227,12 @@ double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
 
 uint64_t ZNSSSTableManager::SpaceRemainingInBytes(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level]->SpaceAvailable();
+  return sstable_level_[level ? 1 : 0]->SpaceAvailable();
 }
 
 uint64_t ZNSSSTableManager::SpaceRemaining(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  return SpaceRemainingInBytes(level) / lba_size_;
-}
-
-void ZNSSSTableManager::GetDefaultRange(
-    const uint8_t level, std::pair<uint64_t, uint64_t>* range) const {
-  *range = std::make_pair(ranges_[level].first, ranges_[level].first);
-}
-
-void ZNSSSTableManager::GetRange(const uint8_t level,
-                                 const std::vector<SSZoneMetaData*>& metas,
-                                 std::pair<uint64_t, uint64_t>* range) const {
-  // if (metas.size() > 1) {
-  //   *range = std::make_pair(metas[metas.size()-1]->lba,
-  //   metas[0]->lba+metas[0]->lba_count);
-  // }
-  if (level != 0) {
-    return;
-  }
-  uint64_t lowest = 0, lowest_res = ranges_[level].first;
-  uint64_t highest = 0, highest_res = ranges_[level].second;
-  bool first = false;
-
-  for (auto n = metas.begin(); n != metas.end(); n++) {
-    if (!first) {
-      lowest = (*n)->number;
-      lowest_res = (*n)->L0.lba;
-      highest = (*n)->number;
-      highest_res = (*n)->L0.lba + (*n)->lba_count;
-      first = true;
-    }
-    if (lowest > (*n)->number) {
-      lowest = (*n)->number;
-      lowest_res = (*n)->L0.lba;
-    }
-    if (highest < (*n)->number) {
-      highest = (*n)->number;
-      highest_res = (*n)->L0.lba + (*n)->lba_count;
-    }
-  }
-  if (first) {
-    *range = std::make_pair(lowest_res, highest_res);
-  } else {
-    *range = std::make_pair(ranges_[level].first, ranges_[level].first);
-  }
-  // TODO: higher levels will need more info.
+  return SpaceRemainingInBytes(level ? 1 : 0) / lba_size_;
 }
 
 size_t ZNSSSTableManager::FindSSTableIndex(
@@ -280,8 +255,8 @@ size_t ZNSSSTableManager::FindSSTableIndex(
 
 std::vector<ZNSDiagnostics> ZNSSSTableManager::IODiagnostics() {
   std::vector<ZNSDiagnostics> diags;
-  for (size_t level = 0; level < ZnsConfig::level_count; level++) {
-    ZNSDiagnostics diag = sstable_level_[level]->GetDiagnostics();
+  for (size_t level = 0; level < 2; level++) {
+    ZNSDiagnostics diag = sstable_level_[level ? 1 : 0]->GetDiagnostics();
     diag.name_ = "L" + std::to_string(level);
     diags.push_back(diag);
   }
@@ -304,29 +279,24 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
   uint64_t distr =
       std::accumulate(ZnsConfig::ss_distribution,
                       ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
-  for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-    zone_step = (num_zones / distr) * ZnsConfig::ss_distribution[i];
-    zone_step = zone_step < ZnsConfig::min_ss_zone_count
-                    ? ZnsConfig::min_ss_zone_count
-                    : zone_step;
-    ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
-    std::cout << std::left << "L" << std::setw(14) << i << std::right
-              << std::setw(25) << ranges[i].first << std::setw(25)
-              << ranges[i].second << "\n";
-    zone_head += zone_step;
-  }
+  zone_step = (num_zones / distr) * ZnsConfig::ss_distribution[0];
+  zone_step = zone_step < ZnsConfig::min_ss_zone_count
+                  ? ZnsConfig::min_ss_zone_count
+                  : zone_step;
+  ranges[0] = std::make_pair(zone_head, zone_step);
+  zone_head += zone_step;
   // Last zone will also get the remainer.
   zone_step = max_zone - zone_head;
-  ranges[ZnsConfig::level_count - 1] =
-      std::make_pair(zone_head, zone_head + zone_step);
-  std::cout << std::left << "L" << std::setw(14) << (ZnsConfig::level_count - 1)
-            << std::right << std::setw(25)
-            << ranges[ZnsConfig::level_count - 1].first << std::setw(25)
-            << ranges[ZnsConfig::level_count - 1].second << "\n";
+  ranges[1] = std::make_pair(zone_head, zone_head + zone_step);
+
+  std::cout << std::left << std::setw(14) << "L0" << std::right << std::setw(27)
+            << ranges[0].first << std::setw(25) << ranges[0].second << "\n";
+  std::cout << std::left << std::setw(14) << "LN" << std::right << std::setw(27)
+            << ranges[1].first << std::setw(25) << ranges[1].second << "\n";
   zone_head += zone_step;
   assert(zone_head == max_zone);
   // Create
   return new ZNSSSTableManager(channel_factory, info, ranges);
-}
+}  // namespace ROCKSDB_NAMESPACE
 
 }  // namespace ROCKSDB_NAMESPACE

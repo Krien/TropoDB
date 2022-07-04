@@ -80,8 +80,9 @@ static int64_t MaxGrandParentOverlapBytes(uint64_t lba_size) {
 bool ZnsCompaction::IsTrivialMove() const {
   // add grandparent stuff level + 2
   // Allow for higher levels...
-  return first_level_ == 0 && targets_[0].size() == 1 &&
-         targets_[1].size() == 0 &&
+  // printf("Compacting on %u: %lu %lu \n", first_level_, targets_[0].size(),
+  //        targets_[1].size());
+  return targets_[0].size() == 1 && targets_[1].size() == 0 &&
          TotalLbas(grandparents_) <=
              MaxGrandParentOverlapBytes(vset_->lba_size_);
 }
@@ -144,7 +145,13 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     uint64_t number = (*base_iter)->number;
     uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
-      edit->RemoveSSDefinition(i + first_level_, *(*base_iter));
+      if (i == 0 && i + first_level_ > 0 && IsTrivialMove()) {
+        // printf("No delete needed %u %u %d \n", i, i + first_level_,
+        // IsTrivialMove());
+        edit->RemoveSSDefinitionOnlyMeta(i + first_level_, *(*base_iter));
+      } else {
+        edit->RemoveSSDefinition(i + first_level_, *(*base_iter));
+      }
       if ((*base_iter)->number < number) {
         number = (*base_iter)->number;
         lba = (*base_iter)->L0.lba;

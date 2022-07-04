@@ -168,7 +168,7 @@ void DBImplZNS::BackgroundCompactionCall() {
   assert(bg_compaction_scheduled_);
   if (!bg_error_.ok()) {
   } else {
-    printf("starting background work\n");
+    // printf("starting background work\n");
     BackgroundCompaction();
   }
   bg_compaction_scheduled_ = false;

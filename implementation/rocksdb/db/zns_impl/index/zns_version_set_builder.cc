@@ -77,8 +77,8 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
 
   // fragmented data
   fragmented_data_.clear();
-  for (auto frag : edit->fragmented_data_) {
-    fragmented_data_.push_back(frag);
+  if (edit->has_fragmented_data_) {
+    fragmented_data_ = edit->fragmented_data_;
   }
 }
 

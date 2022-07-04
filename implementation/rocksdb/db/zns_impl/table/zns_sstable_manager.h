@@ -49,28 +49,24 @@ class ZNSSSTableManager : public RefCounter {
                         const Comparator* cmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
-  Status Recover(const std::vector<std::pair<uint8_t, std::string>>& frag);
-  std::string GetFragmentedLogData(const uint8_t level);
+  Status Recover();
+  Status Recover(const std::string& frag);
+  std::string GetFragmentedLogData();
   // Used for compaction
   double GetFractionFilled(const uint8_t level) const;
   uint64_t SpaceRemaining(const uint8_t level) const;
   uint64_t SpaceRemainingInBytes(const uint8_t level) const;
 
-  // Used for cleaning
-  void GetDefaultRange(const uint8_t level,
-                       std::pair<uint64_t, uint64_t>* range) const;
-  void GetRange(const uint8_t level, const std::vector<SSZoneMetaData*>& metas,
-                std::pair<uint64_t, uint64_t>* range) const;
-  // Utils
-  static size_t FindSSTableIndex(const Comparator* icmp,
+  // util
+  uint64_t GetBytesInLevel(const std::vector<SSZoneMetaData*>& metas);
+  static size_t FindSSTableIndex(const Comparator* cmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
   std::vector<ZNSDiagnostics> IODiagnostics();
 
  private:
-  using RangeArray =
-      std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count>;
-  using SSTableArray = std::array<ZnsSSTable*, ZnsConfig::level_count>;
+  using RangeArray = std::array<std::pair<uint64_t, uint64_t>, 2>;
+  using SSTableArray = std::array<ZnsSSTable*, 2>;
 
   ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);

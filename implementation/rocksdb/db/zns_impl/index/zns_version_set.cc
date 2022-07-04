@@ -187,11 +187,10 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
     }
   }
   // Fragmented logs
-  for (uint8_t level = 1; level < ZnsConfig::level_count; level++) {
-    std::string data = znssstable_->GetFragmentedLogData(level);
-    Slice sdata = Slice(data.data(), data.size());
-    edit.AddFragmentedData(level, sdata);
-  }
+  std::string data = znssstable_->GetFragmentedLogData();
+  Slice sdata = Slice(data.data(), data.size());
+  edit.AddFragmentedData(sdata);
+
   edit.SetLastSequence(last_sequence_);
   edit.EncodeTo(snapshot_dst);
   return Status::OK();
@@ -222,29 +221,36 @@ void ZnsVersionSet::RecalculateScore() {
   ZnsVersion* v = current_;
   uint8_t best_level = ZnsConfig::level_count + 1;
   double best_score = -1;
-  double score;
+  double score = 0;
   // TODO: This is probably a design flaw. This is uninformed and might cause
   // all sorts of holes and early compactions.
   for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-    score = znssstable_->GetFractionFilled(i) /
-            ZnsConfig::ss_compact_treshold_force[i];
-    // not forced, but we might want compaction anyway
-    if (score < 1 &&
-        current_->ss_[i].size() > ZnsConfig::ss_compact_treshold[i]) {
-      score = 1;
+    if (i == 0) {
+      if (znssstable_->GetFractionFilled(0) /
+              ZnsConfig::ss_compact_treshold_force[0] >
+          1) {
+        score = 2;
+      } else if (current_->ss_[i].size() > ZnsConfig::ss_compact_treshold[i]) {
+        score = current_->ss_[i].size() / ZnsConfig::ss_compact_treshold[i];
+      }
+    } else if (static_cast<double>(znssstable_->GetBytesInLevel(
+                   current_->ss_[i])) > ZnsConfig::ss_compact_treshold[i]) {
+      score =
+          static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
+          ZnsConfig::ss_compact_treshold[i];
     } else {
-      // ensures full tables are preferred.
-      score *= 2;
+      score = 0;
     }
     if (score > best_score) {
-      // We have to be carefull... What if the next level is already (close
-      // to) full.
-      if (znssstable_->GetFractionFilled(i + 1) > 0.9) {
-        continue;
-      }
       best_score = score;
       best_level = i;
-      // printf("Score %f from level %d\n", best_score, best_level);
+      if (best_level > 0) {
+        // printf("Score %f from level %d %lu %lu %f \n", best_score,
+        // best_level,
+        //        current_->ss_[i].size(),
+        //        znssstable_->GetBytesInLevel(current_->ss_[i]),
+        //        ZnsConfig::ss_compact_treshold[i]);
+      }
     }
   }
   v->compaction_level_ = best_level;
@@ -616,7 +622,11 @@ Status ZnsVersionSet::Recover() {
   }
 
   // Recover log functionalities for L0 to LN.
-  s = znssstable_->Recover(edit.fragmented_data_);
+  if (edit.has_fragmented_data_) {
+    s = znssstable_->Recover(edit.fragmented_data_);
+  } else {
+    s = znssstable_->Recover();
+  }
 
   // Install recovered edit
   if (s.ok()) {

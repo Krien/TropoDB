@@ -150,7 +150,7 @@ class ZnsVersionSet::Builder {
   };
 
   std::pair<uint64_t, uint64_t> ss_deleted_range_;
-  std::vector<std::pair<uint8_t, Slice>> fragmented_data_;
+  Slice fragmented_data_;
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;
