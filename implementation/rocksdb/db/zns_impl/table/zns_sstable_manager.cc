@@ -111,7 +111,7 @@ Status ZNSSSTableManager::DeleteL0Table(
   if (metas.size() == 0) {
     return Status::OK();
   }
-  return dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])
+  return static_cast<L0ZnsSSTable*>(sstable_level_[0])
       ->TryInvalidateSSZones(metas, remaining_metas);
 }
 
@@ -166,7 +166,7 @@ Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
 }
 
 L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
-  return dynamic_cast<L0ZnsSSTable*>(sstable_level_[0]);
+  return static_cast<L0ZnsSSTable*>(sstable_level_[0]);
 }
 
 Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
@@ -185,7 +185,7 @@ SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
 Status ZNSSSTableManager::Recover() {
   Status s = Status::OK();
   // Recover L0
-  s = dynamic_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
+  s = static_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
   if (!s.ok()) {
     printf("Error recovering L0\n");
   }
@@ -198,7 +198,7 @@ Status ZNSSSTableManager::Recover(const std::string& frag) {
     return s;
   }
   // Recover LN
-  s = dynamic_cast<LNZnsSSTable*>(sstable_level_[1])->Recover(frag);
+  s = static_cast<LNZnsSSTable*>(sstable_level_[1])->Recover(frag);
   if (!s.ok()) {
     printf("Error recovering > L%u \n", 1);
     return s;
@@ -209,7 +209,7 @@ Status ZNSSSTableManager::Recover(const std::string& frag) {
 
 std::string ZNSSSTableManager::GetFragmentedLogData() {
   assert(level > 0);  // L0 does not work!!
-  LNZnsSSTable* table = dynamic_cast<LNZnsSSTable*>(sstable_level_[1]);
+  LNZnsSSTable* table = static_cast<LNZnsSSTable*>(sstable_level_[1]);
   return table->Encode();
 }
 
