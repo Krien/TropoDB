@@ -56,13 +56,20 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                    ZnsConfig::wal_concurrency / N, nullptr
 #endif
         );
+#ifndef WAL_MANAGER_MANAGES_CHANNELS
     std::cout << std::left << "WAL" << std::setw(12) << i << std::right
               << std::setw(25) << wal_walker << std::setw(25)
               << wal_walker + wal_range << "\n";
+#endif
     newwal->Ref();
     wals_[i] = newwal;
     wal_walker += wal_range;
   }
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  std::cout << std::left << "WALS" << std::setw(11) << "" << std::right
+            << std::setw(25) << min_zone_nr << std::setw(25) << max_zone_nr
+            << "\n";
+#endif
 }
 
 template <std::size_t N>
@@ -211,11 +218,51 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
 template <std::size_t N>
 std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
   std::vector<ZNSDiagnostics> diags;
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  ZNSDiagnostics diag;
+  diag.name_ = "WALS";
+  diag.append_operations_counter_ = 0;
+  diag.bytes_written_ = 0;
+  diag.bytes_read_ = 0;
+  diag.read_operations_counter_ = 0;
+  diag.zones_erased_counter_ = 0;
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+    diag.append_operations_counter_ +=
+        write_channels_[i]->GetAppendOperationsCounter();
+    diag.bytes_written_ += write_channels_[i]->GetBytesWritten();
+    if (i == 0) {
+      diag.append_operations_ = write_channels_[i]->GetAppendOperations();
+    } else {
+      std::vector<uint64_t> tmp = write_channels_[i]->GetAppendOperations();
+      std::vector<uint64_t> tmp2 = std::vector<uint64_t>(tmp.size(), 0);
+      std::transform(diag.append_operations_.begin(),
+                     diag.append_operations_.end(), tmp.begin(), tmp2.begin(),
+                     std::plus<uint64_t>());
+      diag.append_operations_ = tmp2;
+    }
+  }
+  for (size_t i = 0; i < N; i++) {
+    ZNSDiagnostics waldiag = wals_[i]->GetDiagnostics();
+    diag.bytes_read_ += waldiag.bytes_read_;
+    diag.read_operations_counter_ += waldiag.read_operations_counter_;
+    diag.zones_erased_counter_ += waldiag.zones_erased_counter_;
+    if (i == 0) {
+      diag.zones_erased_ = waldiag.zones_erased_;
+    } else {
+      std::vector<uint64_t> tmp(diag.zones_erased_);
+      tmp.insert(tmp.end(), waldiag.zones_erased_.begin(),
+                 waldiag.zones_erased_.end());
+      diag.zones_erased_ = tmp;
+    }
+  }
+  diags.push_back(diag);
+#else
   for (size_t i = 0; i < N; i++) {
     ZNSDiagnostics diag = wals_[i]->GetDiagnostics();
     diag.name_ = "WAL" + std::to_string(i);
     diags.push_back(diag);
   }
+#endif
   return diags;
 }
 

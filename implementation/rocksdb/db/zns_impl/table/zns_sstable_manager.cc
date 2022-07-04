@@ -289,10 +289,12 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
   zone_step = max_zone - zone_head;
   ranges[1] = std::make_pair(zone_head, zone_head + zone_step);
 
-  std::cout << std::left << std::setw(14) << "L0" << std::right << std::setw(27)
-            << ranges[0].first << std::setw(25) << ranges[0].second << "\n";
-  std::cout << std::left << std::setw(14) << "LN" << std::right << std::setw(27)
-            << ranges[1].first << std::setw(25) << ranges[1].second << "\n";
+  std::cout << std::left << "L0" << std::setw(13) << "" << std::right
+            << std::setw(25) << ranges[0].first << std::setw(25)
+            << ranges[0].second << "\n";
+  std::cout << std::left << "LN" << std::setw(13) << "" << std::right
+            << std::setw(25) << ranges[1].first << std::setw(25)
+            << ranges[1].second << "\n";
   zone_head += zone_step;
   assert(zone_head == max_zone);
   // Create
