@@ -108,6 +108,7 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
     std::set<uint64_t> live_zones;
     std::vector<SSZoneMetaData*> tmp;
     GetLiveZones(0, live_zones);
+    std::vector<SSZoneMetaData*> new_deleted_ss_l0;
     for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
       SSZoneMetaData* todelete = current_->ss_d_[0][j];
       if (live_zones.count(todelete->number) == 0) {
@@ -115,6 +116,7 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
         //        todelete->L0.lba, todelete->lba_count);
         tmp.push_back(todelete);
       } else {
+        new_deleted_ss_l0.push_back(todelete);
         // printf("we can not delete %lu\n", todelete->number);
         break;
       }
@@ -126,7 +128,6 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
                 [](SSZoneMetaData* a, SSZoneMetaData* b) {
                   return a->number < b->number;
                 });
-      std::vector<SSZoneMetaData*> new_deleted_ss_l0;
       s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
       current_->ss_d_[0].clear();
       current_->ss_d_[0] = new_deleted_ss_l0;
@@ -146,6 +147,8 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
       // printf("  deleting ln %lu \n", current_->ss_d_[i][j]->number);
       SSZoneMetaData* todelete = current_->ss_d_[i][j];
       if (live_zones.count(todelete->number) != 0) {
+        // printf("Alive can not be deleted: %lu \n",
+        // current_->ss_d_[i][j]->number);
         new_deleted.push_back(todelete);
       } else {
         s = znssstable_->DeleteLNTable(i, *todelete);
@@ -451,10 +454,10 @@ bool ZnsVersionSet::OnlyNeedDeletes() {
   uint8_t level = current_->compaction_level_;
   bool only_need = level == 0 ? current_->ss_[level].size() == 0
                               : current_->ss_[level].size() < 3;
-  // if (only_need) {
-  //   printf("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
-  //          current_->ss_d_[level].size());
-  // }
+  if (only_need) {
+    printf("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
+           current_->ss_d_[level].size());
+  }
   return only_need;
 }
 

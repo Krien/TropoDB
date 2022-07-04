@@ -145,7 +145,7 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
     uint64_t number = (*base_iter)->number;
     uint64_t count = 0;
     for (; base_iter != base_end; ++base_iter) {
-      if (i == 0 && i + first_level_ > 0 && IsTrivialMove()) {
+      if (i == 0 && first_level_ > 0 && IsTrivialMove()) {
         // printf("No delete needed %u %u %d \n", i, i + first_level_,
         // IsTrivialMove());
         edit->RemoveSSDefinitionOnlyMeta(i + first_level_, *(*base_iter));

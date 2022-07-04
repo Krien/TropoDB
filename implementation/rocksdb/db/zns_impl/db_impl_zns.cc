@@ -456,8 +456,9 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       s = bg_error_;
       return s;
     }
-    if (allow_delay && versions_->NeedsFlushing()) {
+    if (allow_delay && versions_->NumLevelZones(0) > ZnsConfig::L0_slow_down) {
       mutex_.Unlock();
+      // printf("SlowDown reached...\n");
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
@@ -466,12 +467,14 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
+      // printf("Imm already scheduled\n");
       bg_flush_work_finished_signal_.Wait();
     } else if (versions_->NeedsFlushing()) {
       // printf("waiting for compaction\n");
       MaybeScheduleFlush();
       bg_flush_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
+      // printf("Out of WALs\n");
       bg_flush_work_finished_signal_.Wait();
     } else {
       // create new WAL

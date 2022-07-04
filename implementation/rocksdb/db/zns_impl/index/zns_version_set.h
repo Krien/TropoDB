@@ -73,9 +73,8 @@ class ZnsVersionSet {
 
   bool NeedsFlushing() const {
     return znssstable_->GetFractionFilled(0) /
-                   ZnsConfig::ss_compact_treshold_force[0] >=
-               1 ||
-           current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0];
+               ZnsConfig::ss_compact_treshold_force[0] >=
+           1;
   }
 
   void GetRange(const std::vector<SSZoneMetaData*>& inputs,

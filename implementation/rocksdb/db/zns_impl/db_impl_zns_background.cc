@@ -61,7 +61,7 @@ void DBImplZNS::BGFlushWork(void* db) {
 void DBImplZNS::BackgroundFlushCall() {
   // printf("bg\n");
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  assert(bg_flush_scheduled_);
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
@@ -191,13 +191,11 @@ void DBImplZNS::BackgroundCompaction() {
     mutex_.Unlock();
     return;
   }
-  mutex_.Unlock();
   ZnsVersionEdit edit;
   // This happens when a lot of readers interfere
   if (versions_->OnlyNeedDeletes()) {
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
-    mutex_.Lock();
     s = RemoveObsoleteZones();
     versions_->RecalculateScore();
     if (!s.ok()) {
@@ -206,6 +204,7 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("Only reclaimed\n");
     return;
   } else {
+    mutex_.Unlock();
     // printf("  Compact LN...\n");
     ZnsCompaction* c = versions_->PickCompaction();
     // printf("Picked compact\n");
@@ -223,8 +222,8 @@ void DBImplZNS::BackgroundCompaction() {
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session.
     delete c;
+    mutex_.Lock();
   }
-  mutex_.Lock();
   if (!s.ok()) {
     printf("ERROR during compaction A!!!\n");
     return;
@@ -234,8 +233,12 @@ void DBImplZNS::BackgroundCompaction() {
   // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   // printf("Applied change \n");
+  mutex_.Unlock();
+  mutex_.Lock();
   s = s.ok() ? RemoveObsoleteZones() : s;
   // printf("Removed obsolete zones \n");
+  mutex_.Unlock();
+  mutex_.Lock();
   versions_->RecalculateScore();
   if (!s.ok()) {
     printf("ERROR during compaction!!!\n");

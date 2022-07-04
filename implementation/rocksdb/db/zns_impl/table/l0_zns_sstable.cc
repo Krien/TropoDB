@@ -190,14 +190,14 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   if (metas.size() == 0) {
     return Status::Corruption();
   }
-  remaining_metas.clear();
   SSZoneMetaData* prev = metas[0];
+  SSZoneMetaData* mock = metas[0];
   // GUARANTEE, first deleted is equal to write tail
   if (log_.GetWriteTail() != prev->L0.lba) {
     uint64_t i = 0;
     while (i < metas.size()) {
       SSZoneMetaData* m = metas[i];
-      // printf("Readding %lu \n", m->number);
+      // printf("Readding first %lu \n", m->number);
       remaining_metas.push_back(m);
       i++;
     }
@@ -219,10 +219,12 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
       break;
     }
-    // printf("Deleting %lu \n", m->number);
+    // printf("Deleting %lu %lu %lu\n", m->number, m->L0.lba,
+    //        m->L0.lba + m->lba_count);
     blocks += m->lba_count;
     prev = m;
-    if (blocks > zone_cap_) {
+    if (blocks >= zone_cap_) {
+      mock->number = prev->number;
       blocks_to_delete += blocks;
       upto = i + 1;
       blocks = 0;
@@ -230,11 +232,12 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   }
   if (blocks_to_delete % zone_cap_ != 0) {
     uint64_t safe = (blocks_to_delete / zone_cap_) * zone_cap_;
-    prev->lba_count = blocks_to_delete - safe;
-    blocks_to_delete -= blocks_to_delete - safe;
-    prev->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
-    remaining_metas.push_back(prev);
-    // printf("Mock delete %lu %lu \n", prev->L0.lba, prev->lba_count);
+    mock->lba_count = blocks_to_delete - safe;
+    blocks_to_delete = safe;
+    mock->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
+    remaining_metas.push_back(mock);
+    // printf("Mock delete %lu %lu %lu \n", mock->number, mock->L0.lba,
+    //        mock->lba_count);
   }
   Status s = Status::OK();
   blocks_to_delete = (blocks_to_delete / zone_cap_) * zone_cap_;
@@ -247,7 +250,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   i = upto;
   while (i < metas.size()) {
     SSZoneMetaData* m = metas[i];
-    // printf("Readding %lu \n", m->number);
+    // printf("Readding %lu %lu \n", m->number, m->L0.lba);
     remaining_metas.push_back(m);
     i++;
   }
