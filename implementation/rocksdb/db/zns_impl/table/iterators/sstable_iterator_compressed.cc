@@ -6,12 +6,12 @@
 namespace ROCKSDB_NAMESPACE {
 
 SSTableIteratorCompressed::SSTableIteratorCompressed(
-    const Comparator* comparator, char* data, uint32_t data_size,
-    uint32_t num_restarts)
+    const Comparator* comparator, char* data, uint64_t data_size,
+    uint64_t num_restarts)
     : comparator_(comparator),
       data_(data),
       num_restarts_(num_restarts),
-      kv_pairs_offset_(sizeof(uint32_t) * (num_restarts + 2)),
+      kv_pairs_offset_(sizeof(uint64_t) * (num_restarts + 2)),
       current_(0),
       restart_index_(0),
       data_size_(data_size) {
@@ -20,19 +20,19 @@ SSTableIteratorCompressed::SSTableIteratorCompressed(
 
 SSTableIteratorCompressed::~SSTableIteratorCompressed() { free(data_); }
 
-uint32_t SSTableIteratorCompressed::GetRestartPoint(uint32_t index) {
+uint64_t SSTableIteratorCompressed::GetRestartPoint(uint64_t index) {
   assert(index < num_restarts_);
-  return DecodeFixed32(data_ + (index + 2) * sizeof(uint32_t)) +
+  return DecodeFixed64(data_ + (index + 2) * sizeof(uint64_t)) +
          kv_pairs_offset_;
 }
 
-void SSTableIteratorCompressed::SeekToRestartPoint(uint32_t index) {
+void SSTableIteratorCompressed::SeekToRestartPoint(uint64_t index) {
   key_.clear();
   restart_index_ = index;
   // current_ will be fixed by ParseNextKey();
 
   // ParseNextKey() starts at the end of value_, so set value_ accordingly
-  uint32_t offset = GetRestartPoint(index);
+  uint64_t offset = GetRestartPoint(index);
   value_ = Slice(data_ + offset, 0);
 }
 
@@ -40,7 +40,7 @@ void SSTableIteratorCompressed::Prev() {
   assert(Valid());
 
   // Scan backwards to a restart point before current_
-  const uint32_t original = current_;
+  const uint64_t original = current_;
   while (GetRestartPoint(restart_index_) >= original) {
     if (restart_index_ == 0) {
       // No more entries
@@ -82,8 +82,8 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
   Slice target_ptr_stripped = ExtractUserKey(target);
   // Binary search in restart array to find the last restart point
   // with a key < target
-  uint32_t left = 0;
-  uint32_t right = num_restarts_ - 1;
+  uint64_t left = 0;
+  uint64_t right = num_restarts_ - 1;
 
   int current_key_compare = 0;
 
@@ -104,8 +104,8 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
   }
 
   while (left < right) {
-    uint32_t mid = (left + right + 1) / 2;
-    uint32_t region_offset = GetRestartPoint(mid);
+    uint64_t mid = (left + right + 1) / 2;
+    uint64_t region_offset = GetRestartPoint(mid);
     uint32_t shared, non_shared, value_length;
     const char* key_ptr = ZNSEncoding::DecodeEncodedEntry(
         data_ + region_offset, data_ + data_size_, &shared, &non_shared,
@@ -156,10 +156,10 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
 }
 
 void SSTableIteratorCompressed::CorruptionError() {
+  printf("Corrupt entry in SSTable block %lu/%lu \n", current_, data_size_);
   current_ = data_size_;
   restart_index_ = num_restarts_;
   status_ = Status::Corruption("bad entry in block");
-  printf("Corrupt entry in SSTable block \n");
   key_.clear();
   value_.clear();
 }

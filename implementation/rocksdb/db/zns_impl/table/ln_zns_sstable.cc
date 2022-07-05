@@ -164,14 +164,14 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   }
   char* data = (char*)sstable.data();
   if (ZnsConfig::use_sstable_encoding) {
-    uint32_t size = DecodeFixed32(data);
-    uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    uint64_t size = DecodeFixed64(data);
+    uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0) {
-      printf("SIZE %u COUNT %u \n", size, count);
+      printf("SIZE %lu COUNT %lu \n", size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
-    uint32_t count = DecodeFixed32(data);
+    uint64_t count = DecodeFixed64(data);
     return new SSTableIterator(data, sstable.size(), (size_t)count,
                                &ZNSEncoding::ParseNextNonEncoded, cmp);
   }

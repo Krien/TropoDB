@@ -16,6 +16,7 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_table_cache.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
+#include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -43,7 +44,7 @@ class ZnsVersionSet {
   void GetLiveZones(const uint8_t level, std::set<uint64_t>& live);
   void GetSaveDeleteRange(const uint8_t level,
                           std::pair<uint64_t, uint64_t>* range);
-  Status ReclaimStaleSSTables();
+  Status ReclaimStaleSSTables(port::Mutex* mutex_, port::CondVar* cond);
 
   inline ZnsVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }

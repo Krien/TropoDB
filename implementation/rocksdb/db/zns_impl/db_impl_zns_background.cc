@@ -260,7 +260,7 @@ void DBImplZNS::BackgroundCompaction() {
 Status DBImplZNS::RemoveObsoleteZones() {
   mutex_.AssertHeld();
   Status s = Status::OK();
-  s = versions_->ReclaimStaleSSTables();
+  s = versions_->ReclaimStaleSSTables(&mutex_, &bg_work_finished_signal_);
   if (!s.ok()) {
     printf("error reclaiming \n");
     return s;

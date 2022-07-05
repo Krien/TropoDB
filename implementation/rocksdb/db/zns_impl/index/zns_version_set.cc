@@ -10,6 +10,7 @@
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -97,7 +98,8 @@ void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
   }
 }
 
-Status ZnsVersionSet::ReclaimStaleSSTables() {
+Status ZnsVersionSet::ReclaimStaleSSTables(port::Mutex* mutex_,
+                                           port::CondVar* cond) {
   // printf("reclaiming....\n");
   Status s = Status::OK();
   ZnsVersionEdit edit;
@@ -128,13 +130,16 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
                 [](SSZoneMetaData* a, SSZoneMetaData* b) {
                   return a->number < b->number;
                 });
+      mutex_->Unlock();
       s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
+      mutex_->Lock();
       current_->ss_d_[0].clear();
       current_->ss_d_[0] = new_deleted_ss_l0;
       if (!s.ok()) {
         printf("error reclaiming L0\n");
         return s;
       }
+      cond->SignalAll();
     } else {
     }
   }
@@ -142,6 +147,7 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
     std::set<uint64_t> live_zones;
     std::vector<SSZoneMetaData*> new_deleted;
+    std::vector<SSZoneMetaData*> to_delete;
     GetLiveZones(i, live_zones);
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
       // printf("  deleting ln %lu \n", current_->ss_d_[i][j]->number);
@@ -151,13 +157,18 @@ Status ZnsVersionSet::ReclaimStaleSSTables() {
         // current_->ss_d_[i][j]->number);
         new_deleted.push_back(todelete);
       } else {
-        s = znssstable_->DeleteLNTable(i, *todelete);
-        if (!s.ok()) {
-          printf("Error deleting ln table \n");
-          return s;
-        }
+        to_delete.push_back(todelete);
       }
     }
+    mutex_->Unlock();
+    for (auto del : to_delete) {
+      s = znssstable_->DeleteLNTable(i, *del);
+      if (!s.ok()) {
+        printf("Error deleting ln table \n");
+        return s;
+      }
+    }
+    mutex_->Lock();
     current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);
