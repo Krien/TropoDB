@@ -116,13 +116,13 @@ Status DBImplZNS::CompactMemtable() {
     SSZoneMetaData meta;
 
     ZnsVersion* current = versions_->current();
-    current->Ref();
+    // current->Ref();
 
     meta.number = versions_->NewSSNumber();
     mutex_.Unlock();
     s = FlushL0SSTables(&meta);
     mutex_.Lock();
-    current->Unref();
+    // current->Unref();
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
       edit.AddSSDefinition(level, meta);
@@ -191,7 +191,7 @@ void DBImplZNS::BackgroundCompaction() {
   Status s;
 
   ZnsVersion* current = versions_->current();
-  current->Ref();
+  // current->Ref();
 
   // Compaction itself does not require a lock. only once the changes become
   // visible.
@@ -213,6 +213,7 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   } else {
     ZnsCompaction* c = versions_->PickCompaction();
+    current->Ref();
     mutex_.Unlock();
     // printf("  Compact LN...\n");
     // printf("Picked compact\n");
@@ -227,6 +228,7 @@ void DBImplZNS::BackgroundCompaction() {
       s = c->DoCompaction(&edit);
       // printf("\t\tnormal compaction\n");
     }
+    current->Unref();
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session.
     delete c;
@@ -238,7 +240,7 @@ void DBImplZNS::BackgroundCompaction() {
   }
   // Diag
   compactions_[current->CompactionLevel()]++;
-  current->Unref();
+  // current->Unref();
   // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   // printf("Applied change \n");

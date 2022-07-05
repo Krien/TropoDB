@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -25,18 +26,61 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
     : channel_factory_(channel_factory),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr, number_of_writers,
            borrowed_write_channel),
-      committer_(&log_, info, false) {
+      committer_(&log_, info, false),
+#ifdef WAL_BUFFERED
+      buffered_(ZnsConfig::use_write_buffering),
+      buffsize_(info.zasl),
+      buf_(0),
+      pos_(0)
+#endif
+{
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
+#ifdef WAL_BUFFERED
+  if (buffered_) {
+    buf_ = (char*)calloc(buffsize_, 1);
+  }
+#endif
 }
 
 ZNSWAL::~ZNSWAL() {
   Sync();
   // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
   channel_factory_->Unref();
+#ifdef WAL_BUFFERED
+  if (buffered_) {
+    free(buf_);
+  }
+#endif
 }
 
-Status ZNSWAL::DirectAppend(const Slice& data, uint64_t seq) {
+Status ZNSWAL::BufferedAppend(const Slice& data) {
+  Status s = Status::OK();
+  size_t sizeleft = buffsize_ - pos_;
+  size_t sizeneeded = data.size();
+  if (sizeneeded < sizeleft) {
+    memcpy(buf_ + pos_, data.data(), sizeneeded);
+    pos_ += sizeneeded;
+  } else {
+    if (pos_ != 0) {
+      s = DirectAppend(Slice(buf_, pos_));
+      pos_ = 0;
+    }
+    if (s.ok()) {
+      s = DirectAppend(data);
+    }
+  }
+  return s;
+}
+
+Status ZNSWAL::DirectAppend(const Slice& data) {
+  Status s =
+      FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
+  // committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint64_t)));
+  return s;
+}
+
+Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
   char buf[data.size() + 2 * sizeof(uint32_t)];
   std::memcpy(buf + 2 * sizeof(uint64_t), data.data(), data.size());
   EncodeFixed64(buf, data.size());
@@ -44,12 +88,32 @@ Status ZNSWAL::DirectAppend(const Slice& data, uint64_t seq) {
   std::string out;
   Status s = committer_.CommitToString(
       Slice(buf, data.size() + 2 * sizeof(uint64_t)), &out);
-  s = FromStatus(log_.AsyncAppend(out.data(), out.size(), nullptr, true));
-  // committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint64_t)));
+  if (!s.ok()) {
+    return s;
+  }
+#ifdef WAL_BUFFERED
+  if (buffered_) {
+    return BufferedAppend(Slice(out));
+  }
+#endif
+  return DirectAppend(Slice(out));
+}
+
+Status ZNSWAL::DataSync() {
+  Status s = Status::OK();
+  if (pos_ != 0) {
+    s = DirectAppend(Slice(buf_, pos_));
+    pos_ = 0;
+  }
   return s;
 }
 
-Status ZNSWAL::Sync() { return FromStatus(log_.Sync()); }
+Status ZNSWAL::Sync() {
+#ifdef WAL_BUFFERED
+  DataSync();
+#endif
+  return FromStatus(log_.Sync());
+}
 
 Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   Status s = Status::OK();

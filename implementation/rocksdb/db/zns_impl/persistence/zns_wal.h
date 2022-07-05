@@ -3,6 +3,8 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
+#define WAL_BUFFERED
+
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -28,7 +30,13 @@ class ZNSWAL : public RefCounter {
   ZNSWAL& operator=(const ZNSWAL&) = delete;
   ~ZNSWAL();
 
-  Status DirectAppend(const Slice& data, uint64_t seq);
+#ifdef WAL_BUFFERED
+  Status DataSync();
+  Status BufferedAppend(const Slice& data);
+#endif
+  Status DirectAppend(const Slice& data);
+
+  Status Append(const Slice& data, uint64_t seq);
   Status Sync();
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
 
@@ -45,7 +53,11 @@ class ZNSWAL : public RefCounter {
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline bool SpaceLeft(const Slice& data) {
+#ifdef WAL_BUFFERED
+    return log_.SpaceLeft(data.size() + pos_);
+#else
     return log_.SpaceLeft(data.size());
+#endif
   }
   inline ZNSDiagnostics GetDiagnostics() const {
     struct ZNSDiagnostics diag = {
@@ -63,15 +75,18 @@ class ZNSWAL : public RefCounter {
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
  private:
-  // buffer
-  // const size_t buffsize_;
-  // WriteBatch batch_;
-  // char* buf_;
-  // size_t pos_;
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;
   ZnsCommitter committer_;
+#ifdef WAL_BUFFERED
+  // buffer
+  bool buffered_;
+  const size_t buffsize_;
+  // WriteBatch batch_;
+  char* buf_;
+  size_t pos_;
+#endif
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

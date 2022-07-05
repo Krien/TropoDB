@@ -193,6 +193,9 @@ DBImplZNS::~DBImplZNS() {
       bg_flush_work_finished_signal_.Wait();
     }
   }
+  if (wal_ != nullptr) {
+    wal_->Sync();
+  }
   mutex_.Unlock();
 
   IODiagnostics();
@@ -578,11 +581,11 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       //        max_write_buffer_size_,
       //        WriteBatchInternal::Contents(write_batch).size());
       if (!options.sync) {
-        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
-                               last_sequence + 1);
+        s = wal_->Append(WriteBatchInternal::Contents(write_batch),
+                         last_sequence + 1);
       } else {
-        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
-                               last_sequence + 1);
+        s = wal_->Append(WriteBatchInternal::Contents(write_batch),
+                         last_sequence + 1);
         s = wal_->Sync();
       }
       // write to memtable
