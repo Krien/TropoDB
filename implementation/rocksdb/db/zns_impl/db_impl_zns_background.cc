@@ -114,10 +114,15 @@ Status DBImplZNS::CompactMemtable() {
   {
     ZnsVersionEdit edit;
     SSZoneMetaData meta;
+
+    ZnsVersion* current = versions_->current();
+    current->Ref();
+
     meta.number = versions_->NewSSNumber();
     mutex_.Unlock();
     s = FlushL0SSTables(&meta);
     mutex_.Lock();
+    current->Unref();
     int level = 0;
     if (s.ok() && meta.lba_count > 0) {
       edit.AddSSDefinition(level, meta);
@@ -185,9 +190,12 @@ void DBImplZNS::BackgroundCompaction() {
   mutex_.AssertHeld();
   Status s;
 
+  ZnsVersion* current = versions_->current();
+  current->Ref();
+
   // Compaction itself does not require a lock. only once the changes become
   // visible.
-  if (versions_->current()->CompactionLevel() >= ZnsConfig::level_count) {
+  if (current->CompactionLevel() >= ZnsConfig::level_count) {
     mutex_.Unlock();
     return;
   }
@@ -204,9 +212,9 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("Only reclaimed\n");
     return;
   } else {
+    ZnsCompaction* c = versions_->PickCompaction();
     mutex_.Unlock();
     // printf("  Compact LN...\n");
-    ZnsCompaction* c = versions_->PickCompaction();
     // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
     // printf("marked reusable\n");
@@ -229,7 +237,8 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   // Diag
-  compactions_[versions_->current()->CompactionLevel()]++;
+  compactions_[current->CompactionLevel()]++;
+  current->Unref();
   // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
   // printf("Applied change \n");
