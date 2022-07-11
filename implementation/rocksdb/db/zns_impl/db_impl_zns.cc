@@ -478,7 +478,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       MaybeScheduleFlush();
       bg_flush_work_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {
-      // printf("Out of WALs\n");
+      printf("Out of WALs\n");
       bg_flush_work_finished_signal_.Wait();
     } else {
       // create new WAL
@@ -487,6 +487,14 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       wal_->Unref();
       s = wal_man_->NewWAL(&mutex_, &wal_);
       wal_->Ref();
+#ifdef WALPerfTest
+      // Drop all that was in the memtable (NOT PERSISTENT!)
+      mem_->Unref();
+      mem_ = new ZNSMemTable(options_, internal_comparator_,
+                             max_write_buffer_size_);
+      mem_->Ref();
+      env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+#else
       // printf("Reset WAL\n");
       // Switch to fresh memtable
       imm_ = mem_;
@@ -494,6 +502,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
                              max_write_buffer_size_);
       mem_->Ref();
       MaybeScheduleFlush();
+#endif
     }
   }
   return Status::OK();

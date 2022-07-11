@@ -11,6 +11,8 @@
 #ifndef DB_IMPL_ZNS_H
 #define DB_IMPL_ZNS_H
 
+#define WALPerfTest
+
 #include <atomic>
 #include <deque>
 #include <functional>

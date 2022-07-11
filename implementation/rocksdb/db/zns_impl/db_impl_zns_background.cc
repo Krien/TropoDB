@@ -62,6 +62,11 @@ void DBImplZNS::BackgroundFlushCall() {
   // printf("bg\n");
   MutexLock l(&mutex_);
   assert(bg_flush_scheduled_);
+#ifdef WALPerfTest
+  wal_man_->ResetOldWALs(&mutex_);
+  bg_flush_work_finished_signal_.SignalAll();
+  return;
+#endif
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
