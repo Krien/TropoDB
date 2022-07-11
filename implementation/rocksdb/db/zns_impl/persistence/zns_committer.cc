@@ -43,24 +43,31 @@ ZnsCommitter::~ZnsCommitter() {
   delete[] read_buffer_;
 }
 
-bool ZnsCommitter::SpaceEnough(const Slice& data) const {
-  size_t fragcount = data.size() / lba_size_ + 1;
-  size_t size_needed = fragcount * kZnsHeaderSize + data.size();
+size_t ZnsCommitter::SpaceNeeded(size_t data_size) const {
+  size_t fragcount = data_size / lba_size_ + 1;
+  size_t size_needed = fragcount * kZnsHeaderSize + data_size;
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
-  return log_->SpaceLeft(size_needed);
+  return size_needed;
 }
 
-Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
+bool ZnsCommitter::SpaceEnough(size_t size) const {
+  return log_->SpaceLeft(SpaceNeeded(size));
+}
+
+bool ZnsCommitter::SpaceEnough(const Slice& data) const {
+  return SpaceEnough(data.size());
+}
+
+Status ZnsCommitter::CommitToCharArray(const Slice& in, char** out) {
+  assert(out != nullptr);
   Status s = Status::OK();
   const char* ptr = in.data();
   size_t walker = 0;
   size_t left = in.size();
 
-  size_t fragcount = in.size() / lba_size_ + 1;
-  size_t size_needed = fragcount * kZnsHeaderSize + in.size();
-  size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
-
-  char fragment[size_needed];
+  size_t size_needed = SpaceNeeded(left);
+  *out = new char[size_needed];
+  char* fragment = *out;
 
   bool begin = true;
   do {
@@ -102,7 +109,6 @@ Status ZnsCommitter::CommitToString(const Slice& in, std::string* out) {
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-  out->append(fragment, size_needed);
   return s;
 }
 
@@ -323,6 +329,7 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
   }
   return false;
 }
+
 bool ZnsCommitter::CloseCommit(ZnsCommitReader& reader) {
   if (!keep_buffer_) {
     read_buffer_[reader.reader_nr]->FreeBuffer();
@@ -330,4 +337,94 @@ bool ZnsCommitter::CloseCommit(ZnsCommitReader& reader) {
   reader.scratch.clear();
   return true;
 }
+
+Status ZnsCommitter::GetCommitReaderString(std::string* in,
+                                           ZnsCommitReaderString* reader) {
+  reader->commit_start = 0;
+  reader->commit_end = in->size();
+  reader->commit_ptr = reader->commit_start;
+  reader->in = in;
+  reader->scratch = ZnsConfig::deadbeef;
+  return Status::OK();
+}
+
+bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
+                                          Slice* record) {
+  if (reader.commit_ptr >= reader.commit_end) {
+    return false;
+  }
+  reader.scratch.clear();
+  record->clear();
+  bool in_fragmented_record = false;
+
+  while (reader.commit_ptr < reader.commit_end &&
+         reader.commit_ptr >= reader.commit_start) {
+    const size_t to_read = (reader.commit_end - reader.commit_ptr) > lba_size_
+                               ? lba_size_
+                               : (reader.commit_end - reader.commit_ptr);
+    // parse header
+    const char* header = reader.in->data() + reader.commit_ptr;
+    const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
+    const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
+    const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
+    const uint32_t d = static_cast<uint32_t>(header[7]);
+    ZnsRecordType type = d > kZnsRecordTypeLast ? ZnsRecordType::kInvalid
+                                                : static_cast<ZnsRecordType>(d);
+    const uint32_t length = a | (b << 8) | (c << 16);
+    // TODO: we need better error handling at some point than setting to wrong
+    // tag.
+    if (kZnsHeaderSize + length > to_read) {
+      type = ZnsRecordType::kInvalid;
+    }
+    // Validate CRC
+    {
+      uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
+      uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
+      if (actual_crc != expected_crc) {
+        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
+               reader.commit_end);
+        type = ZnsRecordType::kInvalid;
+      }
+    }
+    reader.commit_ptr +=
+        ((length + kZnsHeaderSize + lba_size_ - 1) / lba_size_) * lba_size_;
+    // printf("Commit ptr %lu %lu \n", reader.commit_ptr, reader.commit_end);
+    switch (type) {
+      case ZnsRecordType::kFullType:
+        reader.scratch.assign(header + kZnsHeaderSize, length);
+        *record = Slice(reader.scratch);
+        return true;
+      case ZnsRecordType::kFirstType:
+        reader.scratch.assign(header + kZnsHeaderSize, length);
+        in_fragmented_record = true;
+        break;
+      case ZnsRecordType::kMiddleType:
+        if (!in_fragmented_record) {
+        } else {
+          reader.scratch.append(header + kZnsHeaderSize, length);
+        }
+        break;
+      case ZnsRecordType::kLastType:
+        if (!in_fragmented_record) {
+        } else {
+          reader.scratch.append(header + kZnsHeaderSize, length);
+          *record = Slice(reader.scratch);
+          return true;
+        }
+        break;
+      default:
+        in_fragmented_record = false;
+        reader.scratch.clear();
+        return false;
+        break;
+    }
+  }
+  return false;
+}
+
+bool ZnsCommitter::CloseCommitString(ZnsCommitReaderString& reader) {
+  reader.scratch.clear();
+  return true;
+}
+
 }  // namespace ROCKSDB_NAMESPACE

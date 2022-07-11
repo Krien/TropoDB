@@ -329,7 +329,7 @@ Status DBImplZNS::InitWAL() {
     MaybeScheduleFlush();
     MaybeScheduleCompaction(true);
     while (!wal_man_->WALAvailable()) {
-      bg_work_finished_signal_.Wait();
+      bg_flush_work_finished_signal_.Wait();
     }
   }
   wal_ = wal_man_->GetCurrentWAL(&mutex_);

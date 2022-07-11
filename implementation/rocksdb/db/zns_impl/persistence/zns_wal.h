@@ -3,7 +3,8 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
-#define WAL_BUFFERED
+//#define WAL_BUFFERED
+#define WAL_UNORDERED
 
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
@@ -31,33 +32,46 @@ class ZNSWAL : public RefCounter {
   ~ZNSWAL();
 
 #ifdef WAL_BUFFERED
+  // Sync buffer from heap to I/O
   Status DataSync();
+  // Append data to buffer or I/O if it is full
   Status BufferedAppend(const Slice& data);
 #endif
+  // Append data to storage (does not guarantee persistence)
   Status DirectAppend(const Slice& data);
-
+  // Append data to WAL
   Status Append(const Slice& data, uint64_t seq);
+  // Ensure WAL in heap buffer/DMA buffer is persisted to storage
   Status Sync();
+// Replay all changes present in this WAL to the memtable
+#ifdef WAL_UNORDERED
+  Status ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq);
+#else
+  Status ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq);
+#endif
   Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
-
-  // OBSOLETE, uses memory buffer, which we do not want
-  // Status ObsoleteDirectAppend(const Slice& data);
-  // Status ObsoleteAppend(const Slice& data);
-  // Status ObsoleteSync();
-  // Status ObsoleteReplay(ZNSMemTable* mem, SequenceNumber* seq);
-
+  // Closes the WAL gracefully (sync, free buffers)
   Status Close();
 
-  inline Status Reset() { return FromStatus(log_.ResetAll()); }
+  inline Status Reset() {
+    Status s = FromStatus(log_.ResetAll());
+#ifdef WAL_UNORDERED
+    sequence_nr_ = 0;
+#endif
+    return s;
+  }
   inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
-  inline bool SpaceLeft(const Slice& data) {
+  inline size_t SpaceNeeded(const Slice& data) {
 #ifdef WAL_BUFFERED
-    return log_.SpaceLeft(data.size() + pos_);
+    return committer_.SpaceNeeded(data.size() + pos_ + 2 * sizeof(uint64_t));
 #else
-    return log_.SpaceLeft(data.size());
+    return committer_.SpaceNeeded(data.size() + 2 * sizeof(uint64_t));
 #endif
+  }
+  inline bool SpaceLeft(const Slice& data) {
+    return committer_.SpaceEnough(SpaceNeeded(data));
   }
   inline ZNSDiagnostics GetDiagnostics() const {
     struct ZNSDiagnostics diag = {
@@ -71,7 +85,6 @@ class ZNSWAL : public RefCounter {
         .append_operations_ = log_.GetAppendOperations()};
     return diag;
   }
-
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
  private:
@@ -83,11 +96,19 @@ class ZNSWAL : public RefCounter {
   // buffer
   bool buffered_;
   const size_t buffsize_;
-  // WriteBatch batch_;
   char* buf_;
   size_t pos_;
+#endif
+#ifdef WAL_UNORDERED
+  uint32_t sequence_nr_;
 #endif
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif
 #endif
+
+// OBSOLETE, uses memory buffer, which we do not want
+// Status ObsoleteDirectAppend(const Slice& data);
+// Status ObsoleteAppend(const Slice& data);
+// Status ObsoleteSync();
+// Status ObsoleteReplay(ZNSMemTable* mem, SequenceNumber* seq);
