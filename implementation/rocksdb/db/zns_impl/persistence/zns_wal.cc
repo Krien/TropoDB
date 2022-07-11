@@ -43,7 +43,8 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
       ,
       sequence_nr_(0)
 #endif
-{
+      ,
+      clock_(SystemClock::Default().get()) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
 #ifdef WAL_BUFFERED
@@ -95,12 +96,18 @@ Status ZNSWAL::DataSync() {
 #endif
 
 Status ZNSWAL::DirectAppend(const Slice& data) {
+  uint64_t before = clock_->NowMicros();
   Status s =
       FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
+  uint64_t value = clock_->NowMicros() - before;
+  num_ += 1;
+  sum_ += value;
+  sum_squares_ += value * value;
   return s;
 }
 
 Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
+  uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
   size_t space_needed = SpaceNeeded(data);
   char* out;
@@ -132,6 +139,9 @@ Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
   }
 #endif
   delete[] out;
+  uint64_t value = clock_->NowMicros() - before;
+  sum_total_ += value;
+  sum_squares_total_ += value * value;
   return s;
 }
 
@@ -264,11 +274,15 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
 #endif
 
 Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
+  Status s = Status::OK();
+  uint64_t before = clock_->NowMicros();
 #ifdef WAL_UNORDERED
-  return ReplayUnordered(mem, seq);
+  s = ReplayUnordered(mem, seq);
 #else
-  return ReplayOrdered(mem, seq);
+  s = ReplayOrdered(mem, seq);
 #endif
+  replay_time_ = clock_->NowMicros() - before;
+  return s;
 }
 
 Status ZNSWAL::Close() {

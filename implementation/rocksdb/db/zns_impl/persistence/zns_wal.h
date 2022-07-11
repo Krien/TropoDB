@@ -54,13 +54,23 @@ class ZNSWAL : public RefCounter {
   Status Close();
 
   inline Status Reset() {
+    uint64_t before = clock_->NowMicros();
     Status s = FromStatus(log_.ResetAll());
 #ifdef WAL_UNORDERED
     sequence_nr_ = 0;
 #endif
+    uint64_t value = clock_->NowMicros() - before;
+    reset_nummers_ += 1;
+    reset_time_ += value;
+    reset_time_squares_ += value * value;
     return s;
   }
-  inline Status Recover() { return FromStatus(log_.RecoverPointers()); }
+  inline Status Recover() {
+    uint64_t before = clock_->NowMicros();
+    Status s = FromStatus(log_.RecoverPointers());
+    recovery_time_ = clock_->NowMicros() - before;
+    return s;
+  }
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline size_t SpaceNeeded(const Slice& data) {
@@ -87,6 +97,22 @@ class ZNSWAL : public RefCounter {
   }
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
+  // Timing
+  inline uint64_t TimeSpendWaitingOnStorage() { return sum_; }
+  inline uint64_t TimeSpendWaitingOnStorageSquared() { return sum_squares_; }
+  inline uint64_t TimeSpendWaitingOnStorageTotal() { return sum_total_; }
+  inline uint64_t TimeSpendWaitingOnStorageSquaredTotal() {
+    return sum_squares_total_;
+  }
+  inline uint64_t TimeSpendWaitingOnStorageNumber() { return num_; }
+  inline uint64_t TimeSpendWaitingOnResets() { return reset_time_; }
+  inline uint64_t TimeSpendWaitingOnResetsSquared() {
+    return reset_time_squares_;
+  }
+  inline uint64_t TimeSpendWaitingOnResetsNumber() { return reset_nummers_; }
+  inline uint64_t TimeSpendReplaying() { return replay_time_; }
+  inline uint64_t TimeSpendRecovering() { return recovery_time_; }
+
  private:
   // references
   SZD::SZDChannelFactory* channel_factory_;
@@ -102,6 +128,19 @@ class ZNSWAL : public RefCounter {
 #ifdef WAL_UNORDERED
   uint32_t sequence_nr_;
 #endif
+
+  // Timing
+  SystemClock* const clock_;
+  uint64_t num_{0};
+  uint64_t sum_{0};
+  uint64_t sum_squares_{0};
+  uint64_t sum_total_{0};
+  uint64_t sum_squares_total_{0};
+  uint64_t replay_time_{0};
+  uint64_t recovery_time_{0};
+  uint64_t reset_time_{0};
+  uint64_t reset_time_squares_{0};
+  uint64_t reset_nummers_{0};
 };
 }  // namespace ROCKSDB_NAMESPACE
 #endif

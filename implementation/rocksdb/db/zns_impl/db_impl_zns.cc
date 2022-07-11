@@ -120,6 +120,7 @@ void DBImplZNS::IODiagnostics() {
   }
   std::cout << "SSTable layout: \n";
   std::cout << versions_->DebugString();
+  wal_man_->PrintAdditionalWALStatistics();
   std::cout << "==== raw IO metrics ==== \n";
   std::cout << std::left << std::setw(10) << "Metric " << std::right
             << std::setw(15) << "Append (ops)" << std::setw(25)
@@ -548,6 +549,7 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
 
 Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s;
+  PERF_TIMER_GUARD(zns_wal_direct_append_time);
 
   Writer w(&mutex_);
   w.batch = updates;
@@ -618,6 +620,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   if (!writers_.empty()) {
     writers_.front()->cv.Signal();
   }
+  PERF_TIMER_STOP(zns_wal_direct_append_time);
 
   return s;
 }

@@ -44,7 +44,7 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
   channel_factory_->Ref();
   for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
     channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
-                                       max_zone_nr);
+                                       max_zone_nr, true);
   }
 #endif
   for (size_t i = 0; i < N; ++i) {
@@ -241,6 +241,7 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
       diag.append_operations_ = tmp2;
     }
   }
+
   for (size_t i = 0; i < N; i++) {
     ZNSDiagnostics waldiag = wals_[i]->GetDiagnostics();
     diag.bytes_read_ += waldiag.bytes_read_;
@@ -264,6 +265,78 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
   }
 #endif
   return diags;
+}
+
+template <std::size_t N>
+void ZnsWALManager<N>::PrintAdditionalWALStatistics() {
+  uint64_t time_waiting_storage = 0;
+  uint64_t time_waiting_storage_squared = 0;
+  uint64_t time_waiting_storage_total = 0;
+  uint64_t time_waiting_storage_squared_total = 0;
+  uint64_t time_waiting_storage_number = 0;
+  uint64_t time_spent_replaying = 0;
+  uint64_t time_spend_recovering = 0;
+  uint64_t time_waiting_resets = 0;
+  uint64_t time_waiting_resets_numbers = 0;
+  uint64_t time_waiting_resets_squares = 0;
+
+  for (size_t i = 0; i < N; i++) {
+    time_waiting_storage += wals_[i]->TimeSpendWaitingOnStorage();
+    time_waiting_storage_squared +=
+        wals_[i]->TimeSpendWaitingOnStorageSquared();
+    time_waiting_storage_total += wals_[i]->TimeSpendWaitingOnStorageTotal();
+    time_waiting_storage_squared_total +=
+        wals_[i]->TimeSpendWaitingOnStorageSquaredTotal();
+    time_waiting_storage_number += wals_[i]->TimeSpendWaitingOnStorageNumber();
+    time_spent_replaying += wals_[i]->TimeSpendReplaying();
+    time_spend_recovering += wals_[i]->TimeSpendRecovering();
+    time_waiting_resets += wals_[i]->TimeSpendWaitingOnResets();
+    time_waiting_resets_numbers += wals_[i]->TimeSpendWaitingOnResetsNumber();
+    time_waiting_resets_squares += wals_[i]->TimeSpendWaitingOnResetsSquared();
+  }
+  double avg = static_cast<double>(time_waiting_storage) /
+               static_cast<double>(time_waiting_storage_number);
+  double variance =
+      std::sqrt(static_cast<double>(
+                    time_waiting_storage_squared * time_waiting_storage_number -
+                    time_waiting_storage * time_waiting_storage) /
+                static_cast<double>(time_waiting_storage_number *
+                                    time_waiting_storage_number));
+  printf("WAL statistics: \n");
+  printf(
+      "\tWAL operations on storage: %lu, AVG time (μs): %.4f, StdDev (μs): "
+      "%.2f \n",
+      time_waiting_storage_number, avg, variance);
+
+  avg = static_cast<double>(time_waiting_storage_total) /
+        static_cast<double>(time_waiting_storage_number);
+  variance = std::sqrt(
+      static_cast<double>(
+          time_waiting_storage_squared_total * time_waiting_storage_number -
+          time_waiting_storage_total * time_waiting_storage_total) /
+      static_cast<double>(time_waiting_storage_number *
+                          time_waiting_storage_number));
+  printf(
+      "\tWAL operations total: %lu, AVG time (μs) %.4f, StdDev (μs): %.2f \n",
+      time_waiting_storage_number, avg, variance);
+
+  avg = static_cast<double>(time_waiting_resets) /
+        static_cast<double>(time_waiting_resets_numbers);
+  variance =
+      std::sqrt(static_cast<double>(time_waiting_resets_squares *
+                                        time_waiting_resets_numbers -
+                                    time_waiting_resets * time_waiting_resets) /
+                static_cast<double>(time_waiting_resets_numbers *
+                                    time_waiting_resets_numbers));
+  printf(
+      "\tWAL reset operations total: %lu, AVG time (μs) %.4f, StdDev (μs): "
+      "%.2f \n",
+      time_waiting_resets_numbers, avg, variance);
+
+  printf(
+      "\tWAL time spent on replaying (μs): %lu, recovering zone heads (μs): "
+      "%lu \n",
+      time_spent_replaying, time_spend_recovering);
 }
 
 }  // namespace ROCKSDB_NAMESPACE
