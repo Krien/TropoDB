@@ -3,6 +3,8 @@
 #ifndef ZNS_SSTABLE_MANAGER_H
 #define ZNS_SSTABLE_MANAGER_H
 
+#include <optional>
+
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"

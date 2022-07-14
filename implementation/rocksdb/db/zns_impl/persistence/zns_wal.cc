@@ -74,12 +74,24 @@ Status ZNSWAL::BufferedAppend(const Slice& data) {
     memcpy(buf_ + pos_, data.data(), sizeneeded);
     pos_ += sizeneeded;
   } else {
+    // Flush stale buffer
     if (pos_ != 0) {
-      s = DirectAppend(Slice(buf_, pos_));
+      char buf_copy_[pos_];
+      memcpy(buf_copy_, buf_, pos_);
+      s = DirectAppend(Slice(buf_copy_, pos_));
       pos_ = 0;
     }
-    if (s.ok()) {
+    if (!s.ok()) {
+      return s;
+    }
+    // If data simply is larger than buffer, we should flush directly
+    // else append to clean buffer
+    sizeleft = buffsize_ - pos_;
+    if (sizeneeded < sizeleft) {
       s = DirectAppend(data);
+    } else {
+      memcpy(buf_ + pos_, data.data(), sizeneeded);
+      pos_ += sizeneeded;
     }
   }
   return s;
@@ -96,6 +108,7 @@ Status ZNSWAL::DataSync() {
 #endif
 
 Status ZNSWAL::DirectAppend(const Slice& data) {
+  // printf("Data size %lu \n", data.size());
   uint64_t before = clock_->NowMicros();
   Status s =
       FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
@@ -140,6 +153,7 @@ Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
 #endif
   delete[] out;
   uint64_t value = clock_->NowMicros() - before;
+  num_total_ += 1;
   sum_total_ += value;
   sum_squares_total_ += value * value;
   return s;
@@ -297,7 +311,8 @@ Status ZNSWAL::Close() {
 //   EncodeFixed32(buf, data.size() + sizeof(uint32_t));
 //   EncodeFixed32(buf + data.size() + sizeof(uint32_t), 0);
 //   Status s =
-//       committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint32_t)));
+//       committer_.SafeCommit(Slice(buf, data.size() + 2 *
+//       sizeof(uint32_t)));
 //   // printf("Tail %lu Head %lu \n", log_.GetWriteTail(),
 //   log_.GetWriteHead()); return s;
 // }
@@ -379,8 +394,10 @@ Status ZNSWAL::Close() {
 //         break;
 //       }
 //       // Ensure the sequence number is up to date.
-//       const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
-//                                       WriteBatchInternal::Count(&batch) - 1;
+//       const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch)
+//       +
+//                                       WriteBatchInternal::Count(&batch) -
+//                                       1;
 //       if (last_seq > *seq) {
 //         *seq = last_seq;
 //       }

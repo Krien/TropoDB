@@ -23,22 +23,25 @@ constexpr static size_t zones_foreach_wal =
     4;                                 /**< Amount of zones for each WAL*/
 constexpr static size_t wal_count = 4; /**< Maximum amount of concurrent WALS*/
 constexpr static size_t wal_concurrency =
-    16; /**< Maximum number of concurrent WAL writerts */
+    1; /**< Maximum number of concurrent WAL writerts */
 constexpr static size_t ss_distribution[level_count] = {
     1, 2, 3, 5}; /**< each level i gets \f$\frac{Xi}{\sum_{i=0}^{N}
                   x}\f$  of the remaining zones*/
 constexpr static size_t min_ss_zone_count =
     5; /**< Minimum amount of zones for each LSM-tree level*/
+constexpr static int L0_slow_down = 60;
 constexpr static double ss_compact_treshold[level_count]{
-    64, 640, 6400, 64000}; /**< Number of SSTables before we want compaction
-                              (hint can be preempted). */
+    20, 500. * 1048576.0, 5000. * 1048576.0,
+    50000. * 1048576.0}; /**< Number of SSTables before
+we want compaction (hint can be preempted). */
 constexpr static double ss_compact_treshold_force[level_count]{
     0.85, 0.55, 0.55, 0.55}; /**< Fraction of lbas that might require
                                 compaction to prevent out of space. HIGHER
                                 prio than ss_compact_treshold*/
+constexpr static bool use_write_buffering = true;
 constexpr static uint64_t max_bytes_sstable_ =
-    16 * 1024;  // Based on LevelDBs max_file_size. Be carefull, this will
-                // scale up depending on lba and zone size!
+    (uint64_t)(2097152. * 2. *
+               0.95);  // please set to a multitude of approximately n zones
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
 constexpr static uint64_t max_zone =
     0x0; /**< Maximum zone to use for database. Set to 0 for full region*/

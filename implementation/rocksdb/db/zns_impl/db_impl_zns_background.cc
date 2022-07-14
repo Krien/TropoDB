@@ -41,6 +41,8 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+void DBImplZNS::BGWAL(void* db) {}
+
 void DBImplZNS::MaybeScheduleFlush() {
   // printf("Scheduling flush?\n");
   mutex_.AssertHeld();
@@ -64,6 +66,7 @@ void DBImplZNS::BackgroundFlushCall() {
   assert(bg_flush_scheduled_);
 #ifdef WALPerfTest
   wal_man_->ResetOldWALs(&mutex_);
+  bg_flush_scheduled_ = false;
   bg_flush_work_finished_signal_.SignalAll();
   return;
 #endif

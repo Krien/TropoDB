@@ -204,7 +204,8 @@ class DBImplZNS : public DB {
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override;
 
-  Status MakeRoomForWrite(Slice log_entry);
+  Status MakeRoomForWrite(size_t size);
+  void BGWAL(void* db);
   void MaybeScheduleFlush();
   void MaybeScheduleCompaction(bool force);
   static void BGFlushWork(void* db);
@@ -359,6 +360,7 @@ class DBImplZNS : public DB {
   bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
+  size_t wal_scheduled_{0};
 
   // diagnostics
   uint64_t flushes_;

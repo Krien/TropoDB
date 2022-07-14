@@ -86,7 +86,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
   for (uint8_t i = 0; i < ZnsConfig::level_count - 1; i++) {
     compactions_[i] = 0;
   }
-  env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(2, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
   env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
@@ -212,7 +212,7 @@ DBImplZNS::~DBImplZNS() {
   if (table_cache_ != nullptr) delete table_cache_;
   if (channel_factory_ != nullptr) channel_factory_->Unref();
   if (zns_device_ != nullptr) delete zns_device_;
-  // printf("exiting \n");
+  printf("exiting \n");
 }  // namespace ROCKSDB_NAMESPACE
 
 Status DBImplZNS::ValidateOptions(const DBOptions& db_options) {
@@ -312,7 +312,6 @@ Status DBImplZNS::InitDB(const DBOptions& options,
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
                                 device_info.lba_size, device_info.zone_cap,
                                 table_cache_);
-
   return Status::OK();
 }
 
@@ -450,7 +449,7 @@ Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
   return Write(opt, &batch);
 }
 
-Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
+Status DBImplZNS::MakeRoomForWrite(size_t size) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
@@ -466,7 +465,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(log_entry)) {
+    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(size)) {
       // space left in memory table
       break;
     } else if (imm_ != nullptr) {
@@ -558,8 +557,6 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
 
 Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s;
-  PERF_TIMER_GUARD(zns_wal_direct_append_time);
-
   Writer w(&mutex_);
   w.batch = updates;
   w.done = false;
@@ -573,8 +570,10 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     return w.status;
   }
 
-  s = MakeRoomForWrite(
-      updates == nullptr ? Slice("") : WriteBatchInternal::Contents(updates));
+  s = MakeRoomForWrite(updates == nullptr
+                           ? 0
+                           : WriteBatchInternal::Contents(updates).size() +
+                                 wal_scheduled_);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   // Write to what is needed
@@ -583,6 +582,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(write_batch);
     {
+      wal_scheduled_ = WriteBatchInternal::Contents(write_batch).size();
       wal_->Ref();
       mutex_.Unlock();
       // buffering does not really make sense at the moment.
@@ -609,6 +609,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       }
       mutex_.Lock();
       wal_->Unref();
+      wal_scheduled_ = 0;
     }
     if (write_batch == tmp_batch_) tmp_batch_->Clear();
 
@@ -629,7 +630,6 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   if (!writers_.empty()) {
     writers_.front()->cv.Signal();
   }
-  PERF_TIMER_STOP(zns_wal_direct_append_time);
 
   return s;
 }

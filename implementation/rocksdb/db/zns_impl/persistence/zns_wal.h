@@ -73,15 +73,21 @@ class ZNSWAL : public RefCounter {
   }
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
-  inline size_t SpaceNeeded(const Slice& data) {
+  inline size_t SpaceNeeded(const size_t size) {
 #ifdef WAL_BUFFERED
-    return committer_.SpaceNeeded(data.size() + pos_ + 2 * sizeof(uint64_t));
+    return committer_.SpaceNeeded(size + pos_ + 2 * sizeof(uint64_t));
 #else
-    return committer_.SpaceNeeded(data.size() + 2 * sizeof(uint64_t));
+    return committer_.SpaceNeeded(size + 2 * sizeof(uint64_t));
 #endif
+  }
+  inline size_t SpaceNeeded(const Slice& data) {
+    return committer_.SpaceNeeded(data.size());
   }
   inline bool SpaceLeft(const Slice& data) {
     return committer_.SpaceEnough(SpaceNeeded(data));
+  }
+  inline bool SpaceLeft(const size_t size) {
+    return committer_.SpaceEnough(SpaceNeeded(size));
   }
   inline ZNSDiagnostics GetDiagnostics() const {
     struct ZNSDiagnostics diag = {
@@ -98,13 +104,14 @@ class ZNSWAL : public RefCounter {
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
   // Timing
+  inline uint64_t TimeSpendWaitingOnStorageNumber() { return num_; }
   inline uint64_t TimeSpendWaitingOnStorage() { return sum_; }
   inline uint64_t TimeSpendWaitingOnStorageSquared() { return sum_squares_; }
+  inline uint64_t TimeSpendWaitingOnStorageNumberTotal() { return num_total_; }
   inline uint64_t TimeSpendWaitingOnStorageTotal() { return sum_total_; }
   inline uint64_t TimeSpendWaitingOnStorageSquaredTotal() {
     return sum_squares_total_;
   }
-  inline uint64_t TimeSpendWaitingOnStorageNumber() { return num_; }
   inline uint64_t TimeSpendWaitingOnResets() { return reset_time_; }
   inline uint64_t TimeSpendWaitingOnResetsSquared() {
     return reset_time_squares_;
@@ -134,6 +141,7 @@ class ZNSWAL : public RefCounter {
   uint64_t num_{0};
   uint64_t sum_{0};
   uint64_t sum_squares_{0};
+  uint64_t num_total_{0};
   uint64_t sum_total_{0};
   uint64_t sum_squares_total_{0};
   uint64_t replay_time_{0};
