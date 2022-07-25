@@ -388,7 +388,7 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
     }
     reader.commit_ptr +=
         ((length + kZnsHeaderSize + lba_size_ - 1) / lba_size_) * lba_size_;
-    // printf("Commit ptr %lu %lu \n", reader.commit_ptr, reader.commit_end);
+   // printf("Commit ptr %lu %lu \n", reader.commit_ptr, reader.commit_end);
     switch (type) {
       case ZnsRecordType::kFullType:
         reader.scratch.assign(header + kZnsHeaderSize, length);

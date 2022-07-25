@@ -450,7 +450,7 @@ Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
   return Write(opt, &batch);
 }
 
-Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
+Status DBImplZNS::MakeRoomForWrite(size_t size) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
@@ -462,21 +462,25 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
     }
     if (allow_delay && versions_->NumLevelZones(0) > ZnsConfig::L0_slow_down) {
       mutex_.Unlock();
-      // printf("SlowDown reached...\n");
+      printf("SlowDown reached...\n");
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(log_entry)) {
+    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(size)) {
       // space left in memory table
       break;
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
       // printf("Imm already scheduled\n");
-      bg_flush_work_finished_signal_.Wait();
-    } else if (versions_->NeedsFlushing()) {
-      // printf("waiting for compaction\n");
-      MaybeScheduleFlush();
-      bg_flush_work_finished_signal_.Wait();
+      while (imm_ != nullptr) {
+	      bg_flush_work_finished_signal_.Wait();
+      }
+    } else if (imm_ != nullptr && versions_->NeedsFlushing()) {
+     while (imm_ != nullptr && versions_->NeedsFlushing()) {
+      	printf("waiting for compaction\n");
+      	MaybeScheduleFlush();
+      	bg_flush_work_finished_signal_.Wait();
+	}
     } else if (!wal_man_->WALAvailable()) {
       printf("Out of WALs\n");
       bg_flush_work_finished_signal_.Wait();
@@ -502,6 +506,7 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
                              max_write_buffer_size_);
       mem_->Ref();
       MaybeScheduleFlush();
+      MaybeScheduleCompaction(false);
 #endif
     }
   }
@@ -558,12 +563,11 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
 
 Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s;
-  PERF_TIMER_GUARD(zns_wal_direct_append_time);
 
   Writer w(&mutex_);
   w.batch = updates;
   w.done = false;
-
+static size_t reserved = 0;
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
@@ -574,7 +578,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   }
 
   s = MakeRoomForWrite(
-      updates == nullptr ? Slice("") : WriteBatchInternal::Contents(updates));
+      updates == nullptr ? 0 : WriteBatchInternal::Contents(updates).size() + reserved);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   // Write to what is needed
@@ -583,6 +587,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(write_batch);
     {
+     reserved = WriteBatchInternal::Contents(write_batch).size();
       wal_->Ref();
       mutex_.Unlock();
       // buffering does not really make sense at the moment.
@@ -629,7 +634,6 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   if (!writers_.empty()) {
     writers_.front()->cv.Signal();
   }
-  PERF_TIMER_STOP(zns_wal_direct_append_time);
 
   return s;
 }

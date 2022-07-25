@@ -46,7 +46,7 @@ void DBImplZNS::MaybeScheduleFlush() {
   mutex_.AssertHeld();
   if (bg_flush_scheduled_) {
     return;
-  } else if (imm_ == nullptr && wal_man_->WALAvailable()) {
+  } else if ( (imm_ == nullptr && wal_man_->WALAvailable())) {
     return;
   }
   bg_flush_scheduled_ = true;
@@ -88,7 +88,7 @@ void DBImplZNS::BackgroundFlush() {
   Status s;
 
   if (imm_ != nullptr) {
-    // printf("  Compact memtable...\n");
+    printf("  Compact memtable...\n");
     s = CompactMemtable();
     if (!s.ok()) {
       printf("error during flushing\n");
@@ -105,11 +105,11 @@ void DBImplZNS::BackgroundFlush() {
 Status DBImplZNS::CompactMemtable() {
   mutex_.AssertHeld();
   // We can not do a flush...
-  if (imm_->GetInternalSize() * 1.2 > ss_manager_->SpaceRemainingInBytes(0)) {
+  while (imm_->GetInternalSize() * 1.2 > ss_manager_->SpaceRemainingInBytes(0)) {
     MaybeScheduleCompaction(true);
-    // printf("WAITING, can not flush %f %f \n",
-    //        (float)imm_->GetInternalSize() / 1024. / 1024.,
-    //        (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
+    printf("WAITING, can not flush %f %f \n",
+            (float)imm_->GetInternalSize() / 1024. / 1024.,
+            (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
     bg_work_finished_signal_.Wait();
   }
   assert(imm_ != nullptr);
@@ -140,7 +140,7 @@ Status DBImplZNS::CompactMemtable() {
     // wal
     s = wal_man_->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
-    // printf("Flushed!!\n");
+    printf("Flushed memtable!!\n");
   }
   return s;
 }
@@ -186,8 +186,10 @@ void DBImplZNS::BackgroundCompactionCall() {
   // cascading, but shutdown if ordered
   if (!shutdown_) {
     MaybeScheduleCompaction(false);
+    MaybeScheduleFlush();
   }
   bg_work_finished_signal_.SignalAll();
+  bg_flush_work_finished_signal_.SignalAll();
   // printf("bg done\n");
 }
 
@@ -220,7 +222,7 @@ void DBImplZNS::BackgroundCompaction() {
     ZnsCompaction* c = versions_->PickCompaction();
     current->Ref();
     mutex_.Unlock();
-    // printf("  Compact LN...\n");
+    printf("  Compact LN...\n");
     // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
     // printf("marked reusable\n");
@@ -259,7 +261,7 @@ void DBImplZNS::BackgroundCompaction() {
   if (!s.ok()) {
     printf("ERROR during compaction!!!\n");
   }
-  // printf("Compacted!!\n");
+  printf("Compacted!!\n");
 }
 
 Status DBImplZNS::RemoveObsoleteZones() {

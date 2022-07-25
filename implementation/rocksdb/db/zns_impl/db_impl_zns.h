@@ -11,7 +11,7 @@
 #ifndef DB_IMPL_ZNS_H
 #define DB_IMPL_ZNS_H
 
-#define WALPerfTest
+//#define WALPerfTest
 
 #include <atomic>
 #include <deque>
@@ -204,7 +204,7 @@ class DBImplZNS : public DB {
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override;
 
-  Status MakeRoomForWrite(Slice log_entry);
+  Status MakeRoomForWrite(size_t size);
   void MaybeScheduleFlush();
   void MaybeScheduleCompaction(bool force);
   static void BGFlushWork(void* db);

@@ -67,7 +67,7 @@ ZNSWAL::~ZNSWAL() {
 
 #ifdef WAL_BUFFERED
 Status ZNSWAL::BufferedAppend(const Slice& data) {
-  Status s = Status::OK();
+ Status s = Status::OK();
   size_t sizeleft = buffsize_ - pos_;
   size_t sizeneeded = data.size();
   if (sizeneeded < sizeleft) {
@@ -75,14 +75,23 @@ Status ZNSWAL::BufferedAppend(const Slice& data) {
     pos_ += sizeneeded;
   } else {
     if (pos_ != 0) {
-      s = DirectAppend(Slice(buf_, pos_));
+      char buf_copy_[pos_];
+      memcpy(buf_copy_, buf_, pos_);
+      s = DirectAppend(Slice(buf_copy_, pos_));
       pos_ = 0;
     }
-    if (s.ok()) {
+    if (!s.ok()) {
+      return s;
+    }
+    sizeleft = buffsize_ - pos_;
+    if (sizeneeded < sizeleft) {
       s = DirectAppend(data);
+    } else {
+      memcpy(buf_ + pos_, data.data(), sizeneeded);
+      pos_ += sizeneeded;
     }
   }
-  return s;
+    return s;
 }
 
 Status ZNSWAL::DataSync() {
@@ -103,6 +112,7 @@ Status ZNSWAL::DirectAppend(const Slice& data) {
   num_ += 1;
   sum_ += value;
   sum_squares_ += value * value;
+  // printf("VAL %lu \n", value);
   return s;
 }
 
@@ -140,6 +150,7 @@ Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
 #endif
   delete[] out;
   uint64_t value = clock_->NowMicros() - before;
+  num_total_ += 1;
   sum_total_ += value;
   sum_squares_total_ += value * value;
   return s;
@@ -154,10 +165,10 @@ Status ZNSWAL::Sync() {
 
 #ifdef WAL_UNORDERED
 Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
-  // printf("Replaying WAL\n");
+  //printf("Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    // printf("Replayed WAL\n");
+    //printf("Replayed WAL\n");
     return s;
   }
   // Used for each batch
@@ -173,9 +184,10 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
   if (!s.ok()) {
     return s;
   }
-  // printf("Read WAL in memory\n");
+  // printf("Read WAL in memory %lu \n", commit_string.size());
 
   committer_.GetCommitReaderString(&commit_string, &reader);
+  uint64_t entries_found = 0;
   while (committer_.SeekCommitReaderString(reader, &record)) {
     uint64_t data_size = DecodeFixed64(record.data());
     uint64_t seq_nr = DecodeFixed64(record.data() + sizeof(uint64_t));
@@ -186,9 +198,10 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     std::string* dat = new std::string;
     dat->assign(record.data() + 2 * sizeof(uint64_t), data_size);
     entries.push_back(std::make_pair(seq_nr, dat));
-  }
+    entries_found++;
+ }
   committer_.CloseCommitString(reader);
-  // printf("Read WAL into dictionary\n");
+  // printf("Read WAL into dictionary, total of %lu entries\n", entries_found);
 
   // Sort on sequence number
   std::sort(
@@ -213,6 +226,7 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     // Ensure the sequence number is up to date.
     const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
                                     WriteBatchInternal::Count(&batch) - 1;
+    //printf("LAST SEQ %lu \n", last_seq);
     if (last_seq > *seq) {
       *seq = last_seq;
     }

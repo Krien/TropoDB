@@ -15,6 +15,8 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
+#include <optional>
+
 namespace ROCKSDB_NAMESPACE {
 class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {

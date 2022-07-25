@@ -240,18 +240,16 @@ void ZnsVersionSet::RecalculateScore() {
   // all sorts of holes and early compactions.
   for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
     if (i == 0) {
-      if (znssstable_->GetFractionFilled(0) /
-              ZnsConfig::ss_compact_treshold_force[0] >
-          1) {
-        score = 2;
-      } else if (current_->ss_[i].size() > ZnsConfig::ss_compact_treshold[i]) {
-        score = current_->ss_[i].size() / ZnsConfig::ss_compact_treshold[i];
+      if (NeedsFlushing()) {
+        score = 2^6;
+      } else {
+        score = 0;
       }
     } else if (static_cast<double>(znssstable_->GetBytesInLevel(
                    current_->ss_[i])) > ZnsConfig::ss_compact_treshold[i]) {
       score =
-          static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
-          ZnsConfig::ss_compact_treshold[i];
+          (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
+          ZnsConfig::ss_compact_treshold[i]) * static_cast<double>(2^(6-i));
     } else {
       score = 0;
     }
