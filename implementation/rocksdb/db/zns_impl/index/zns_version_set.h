@@ -72,7 +72,11 @@ class ZnsVersionSet {
            current_->compaction_level_ != ZnsConfig::level_count + 1;
   }
 
-  bool NeedsFlushing() const {
+  bool NeedsL0Compaction() const {
+    return current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0];
+  }
+
+  bool NeedsL0CompactionForce() const {
     return znssstable_->GetFractionFilled(0) /
                ZnsConfig::ss_compact_treshold_force[0] >=
            1;

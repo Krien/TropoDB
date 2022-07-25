@@ -472,46 +472,45 @@ Status DBImplZNS::MakeRoomForWrite(size_t size) {
     } else if (imm_ != nullptr) {
       // flush is scheduled, wait...
       // printf("Imm already scheduled\n");
-      while (imm_ != nullptr) {
-	      bg_flush_work_finished_signal_.Wait();
-      }
-    } else if (imm_ != nullptr && versions_->NeedsFlushing()) {
-     while (imm_ != nullptr && versions_->NeedsFlushing()) {
-      	printf("waiting for compaction\n");
-      	MaybeScheduleFlush();
-      	bg_flush_work_finished_signal_.Wait();
-	}
-    } else if (!wal_man_->WALAvailable()) {
-      printf("Out of WALs\n");
       bg_flush_work_finished_signal_.Wait();
-    } else {
-      // create new WAL
-      wal_->Sync();
-      wal_->Close();
-      wal_->Unref();
-      s = wal_man_->NewWAL(&mutex_, &wal_);
-      wal_->Ref();
-#ifdef WALPerfTest
-      // Drop all that was in the memtable (NOT PERSISTENT!)
-      mem_->Unref();
-      mem_ = new ZNSMemTable(options_, internal_comparator_,
-                             max_write_buffer_size_);
-      mem_->Ref();
-      env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
-#else
-      // printf("Reset WAL\n");
-      // Switch to fresh memtable
-      imm_ = mem_;
-      mem_ = new ZNSMemTable(options_, internal_comparator_,
-                             max_write_buffer_size_);
-      mem_->Ref();
-      MaybeScheduleFlush();
-      MaybeScheduleCompaction(false);
-#endif
+    } else if (versions_->NeedsL0CompactionForce()) {
+      // No more space in L0... Better to wait till compaction is done
+      MaybeScheduleCompaction(true);
+      bg_work_finished_signal_.Wait();
     }
   }
-  return Status::OK();
+  else if (!wal_man_->WALAvailable()) {
+    printf("Out of WALs\n");
+    bg_flush_work_finished_signal_.Wait();
+  }
+  else {
+    // create new WAL
+    wal_->Sync();
+    wal_->Close();
+    wal_->Unref();
+    s = wal_man_->NewWAL(&mutex_, &wal_);
+    wal_->Ref();
+#ifdef WALPerfTest
+    // Drop all that was in the memtable (NOT PERSISTENT!)
+    mem_->Unref();
+    mem_ =
+        new ZNSMemTable(options_, internal_comparator_, max_write_buffer_size_);
+    mem_->Ref();
+    env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+#else
+    // printf("Reset WAL\n");
+    // Switch to fresh memtable
+    imm_ = mem_;
+    mem_ =
+        new ZNSMemTable(options_, internal_comparator_, max_write_buffer_size_);
+    mem_->Ref();
+    MaybeScheduleFlush();
+    MaybeScheduleCompaction(false);
+#endif
+  }
 }
+return Status::OK();
+}  // namespace ROCKSDB_NAMESPACE
 
 WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
   mutex_.AssertHeld();
@@ -567,7 +566,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Writer w(&mutex_);
   w.batch = updates;
   w.done = false;
-static size_t reserved = 0;
+  static size_t reserved = 0;
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
@@ -577,8 +576,10 @@ static size_t reserved = 0;
     return w.status;
   }
 
-  s = MakeRoomForWrite(
-      updates == nullptr ? 0 : WriteBatchInternal::Contents(updates).size() + reserved);
+  s = MakeRoomForWrite(updates == nullptr
+                           ? 0
+                           : WriteBatchInternal::Contents(updates).size() +
+                                 reserved);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   // Write to what is needed
@@ -587,7 +588,7 @@ static size_t reserved = 0;
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(write_batch);
     {
-     reserved = WriteBatchInternal::Contents(write_batch).size();
+      reserved = WriteBatchInternal::Contents(write_batch).size();
       wal_->Ref();
       mutex_.Unlock();
       // buffering does not really make sense at the moment.
