@@ -23,7 +23,8 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
                      vset->zone_cap_),
       vset_(vset),
       version_(nullptr),
-      busy_(false) {
+      busy_(false),
+      clock_(SystemClock::Default().get()) {
   // printf(
   //     "Max compaction size %lu %lu %lu %lu\n", ZnsConfig::max_bytes_sstable_,
   //     ((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
@@ -215,7 +216,9 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   SSTableBuilder* current_builder = *builder;
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
+  uint64_t before = clock_->NowMicros();
   s = current_builder->Flush();
+  printf("Time of flush to LN %lu \n", clock_->NowMicros() - before);
   // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1, meta->LN.lbas[0],
   //        meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
 
@@ -260,7 +263,9 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
     SSTableBuilder* builder =
         vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
     {
+      uint64_t before = clock_->NowMicros();
       Iterator* merger = MakeCompactionIterator();
+      printf("Time to make iterator %lu \n", clock_->NowMicros() - before);
       merger->SeekToFirst();
       if (!merger->Valid()) {
         delete merger;
@@ -273,6 +278,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
       SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
       SequenceNumber min_seq = vset_->LastSequence();
       const Comparator* ucmp = vset_->icmp_.user_comparator();
+      before = clock_->NowMicros();
       for (; merger->Valid(); merger->Next()) {
         const Slice& key = merger->key();
         const Slice& value = merger->value();
@@ -307,7 +313,9 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
                vset_->lba_size_ - 1) /
                   vset_->lba_size_ >=
               max_lba_count_) {
+            printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
             s = FlushSSTable(&builder, edit, &meta);
+            before = clock_->NowMicros();
             if (!s.ok()) {
               break;
             }
@@ -316,6 +324,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         }
       }
       if (s.ok() && builder->GetSize() > 0) {
+        printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
         s = FlushSSTable(&builder, edit, &meta);
       }
       delete merger;

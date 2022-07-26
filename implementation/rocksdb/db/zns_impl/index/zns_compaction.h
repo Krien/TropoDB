@@ -55,6 +55,8 @@ class ZnsCompaction {
 
   std::vector<SSZoneMetaData*> grandparents_;
   bool busy_;
+
+  SystemClock* const clock_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 
