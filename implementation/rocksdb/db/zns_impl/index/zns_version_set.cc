@@ -18,7 +18,8 @@ namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
                              ZNSSSTableManager* znssstable,
                              ZnsManifest* manifest, const uint64_t lba_size,
-                             uint64_t zone_cap, ZnsTableCache* table_cache)
+                             uint64_t zone_cap, ZnsTableCache* table_cache,
+                             Env* env)
     : dummy_versions_(this),
       current_(nullptr),
       icmp_(icmp),
@@ -28,7 +29,8 @@ ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
       zone_cap_(zone_cap),
       ss_number_(0),
       logged_(false),
-      table_cache_(table_cache) {
+      table_cache_(table_cache),
+      env_(env) {
   AppendVersion(new ZnsVersion(this));
 };
 
@@ -114,15 +116,16 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     SSZoneMetaData* todelete = current_->ss_d_[0][j];
     if (live_zones.count(todelete->number) == 0) {
       // printf("Safe to delete %lu %lu %lu\n", todelete->number,
-      //        todelete->L0.lba, todelete->lba_count);
+      // todelete->L0.lba,
+      //        todelete->lba_count);
       tmp.push_back(todelete);
     } else {
       new_deleted_ss_l0.push_back(todelete);
       // printf("we can not delete %lu\n", todelete->number);
-      break;
     }
   }
   // Sort on circular log order
+  printf("Safe to delete %lu \n", tmp.size());
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
@@ -133,12 +136,15 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     mutex_->Lock();
     current_->ss_d_[0].clear();
     current_->ss_d_[0] = new_deleted_ss_l0;
+
     if (!s.ok()) {
       printf("error reclaiming L0\n");
       return s;
     }
     cond->SignalAll();
   }
+  printf("CUR DEL %lu  %lu \n", current_->ss_d_[0].size(),
+         current_->ss_[0].size());
 
   s = LogAndApply(&edit);
   // printf("DONE reclaiming \n");
@@ -473,7 +479,8 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
     uint8_t level, const std::vector<SSZoneMetaData*>& busy) {
   ZnsCompaction* c;
 
-  c = new ZnsCompaction(this, level);
+  c = new ZnsCompaction(this, level, env_);
+  c->busy_ = false;
 
   // printf("Compacting from <%d because score is %f, from %f>\n", level,
   //        current_->compaction_score_,
@@ -541,6 +548,10 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
               c->targets_[0].push_back(m);
               break;
             }
+          }
+          if (busy.size() == 0) {
+            c->targets_[0].push_back(m);
+            done = true;
           }
           if (done) {
             break;

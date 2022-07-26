@@ -202,7 +202,6 @@ void DBImplZNS::BackgroundCompactionL0() {
   Status s;
 
   ZnsVersion* current = versions_->current();
-  // current->Ref();
 
   // Compaction itself does not require a lock. only once the changes become
   // visible.
@@ -213,6 +212,7 @@ void DBImplZNS::BackgroundCompactionL0() {
   ZnsVersionEdit edit;
   // This happens when a lot of readers interfere
   if (versions_->OnlyNeedDeletes(0)) {
+    current->Ref();
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
     s = RemoveObsoleteZonesL0();
@@ -220,13 +220,15 @@ void DBImplZNS::BackgroundCompactionL0() {
       printf("ERROR during reclaiming!!!\n");
     }
     // printf("Only reclaimed\n");
+    current->Unref();
     return;
   } else {
     ZnsCompaction* c = versions_->PickCompaction(0, reserved_comp_[1]);
     // Can not do this compaction
     while (reserve_claimed_ == 1 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
-      printf("\tOverlap with LN write\n");
+      printf("\tOverlap with LN write %u %u\n", reserve_claimed_ == 1,
+             c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 0 : reserve_claimed_;
       bg_work_finished_signal_.Wait();
@@ -250,11 +252,11 @@ void DBImplZNS::BackgroundCompactionL0() {
       s = c->DoCompaction(&edit);
       // printf("\t\tnormal compaction\n");
     }
-    current->Unref();
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session.
     delete c;
     mutex_.Lock();
+    current->Unref();
   }
   if (!s.ok()) {
     printf("ERROR during compaction A!!!\n");
@@ -325,7 +327,6 @@ void DBImplZNS::BackgroundCompaction() {
   Status s;
 
   ZnsVersion* current = versions_->current();
-  // current->Ref();
 
   // Compaction itself does not require a lock. only once the changes become
   // visible.
@@ -350,7 +351,8 @@ void DBImplZNS::BackgroundCompaction() {
                                                  reserved_comp_[0]);
     while (reserve_claimed_ == 0 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[0]) || c->IsBusy()) {
-      printf("\tOverlap with L0 write...\n");
+      printf("\tOverlap with L0 write... %u %u %u\n", reserve_claimed_ == 0,
+             c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 1 : reserve_claimed_;
       bg_work_l0_finished_signal_.Wait();
@@ -373,13 +375,13 @@ void DBImplZNS::BackgroundCompaction() {
     } else {
       // printf("starting compaction\n");
       s = c->DoCompaction(&edit);
-      // printf("\t\tnormal compaction\n");
+      printf("\t\tnormal compaction\n");
     }
-    current->Unref();
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session.
     delete c;
     mutex_.Lock();
+    current->Unref();
   }
   if (!s.ok()) {
     printf("ERROR during compaction A!!!\n");
@@ -408,7 +410,7 @@ void DBImplZNS::BackgroundCompaction() {
 Status DBImplZNS::RemoveObsoleteZonesL0() {
   mutex_.AssertHeld();
   Status s = Status::OK();
-  s = versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_finished_signal_);
+  s = versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_l0_finished_signal_);
   if (!s.ok()) {
     printf("error reclaiming L0 \n");
     return s;

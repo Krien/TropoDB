@@ -86,7 +86,7 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
     if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
          lba_size_ - 1) /
             lba_size_ >=
-        (ZnsConfig::max_byte_sstable_l0 + lba_size_ - 1) / lba_size) {
+        (ZnsConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
       builder->Finalise();
       s = builder->Flush();
       if (!s.ok()) {
@@ -231,6 +231,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     SSZoneMetaData* m = metas[i];
     // Get adjacents
     if (prev->number == m->number) {
+      exit(-1);
       continue;
     }
     if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
@@ -267,7 +268,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   i = upto;
   while (i < metas.size()) {
     SSZoneMetaData* m = metas[i];
-    // printf("Readding %lu %lu \n", m->number, m->L0.lba);
+    // printf("Readding %lu %lu %lu \n", m->number, m->L0.lba, m->lba_count);
     remaining_metas.push_back(m);
     i++;
   }

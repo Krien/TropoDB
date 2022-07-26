@@ -89,7 +89,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
     compactions_[i] = 0;
   }
   env_->SetBackgroundThreads(2, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
-  env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::LOW);
+  env_->SetBackgroundThreads(3, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
@@ -317,7 +317,7 @@ Status DBImplZNS::InitDB(const DBOptions& options,
 
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
                                 device_info.lba_size, device_info.zone_cap,
-                                table_cache_);
+                                table_cache_, this->env_);
 
   return Status::OK();
 }
@@ -492,6 +492,7 @@ Status DBImplZNS::MakeRoomForWrite(size_t size) {
       bg_flush_work_finished_signal_.Wait();
     } else if (versions_->NeedsL0CompactionForce()) {
       // No more space in L0... Better to wait till compaction is done
+      printf("Force L0\n");
       MaybeScheduleCompactionL0();
       bg_work_l0_finished_signal_.Wait();
     } else if (!wal_man_->WALAvailable()) {

@@ -19,6 +19,7 @@ class SSTableBuilder {
   Status Finalise();
   Status Flush();
   uint64_t GetSize() const { return (uint64_t)buffer_.size(); }
+  SSZoneMetaData* GetMeta() { return meta_; }
 
  private:
   // Used for generating the string

@@ -224,9 +224,11 @@ double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
       sstable_level_[level ? 1 : 0]->SpaceAvailable() / lba_size_;
   uint64_t total_space =
       ranges_[level ? 1 : 0].second - ranges_[level ? 1 : 0].first;
-  // printf("Space available %lu, Total space %lu \n", space_available,
-  //        total_space);
+
   double fract = (double)(total_space - space_available) / (double)total_space;
+  // printf("Space available %lu, Total space %lu, fraction %f\n",
+  // space_available,
+  //        total_space, fract);
   return fract;
 }
 

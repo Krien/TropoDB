@@ -31,7 +31,7 @@ class ZnsVersionSet {
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
                 const uint64_t lba_size, const uint64_t zone_cap,
-                ZnsTableCache* table_cache);
+                ZnsTableCache* table_cache, Env* env);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
   ~ZnsVersionSet();
@@ -74,7 +74,8 @@ class ZnsVersionSet {
   }
 
   bool NeedsL0Compaction() const {
-    return current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0];
+    return current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0] ||
+           NeedsL0CompactionForce();
   }
 
   bool NeedsL0CompactionForce() const {
@@ -118,6 +119,7 @@ class ZnsVersionSet {
   uint64_t ss_number_;
   bool logged_;
   ZnsTableCache* table_cache_;
+  Env* env_;
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.

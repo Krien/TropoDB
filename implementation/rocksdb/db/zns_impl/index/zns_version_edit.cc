@@ -53,13 +53,11 @@ void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
                                         const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
   deleted_ss_pers_.push_back(std::make_pair(level, meta));
-  // printf("Deleting %lu \n", meta.number);
 }
 
 void ZnsVersionEdit::RemoveSSDefinitionOnlyMeta(const uint8_t level,
                                                 const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
-  // printf("Deleting %lu \n", meta.number);
 }
 
 // For debugging
