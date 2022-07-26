@@ -38,6 +38,36 @@ ZnsCompaction::~ZnsCompaction() {
   }
 }
 
+bool ZnsCompaction::HasOverlapWithOtherCompaction(
+    std::vector<SSZoneMetaData*> metas) {
+  for (const auto& target : metas) {
+    for (const auto& c0 : targets_[0]) {
+      // printf("overlap %lu == %lu \n", target->number, c0->number);
+      if (target->number == c0->number) {
+        return true;
+      }
+    }
+    for (const auto& c1 : targets_[1]) {
+      // printf("overlap %lu == %lu \n", target->number, c1->number);
+      if (target->number == c1->number) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void ZnsCompaction::GetCompactionTargets(std::vector<SSZoneMetaData*>* metas) {
+  for (const auto& c0 : targets_[0]) {
+    // printf("ADDING %lu \n", c0->number);
+    metas->push_back(c0);
+  }
+  for (const auto& c1 : targets_[1]) {
+    // printf("ADDING %lu \n", c1->number);
+    metas->push_back(c1);
+  }
+}
+
 Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const Comparator* cmp) {
   ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);

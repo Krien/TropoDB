@@ -24,6 +24,7 @@ class LNZnsSSTable : public ZnsSSTable {
   bool EnoughSpaceAvailable(const Slice& slice) const override;
   uint64_t SpaceAvailable() const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
+  SSTableBuilder* NewLNBuilder(SSZoneMetaData* meta);
   Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
@@ -32,6 +33,8 @@ class LNZnsSSTable : public ZnsSSTable {
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
+  Status WriteSSTable(const Slice& content, SSZoneMetaData* meta,
+                      uint8_t writer);
   Status Recover() override;
   Status Recover(const std::string& from);
   std::string Encode();

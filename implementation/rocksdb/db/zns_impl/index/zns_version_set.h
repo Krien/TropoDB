@@ -44,7 +44,8 @@ class ZnsVersionSet {
   void GetLiveZones(const uint8_t level, std::set<uint64_t>& live);
   void GetSaveDeleteRange(const uint8_t level,
                           std::pair<uint64_t, uint64_t>* range);
-  Status ReclaimStaleSSTables(port::Mutex* mutex_, port::CondVar* cond);
+  Status ReclaimStaleSSTablesL0(port::Mutex* mutex_, port::CondVar* cond);
+  Status ReclaimStaleSSTablesLN(port::Mutex* mutex_, port::CondVar* cond);
 
   inline ZnsVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
@@ -88,8 +89,8 @@ class ZnsVersionSet {
                  const std::vector<SSZoneMetaData*>& inputs2,
                  InternalKey* smallest, InternalKey* largest);
   void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
-  bool OnlyNeedDeletes();
-  ZnsCompaction* PickCompaction();
+  bool OnlyNeedDeletes(uint8_t level);
+  ZnsCompaction* PickCompaction(uint8_t level);
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
   Status Recover();

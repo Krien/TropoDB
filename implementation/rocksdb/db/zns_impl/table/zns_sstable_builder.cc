@@ -1,17 +1,19 @@
 #include "db/zns_impl/table/zns_sstable_builder.h"
 
 #include "db/zns_impl/config.h"
+#include "db/zns_impl/table/ln_zns_sstable.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
-                               bool use_encoding)
+                               bool use_encoding, int8_t writer)
     : started_(false),
       kv_numbers_(0),
       counter_(0),
       use_encoding_(use_encoding),
       table_(table),
-      meta_(meta) {
+      meta_(meta),
+      writer_(writer) {
   meta_->lba_count = 0;
   buffer_.clear();
   kv_pair_offsets_.clear();
@@ -92,6 +94,11 @@ Status SSTableBuilder::Finalise() {
 }
 
 Status SSTableBuilder::Flush() {
-  return table_->WriteSSTable(Slice(buffer_), meta_);
+  if (writer_ != -1) {
+    return static_cast<LNZnsSSTable*>(table_)->WriteSSTable(Slice(buffer_),
+                                                            meta_, writer_);
+  } else {
+    return table_->WriteSSTable(Slice(buffer_), meta_);
+  }
 }
 }  // namespace ROCKSDB_NAMESPACE

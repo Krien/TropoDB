@@ -207,12 +207,16 @@ class DBImplZNS : public DB {
   Status MakeRoomForWrite(size_t size);
   void MaybeScheduleFlush();
   void MaybeScheduleCompaction(bool force);
+  void MaybeScheduleCompactionL0();
   static void BGFlushWork(void* db);
   static void BGCompactionWork(void* db);
+  static void BGCompactionL0Work(void* db);
   void BackgroundFlushCall();
   void BackgroundFlush();
   void BackgroundCompactionCall();
   void BackgroundCompaction();
+  void BackgroundCompactionL0Call();
+  void BackgroundCompactionL0();
   Status CompactMemtable();
   Status FlushL0SSTables(SSZoneMetaData* meta);
 
@@ -324,7 +328,9 @@ class DBImplZNS : public DB {
  private:
   struct Writer;
   Status Recover();
-  Status RemoveObsoleteZones();
+  Status RemoveObsoleteZonesL0();
+  Status RemoveObsoleteZonesLN();
+
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   // Should remain constant after construction
@@ -352,13 +358,17 @@ class DBImplZNS : public DB {
 
   // Threading variables
   port::Mutex mutex_;
+  port::Mutex meta_mutex_;
+  port::CondVar bg_work_l0_finished_signal_;
   port::CondVar bg_work_finished_signal_;
   port::CondVar bg_flush_work_finished_signal_;
+  bool bg_compaction_l0_scheduled_;
   bool bg_compaction_scheduled_;
   bool bg_flush_scheduled_;
   bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
+  std::array<std::vector<SSZoneMetaData*>, 2> reserved_comp_;
 
   // diagnostics
   uint64_t flushes_;

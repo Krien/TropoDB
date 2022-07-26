@@ -46,7 +46,7 @@ void DBImplZNS::MaybeScheduleFlush() {
   mutex_.AssertHeld();
   if (bg_flush_scheduled_) {
     return;
-  } else if ( (imm_ == nullptr && wal_man_->WALAvailable())) {
+  } else if ((imm_ == nullptr && wal_man_->WALAvailable())) {
     return;
   }
   bg_flush_scheduled_ = true;
@@ -77,6 +77,7 @@ void DBImplZNS::BackgroundFlushCall() {
   // cascading, but shutdown if ordered
   if (!shutdown_) {
     MaybeScheduleFlush();
+    MaybeScheduleCompactionL0();
     MaybeScheduleCompaction(false);
   }
   bg_flush_work_finished_signal_.SignalAll();
@@ -105,11 +106,12 @@ void DBImplZNS::BackgroundFlush() {
 Status DBImplZNS::CompactMemtable() {
   mutex_.AssertHeld();
   // We can not do a flush...
-  while (imm_->GetInternalSize() * 1.2 > ss_manager_->SpaceRemainingInBytes(0)) {
+  while (imm_->GetInternalSize() * 1.2 >
+         ss_manager_->SpaceRemainingInBytes(0)) {
     MaybeScheduleCompaction(true);
     printf("WAITING, can not flush %f %f \n",
-            (float)imm_->GetInternalSize() / 1024. / 1024.,
-            (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
+           (float)imm_->GetInternalSize() / 1024. / 1024.,
+           (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
     bg_work_finished_signal_.Wait();
   }
   assert(imm_ != nullptr);
@@ -150,6 +152,126 @@ Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
   s = ss_manager_->FlushMemTable(imm_, meta);
   flushes_++;
   return s;
+}
+
+void DBImplZNS::MaybeScheduleCompactionL0() {
+  // printf("Scheduling L0 compaction?\n");
+  mutex_.AssertHeld();
+  if (!bg_error_.ok()) {
+    return;
+  } else if (bg_compaction_l0_scheduled_) {
+    return;
+  } else if (!versions_->NeedsL0Compaction()) {
+    return;
+  }
+  bg_compaction_l0_scheduled_ = true;
+  // printf("Scheduled compaction\n");
+  env_->Schedule(&DBImplZNS::BGCompactionL0Work, this, rocksdb::Env::HIGH);
+}
+
+void DBImplZNS::BGCompactionL0Work(void* db) {
+  reinterpret_cast<DBImplZNS*>(db)->BackgroundCompactionL0Call();
+}
+
+void DBImplZNS::BackgroundCompactionL0Call() {
+  // printf("bg\n");
+  MutexLock l(&mutex_);
+  assert(bg_compaction_l0_scheduled_);
+  if (!bg_error_.ok()) {
+  } else {
+    // printf("starting background work\n");
+    BackgroundCompactionL0();
+  }
+  bg_compaction_l0_scheduled_ = false;
+  // cascading, but shutdown if ordered
+  if (!shutdown_) {
+    MaybeScheduleCompactionL0();
+    MaybeScheduleCompaction(false);
+    MaybeScheduleFlush();
+  }
+  bg_work_l0_finished_signal_.SignalAll();
+  bg_work_finished_signal_.SignalAll();
+  bg_flush_work_finished_signal_.SignalAll();
+  // printf("bg done\n");
+}
+
+void DBImplZNS::BackgroundCompactionL0() {
+  mutex_.AssertHeld();
+  Status s;
+
+  ZnsVersion* current = versions_->current();
+  // current->Ref();
+
+  // Compaction itself does not require a lock. only once the changes become
+  // visible.
+  if (!versions_->NeedsL0Compaction()) {
+    mutex_.Unlock();
+    return;
+  }
+  ZnsVersionEdit edit;
+  // This happens when a lot of readers interfere
+  if (versions_->OnlyNeedDeletes(0)) {
+    // TODO: we should probably wait a while instead of spamming reset requests.
+    // Then probably all clients are done with their reads on old versions.
+    s = RemoveObsoleteZonesL0();
+    if (!s.ok()) {
+      printf("ERROR during reclaiming!!!\n");
+    }
+    // printf("Only reclaimed\n");
+    return;
+  } else {
+    ZnsCompaction* c = versions_->PickCompaction(0);
+    // Can not do this compaction
+    while (c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
+      printf("\tOverlap with LN write\n");
+      delete c;
+      bg_work_finished_signal_.Wait();
+      current = versions_->current();
+      c = versions_->PickCompaction(0);
+    }
+    c->GetCompactionTargets(&reserved_comp_[0]);
+    current->Ref();
+    mutex_.Unlock();
+    printf("  Compact L0...\n");
+    // printf("Picked compact\n");
+    c->MarkStaleTargetsReusable(&edit);
+    // printf("marked reusable\n");
+    if (c->IsTrivialMove()) {
+      // printf("starting trivial move\n");
+      s = c->DoTrivialMove(&edit);
+      // printf("\t\ttrivial move\n");
+    } else {
+      // printf("starting compaction\n");
+      s = c->DoCompaction(&edit);
+      // printf("\t\tnormal compaction\n");
+    }
+    current->Unref();
+    // Note if this delete is not reached, a stale version will remain in memory
+    // for the rest of this session.
+    delete c;
+    mutex_.Lock();
+  }
+  if (!s.ok()) {
+    printf("ERROR during compaction A!!!\n");
+    return;
+  }
+  // Diag
+  compactions_[0]++;
+  // current->Unref();
+  // printf("Removing cache \n");
+  s = s.ok() ? versions_->LogAndApply(&edit) : s;
+  reserved_comp_[0].clear();
+  // printf("Applied change \n");
+  mutex_.Unlock();
+  mutex_.Lock();
+  s = s.ok() ? RemoveObsoleteZonesL0() : s;
+  // printf("Removed obsolete zones \n");
+  mutex_.Unlock();
+  mutex_.Lock();
+  if (!s.ok()) {
+    printf("ERROR during compaction!!!\n");
+  }
+  printf("Compacted L0!!\n");
 }
 
 void DBImplZNS::MaybeScheduleCompaction(bool force) {
@@ -208,10 +330,10 @@ void DBImplZNS::BackgroundCompaction() {
   }
   ZnsVersionEdit edit;
   // This happens when a lot of readers interfere
-  if (versions_->OnlyNeedDeletes()) {
+  if (versions_->OnlyNeedDeletes(current->CompactionLevel())) {
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
-    s = RemoveObsoleteZones();
+    s = RemoveObsoleteZonesLN();
     versions_->RecalculateScore();
     if (!s.ok()) {
       printf("ERROR during reclaiming!!!\n");
@@ -219,7 +341,15 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("Only reclaimed\n");
     return;
   } else {
-    ZnsCompaction* c = versions_->PickCompaction();
+    ZnsCompaction* c = versions_->PickCompaction(current->CompactionLevel());
+    while (c->HasOverlapWithOtherCompaction(reserved_comp_[0])) {
+      printf("\tOverlap with L0 write...\n");
+      delete c;
+      bg_work_l0_finished_signal_.Wait();
+      current = versions_->current();
+      c = versions_->PickCompaction(current->CompactionLevel());
+    }
+    c->GetCompactionTargets(&reserved_comp_[1]);
     current->Ref();
     mutex_.Unlock();
     printf("  Compact LN...\n");
@@ -250,10 +380,11 @@ void DBImplZNS::BackgroundCompaction() {
   // current->Unref();
   // printf("Removing cache \n");
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
+  reserved_comp_[1].clear();
   // printf("Applied change \n");
   mutex_.Unlock();
   mutex_.Lock();
-  s = s.ok() ? RemoveObsoleteZones() : s;
+  s = s.ok() ? RemoveObsoleteZonesLN() : s;
   // printf("Removed obsolete zones \n");
   mutex_.Unlock();
   mutex_.Lock();
@@ -264,12 +395,23 @@ void DBImplZNS::BackgroundCompaction() {
   printf("Compacted!!\n");
 }
 
-Status DBImplZNS::RemoveObsoleteZones() {
+Status DBImplZNS::RemoveObsoleteZonesL0() {
   mutex_.AssertHeld();
   Status s = Status::OK();
-  s = versions_->ReclaimStaleSSTables(&mutex_, &bg_work_finished_signal_);
+  s = versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_finished_signal_);
   if (!s.ok()) {
-    printf("error reclaiming \n");
+    printf("error reclaiming L0 \n");
+    return s;
+  }
+  return s;
+}
+
+Status DBImplZNS::RemoveObsoleteZonesLN() {
+  mutex_.AssertHeld();
+  Status s = Status::OK();
+  s = versions_->ReclaimStaleSSTablesLN(&mutex_, &bg_work_finished_signal_);
+  if (!s.ok()) {
+    printf("error reclaiming LN \n");
     return s;
   }
   return s;

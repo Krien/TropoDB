@@ -16,7 +16,7 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           number_of_concurrent_ln_readers),
+           number_of_concurrent_ln_readers, 2),
       cv_(&mutex_) {
   // unset
   for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
@@ -38,13 +38,18 @@ SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
 }
 
+SSTableBuilder* LNZnsSSTable::NewLNBuilder(SSZoneMetaData* meta) {
+  return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding, 1);
+}
+
 bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return log_.SpaceLeft(slice.size(), false);
 }
 
 uint64_t LNZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 
-Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
+                                  uint8_t writer) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     printf("out of space LN %lu %lu \n", content.size() / lba_size_,
@@ -53,7 +58,8 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   }
 
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  if (!FromStatus(log_.Append(content.data(), content.size(), ptrs, false))
+  if (!FromStatus(
+           log_.Append(content.data(), content.size(), ptrs, false, writer))
            .ok()) {
     printf("Error appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
@@ -70,6 +76,10 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   //        meta->number, meta->LN.lba_regions, meta->lba_count,
   //        content.size());
   return Status::OK();
+}
+
+Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+  return WriteSSTable(content, meta, 0);
 }
 
 // TODO: this is better than locking around the entire read, but we have to

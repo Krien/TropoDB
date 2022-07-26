@@ -179,7 +179,12 @@ Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
 SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
                                               SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->NewBuilder(meta);
+  if (level > 1) {
+    return static_cast<LNZnsSSTable*>(sstable_level_[level ? 1 : 0])
+        ->NewLNBuilder(meta);
+  } else {
+    return sstable_level_[level ? 1 : 0]->NewBuilder(meta);
+  }
 }
 
 Status ZNSSSTableManager::Recover() {

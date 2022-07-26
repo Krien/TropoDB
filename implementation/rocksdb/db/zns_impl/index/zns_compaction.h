@@ -26,6 +26,9 @@ class ZnsCompaction {
 
   void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
   bool IsTrivialMove() const;
+  bool HasOverlapWithOtherCompaction(std::vector<SSZoneMetaData*> metas);
+  void GetCompactionTargets(std::vector<SSZoneMetaData*>* metas);
+
   Status DoTrivialMove(ZnsVersionEdit* edit);
   Iterator* MakeCompactionIterator();
   Status DoCompaction(ZnsVersionEdit* edit);

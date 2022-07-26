@@ -98,52 +98,58 @@ void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
   }
 }
 
-Status ZnsVersionSet::ReclaimStaleSSTables(port::Mutex* mutex_,
-                                           port::CondVar* cond) {
+Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
+                                             port::CondVar* cond) {
   // printf("reclaiming....\n");
   Status s = Status::OK();
   ZnsVersionEdit edit;
 
   // Reclaim L0
-  {
-    // Get all of the files that can be deleted as no reader uses it.
-    std::set<uint64_t> live_zones;
-    std::vector<SSZoneMetaData*> tmp;
-    GetLiveZones(0, live_zones);
-    std::vector<SSZoneMetaData*> new_deleted_ss_l0;
-    for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
-      SSZoneMetaData* todelete = current_->ss_d_[0][j];
-      if (live_zones.count(todelete->number) == 0) {
-        // printf("Safe to delete %lu %lu %lu\n", todelete->number,
-        //        todelete->L0.lba, todelete->lba_count);
-        tmp.push_back(todelete);
-      } else {
-        new_deleted_ss_l0.push_back(todelete);
-        // printf("we can not delete %lu\n", todelete->number);
-        break;
-      }
-    }
-    // Sort on circular log order
-    if (!tmp.empty()) {
-      // in_range = 0;
-      std::sort(tmp.begin(), tmp.end(),
-                [](SSZoneMetaData* a, SSZoneMetaData* b) {
-                  return a->number < b->number;
-                });
-      mutex_->Unlock();
-      s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
-      mutex_->Lock();
-      current_->ss_d_[0].clear();
-      current_->ss_d_[0] = new_deleted_ss_l0;
-      if (!s.ok()) {
-        printf("error reclaiming L0\n");
-        return s;
-      }
-      cond->SignalAll();
+  // Get all of the files that can be deleted as no reader uses it.
+  std::set<uint64_t> live_zones;
+  std::vector<SSZoneMetaData*> tmp;
+  GetLiveZones(0, live_zones);
+  std::vector<SSZoneMetaData*> new_deleted_ss_l0;
+  for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
+    SSZoneMetaData* todelete = current_->ss_d_[0][j];
+    if (live_zones.count(todelete->number) == 0) {
+      // printf("Safe to delete %lu %lu %lu\n", todelete->number,
+      //        todelete->L0.lba, todelete->lba_count);
+      tmp.push_back(todelete);
     } else {
+      new_deleted_ss_l0.push_back(todelete);
+      // printf("we can not delete %lu\n", todelete->number);
+      break;
     }
   }
+  // Sort on circular log order
+  if (!tmp.empty()) {
+    // in_range = 0;
+    std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
+      return a->number < b->number;
+    });
+    mutex_->Unlock();
+    s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
+    mutex_->Lock();
+    current_->ss_d_[0].clear();
+    current_->ss_d_[0] = new_deleted_ss_l0;
+    if (!s.ok()) {
+      printf("error reclaiming L0\n");
+      return s;
+    }
+    cond->SignalAll();
+  }
 
+  s = LogAndApply(&edit);
+  // printf("DONE reclaiming \n");
+  return s;
+}
+
+Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
+                                             port::CondVar* cond) {
+  // printf("reclaiming....\n");
+  Status s = Status::OK();
+  ZnsVersionEdit edit;
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
     std::set<uint64_t> live_zones;
     std::vector<SSZoneMetaData*> new_deleted;
@@ -238,15 +244,9 @@ void ZnsVersionSet::RecalculateScore() {
   double score = 0;
   // TODO: This is probably a design flaw. This is uninformed and might cause
   // all sorts of holes and early compactions.
-  for (size_t i = 0; i < ZnsConfig::level_count - 1; i++) {
-    if (i == 0) {
-      if (NeedsL0Compaction()) {
-        score = 2 ^ 6;
-      } else {
-        score = 0;
-      }
-    } else if (static_cast<double>(znssstable_->GetBytesInLevel(
-                   current_->ss_[i])) > ZnsConfig::ss_compact_treshold[i]) {
+  for (size_t i = 1; i < ZnsConfig::level_count - 1; i++) {
+    if (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) >
+        ZnsConfig::ss_compact_treshold[i]) {
       score =
           (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
            ZnsConfig::ss_compact_treshold[i]) *
@@ -460,10 +460,8 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   c->edit_.SetCompactPointer(level, largest);
 }
 
-bool ZnsVersionSet::OnlyNeedDeletes() {
-  uint8_t level = current_->compaction_level_;
-  bool only_need = level == 0 ? current_->ss_[level].size() == 0
-                              : current_->ss_[level].size() < 3;
+bool ZnsVersionSet::OnlyNeedDeletes(uint8_t level) {
+  bool only_need = current_->ss_[level].size() == 0;
   if (only_need) {
     printf("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
            current_->ss_d_[level].size());
@@ -471,11 +469,9 @@ bool ZnsVersionSet::OnlyNeedDeletes() {
   return only_need;
 }
 
-ZnsCompaction* ZnsVersionSet::PickCompaction() {
+ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
   ZnsCompaction* c;
-  uint8_t level;
 
-  level = current_->compaction_level_;
   c = new ZnsCompaction(this, level);
 
   // printf("Compacting from <%d because score is %f, from %f>\n", level,

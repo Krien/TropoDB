@@ -74,8 +74,10 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       imm_(nullptr),
       tmp_batch_(new WriteBatch),
       // State
+      bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
       bg_flush_work_finished_signal_(&mutex_),
+      bg_compaction_l0_scheduled_(false),
       bg_compaction_scheduled_(false),
       bg_flush_scheduled_(false),
       shutdown_(false),
@@ -184,9 +186,13 @@ void DBImplZNS::IODiagnostics() {
 DBImplZNS::~DBImplZNS() {
   printf("Shutdown \n");
   mutex_.Lock();
-  while (bg_compaction_scheduled_ || bg_flush_scheduled_) {
+  while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
+         bg_flush_scheduled_) {
     shutdown_ = true;
     printf("busy, wait before closing\n");
+    if (bg_compaction_l0_scheduled_) {
+      bg_work_l0_finished_signal_.Wait();
+    }
     if (bg_compaction_scheduled_) {
       bg_work_finished_signal_.Wait();
     }
@@ -328,6 +334,7 @@ Status DBImplZNS::InitWAL() {
       mem_->Ref();
     }
     MaybeScheduleFlush();
+    MaybeScheduleCompactionL0();
     MaybeScheduleCompaction(true);
     while (!wal_man_->WALAvailable()) {
       bg_flush_work_finished_signal_.Wait();
@@ -371,6 +378,7 @@ Status DBImplZNS::Open(
   if (s.ok()) {
     // impl->RemoveObsoleteZones();
     impl->MaybeScheduleFlush();
+    impl->MaybeScheduleCompactionL0();
     impl->MaybeScheduleCompaction(false);
   }
   impl->mutex_.Unlock();
@@ -384,10 +392,19 @@ Status DBImplZNS::Open(
 
 Status DBImplZNS::Close() {
   mutex_.Lock();
-  while (bg_compaction_scheduled_) {
-    // printf("busy, wait before closing\n");
+  while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
+         bg_flush_scheduled_) {
     shutdown_ = true;
-    bg_work_finished_signal_.Wait();
+    printf("busy, wait before closing\n");
+    if (bg_compaction_l0_scheduled_) {
+      bg_work_l0_finished_signal_.Wait();
+    }
+    if (bg_compaction_scheduled_) {
+      bg_work_finished_signal_.Wait();
+    }
+    if (bg_flush_scheduled_) {
+      bg_flush_work_finished_signal_.Wait();
+    }
   }
   mutex_.Unlock();
   // TODO: close device.
@@ -475,41 +492,38 @@ Status DBImplZNS::MakeRoomForWrite(size_t size) {
       bg_flush_work_finished_signal_.Wait();
     } else if (versions_->NeedsL0CompactionForce()) {
       // No more space in L0... Better to wait till compaction is done
-      MaybeScheduleCompaction(true);
-      bg_work_finished_signal_.Wait();
+      MaybeScheduleCompactionL0();
+      bg_work_l0_finished_signal_.Wait();
+    } else if (!wal_man_->WALAvailable()) {
+      printf("Out of WALs\n");
+      bg_flush_work_finished_signal_.Wait();
+    } else {
+      // create new WAL
+      wal_->Sync();
+      wal_->Close();
+      wal_->Unref();
+      s = wal_man_->NewWAL(&mutex_, &wal_);
+      wal_->Ref();
+#ifdef WALPerfTest
+      // Drop all that was in the memtable (NOT PERSISTENT!)
+      mem_->Unref();
+      mem_ = new ZNSMemTable(options_, internal_comparator_,
+                             max_write_buffer_size_);
+      mem_->Ref();
+      env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+#else
+      // printf("Reset WAL\n");
+      // Switch to fresh memtable
+      imm_ = mem_;
+      mem_ = new ZNSMemTable(options_, internal_comparator_,
+                             max_write_buffer_size_);
+      mem_->Ref();
+      MaybeScheduleFlush();
+      MaybeScheduleCompactionL0();
+#endif
     }
   }
-  else if (!wal_man_->WALAvailable()) {
-    printf("Out of WALs\n");
-    bg_flush_work_finished_signal_.Wait();
-  }
-  else {
-    // create new WAL
-    wal_->Sync();
-    wal_->Close();
-    wal_->Unref();
-    s = wal_man_->NewWAL(&mutex_, &wal_);
-    wal_->Ref();
-#ifdef WALPerfTest
-    // Drop all that was in the memtable (NOT PERSISTENT!)
-    mem_->Unref();
-    mem_ =
-        new ZNSMemTable(options_, internal_comparator_, max_write_buffer_size_);
-    mem_->Ref();
-    env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
-#else
-    // printf("Reset WAL\n");
-    // Switch to fresh memtable
-    imm_ = mem_;
-    mem_ =
-        new ZNSMemTable(options_, internal_comparator_, max_write_buffer_size_);
-    mem_->Ref();
-    MaybeScheduleFlush();
-    MaybeScheduleCompaction(false);
-#endif
-  }
-}
-return Status::OK();
+  return Status::OK();
 }  // namespace ROCKSDB_NAMESPACE
 
 WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
