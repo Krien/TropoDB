@@ -76,6 +76,7 @@ class ZnsCompaction {
   // Deferred
   Env* env_;
   DeferredLNCompaction deferred_;
+  std::vector<SSZoneMetaData*> metas_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

@@ -13,10 +13,10 @@ struct SSZoneMetaData {
   int allowed_seeks;  // Seeks allowed until compaction
   uint64_t number;    // version identifier
   struct {
-    uint64_t lba;  // Lba when no regions are used
+    uint64_t lba{0};  // Lba when no regions are used
   } L0;
   struct {
-    uint8_t lba_regions;           // Number of start lbas (legal from 1 to 8)
+    uint8_t lba_regions{0};        // Number of start lbas (legal from 1 to 8)
     uint64_t lbas[8];              // start lbas (can be multiple, up to 8)
     uint64_t lba_region_sizes[8];  // Size in zones of an lbas region
   } LN;
