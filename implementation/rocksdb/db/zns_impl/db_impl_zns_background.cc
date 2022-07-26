@@ -108,11 +108,11 @@ Status DBImplZNS::CompactMemtable() {
   // We can not do a flush...
   while (imm_->GetInternalSize() * 1.2 >
          ss_manager_->SpaceRemainingInBytes(0)) {
-    MaybeScheduleCompaction(true);
+    MaybeScheduleCompactionL0();
     printf("WAITING, can not flush %f %f \n",
            (float)imm_->GetInternalSize() / 1024. / 1024.,
            (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
-    bg_work_finished_signal_.Wait();
+    bg_work_l0_finished_signal_.Wait();
   }
   assert(imm_ != nullptr);
   assert(bg_flush_scheduled_);
@@ -120,19 +120,21 @@ Status DBImplZNS::CompactMemtable() {
   // Flush and set new version
   {
     ZnsVersionEdit edit;
-    SSZoneMetaData meta;
-
-    ZnsVersion* current = versions_->current();
+    std::vector<SSZoneMetaData> metas;
+    // ZnsVersion* current = versions_->current();
     // current->Ref();
-
-    meta.number = versions_->NewSSNumber();
     mutex_.Unlock();
-    s = FlushL0SSTables(&meta);
+    s = FlushL0SSTables(metas);
     mutex_.Lock();
     // current->Unref();
     int level = 0;
-    if (s.ok() && meta.lba_count > 0) {
-      edit.AddSSDefinition(level, meta);
+    if (s.ok() && metas.size() > 0) {
+      for (auto& meta : metas) {
+        if (meta.lba_count > 0) {
+          meta.number = versions_->NewSSNumber();
+          edit.AddSSDefinition(level, meta);
+        }
+      }
       s = versions_->LogAndApply(&edit);
     } else {
       printf("Fatal error \n");
@@ -147,9 +149,9 @@ Status DBImplZNS::CompactMemtable() {
   return s;
 }
 
-Status DBImplZNS::FlushL0SSTables(SSZoneMetaData* meta) {
+Status DBImplZNS::FlushL0SSTables(std::vector<SSZoneMetaData>& metas) {
   Status s;
-  s = ss_manager_->FlushMemTable(imm_, meta);
+  s = ss_manager_->FlushMemTable(imm_, metas);
   flushes_++;
   return s;
 }
@@ -220,15 +222,18 @@ void DBImplZNS::BackgroundCompactionL0() {
     // printf("Only reclaimed\n");
     return;
   } else {
-    ZnsCompaction* c = versions_->PickCompaction(0);
+    ZnsCompaction* c = versions_->PickCompaction(0, reserved_comp_[1]);
     // Can not do this compaction
-    while (c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
+    while (reserve_claimed_ == 1 ||
+           c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
       printf("\tOverlap with LN write\n");
       delete c;
+      reserve_claimed_ = reserve_claimed_ == -1 ? 0 : reserve_claimed_;
       bg_work_finished_signal_.Wait();
       current = versions_->current();
-      c = versions_->PickCompaction(0);
+      c = versions_->PickCompaction(0, reserved_comp_[1]);
     }
+    reserve_claimed_ = reserve_claimed_ == 0 ? -1 : reserve_claimed_;
     c->GetCompactionTargets(&reserved_comp_[0]);
     current->Ref();
     mutex_.Unlock();
@@ -341,14 +346,19 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("Only reclaimed\n");
     return;
   } else {
-    ZnsCompaction* c = versions_->PickCompaction(current->CompactionLevel());
-    while (c->HasOverlapWithOtherCompaction(reserved_comp_[0])) {
+    ZnsCompaction* c = versions_->PickCompaction(current->CompactionLevel(),
+                                                 reserved_comp_[0]);
+    while (reserve_claimed_ == 0 ||
+           c->HasOverlapWithOtherCompaction(reserved_comp_[0]) || c->IsBusy()) {
       printf("\tOverlap with L0 write...\n");
       delete c;
+      reserve_claimed_ = reserve_claimed_ == -1 ? 1 : reserve_claimed_;
       bg_work_l0_finished_signal_.Wait();
       current = versions_->current();
-      c = versions_->PickCompaction(current->CompactionLevel());
+      c = versions_->PickCompaction(current->CompactionLevel(),
+                                    reserved_comp_[0]);
     }
+    reserve_claimed_ = reserve_claimed_ == 1 ? -1 : reserve_claimed_;
     c->GetCompactionTargets(&reserved_comp_[1]);
     current->Ref();
     mutex_.Unlock();

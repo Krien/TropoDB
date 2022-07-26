@@ -22,7 +22,8 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level)
                       vset->zone_cap_) *
                      vset->zone_cap_),
       vset_(vset),
-      version_(nullptr) {
+      version_(nullptr),
+      busy_(false) {
   // printf(
   //     "Max compaction size %lu %lu %lu %lu\n", ZnsConfig::max_bytes_sstable_,
   //     ((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /

@@ -45,9 +45,11 @@ constexpr static double ss_compact_treshold_force[level_count]{
     0.55, 0.55}; /**< Fraction of lbas that might require
         compaction to prevent out of space. HIGHER
         prio than ss_compact_treshold*/
+constexpr static uint64_t max_byte_sstable_l0 = 1024U * 1024U * 64;
 constexpr static uint64_t max_bytes_sstable_ =
     (uint64_t)(1073741824. * 2. *
                0.95);  // please set to a multitude of approximately n zones
+constexpr static uint64_t max_lbas_compaction = 2097152 * 6;
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
 constexpr static uint64_t max_zone =
     0x0; /**< Maximum zone to use for database. Set to 0 for full region*/

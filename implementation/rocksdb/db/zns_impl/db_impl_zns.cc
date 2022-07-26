@@ -88,7 +88,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
   for (uint8_t i = 0; i < ZnsConfig::level_count - 1; i++) {
     compactions_[i] = 0;
   }
-  env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(2, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
   env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 

@@ -250,7 +250,7 @@ void ZnsVersionSet::RecalculateScore() {
       score =
           (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
            ZnsConfig::ss_compact_treshold[i]) *
-          static_cast<double>(2 ^ (6 - i));
+          static_cast<double>(2 ^ (ZnsConfig::level_count - i));
     } else {
       score = 0;
     }
@@ -469,7 +469,8 @@ bool ZnsVersionSet::OnlyNeedDeletes(uint8_t level) {
   return only_need;
 }
 
-ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
+ZnsCompaction* ZnsVersionSet::PickCompaction(
+    uint8_t level, const std::vector<SSZoneMetaData*>& busy) {
   ZnsCompaction* c;
 
   c = new ZnsCompaction(this, level);
@@ -480,7 +481,9 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
-  max_lba_c = max_lba_c > 800000 ? 800000 : max_lba_c;
+  max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction
+                  ? ZnsConfig::max_lbas_compaction
+                  : max_lba_c;
 
   // Always pick the tail on L0
   uint64_t L0index;
@@ -509,6 +512,18 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
       SSZoneMetaData* m = current_->ss_[level][i];
       if (compact_pointer_[level].empty() ||
           icmp_.Compare(m->largest.Encode(), compact_pointer_[level]) > 0) {
+        if (level == 1) {
+          bool skip = false;
+          for (const auto& m2 : busy) {
+            if (m2->number == m->number) {
+              skip = true;
+              break;
+            }
+          }
+          if (skip) {
+            continue;
+          }
+        }
         c->targets_[0].push_back(m);
         max_lba_c -= m->lba_count;
         break;
@@ -516,7 +531,26 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
     }
     if (c->targets_[0].empty()) {
       // Wrap-around to the beginning of the key space
-      if (current_->ss_[level].size() > 0) {
+      if (level == 1) {
+        for (size_t i = 0; i < current_->ss_[level].size(); i++) {
+          SSZoneMetaData* m = current_->ss_[level][i];
+          bool done = false;
+          for (const auto& m2 : busy) {
+            if (m2->number != m->number) {
+              done = true;
+              c->targets_[0].push_back(m);
+              break;
+            }
+          }
+          if (done) {
+            break;
+          }
+        }
+        if (c->targets_[0].empty()) {
+          c->busy_ = true;
+          return c;
+        }
+      } else if (current_->ss_[level].size() > 0) {
         c->targets_[0].push_back(current_->ss_[level][0]);
         max_lba_c -= current_->ss_[level][0]->lba_count;
       } else {
@@ -561,7 +595,10 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(uint8_t level) {
   }
 
   SetupOtherInputs(c, max_lba_c);
-
+  printf("Compact from %u, with size %lu/%lu(%lud) %lu/%lu(%lud \n", level,
+         c->targets_[0].size(), current_->ss_[level].size(),
+         current_->ss_d_[level].size(), c->targets_[1].size(),
+         current_->ss_[level + 1].size(), current_->ss_d_[level + 1].size());
   return c;
 }
 

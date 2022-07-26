@@ -46,9 +46,9 @@ ZNSSSTableManager::~ZNSSSTableManager() {
   channel_factory_ = nullptr;
 }
 
-Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
-                                        SSZoneMetaData* meta) const {
-  return GetL0SSTableLog()->FlushMemTable(mem, meta);
+Status ZNSSSTableManager::FlushMemTable(
+    ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas) const {
+  return GetL0SSTableLog()->FlushMemTable(mem, metas);
 }
 
 Status ZNSSSTableManager::WriteSSTable(const uint8_t level,

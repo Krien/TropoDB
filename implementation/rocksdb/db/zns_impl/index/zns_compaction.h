@@ -26,6 +26,7 @@ class ZnsCompaction {
 
   void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
   bool IsTrivialMove() const;
+  bool IsBusy() const { return busy_; }
   bool HasOverlapWithOtherCompaction(std::vector<SSZoneMetaData*> metas);
   void GetCompactionTargets(std::vector<SSZoneMetaData*>* metas);
 
@@ -53,6 +54,7 @@ class ZnsCompaction {
   size_t level_ptrs_[ZnsConfig::level_count];
 
   std::vector<SSZoneMetaData*> grandparents_;
+  bool busy_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

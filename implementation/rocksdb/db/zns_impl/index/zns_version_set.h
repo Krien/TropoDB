@@ -90,7 +90,8 @@ class ZnsVersionSet {
                  InternalKey* smallest, InternalKey* largest);
   void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
   bool OnlyNeedDeletes(uint8_t level);
-  ZnsCompaction* PickCompaction(uint8_t level);
+  ZnsCompaction* PickCompaction(uint8_t level,
+                                const std::vector<SSZoneMetaData*>& busy);
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
   Status Recover();

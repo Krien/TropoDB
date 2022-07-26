@@ -3,6 +3,8 @@
 #ifndef ZNS_SSTABLE_MANAGER_H
 #define ZNS_SSTABLE_MANAGER_H
 
+#include <optional>
+
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
@@ -15,8 +17,6 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
-#include <optional>
-
 namespace ROCKSDB_NAMESPACE {
 class ZnsSSTableManagerInternal;
 class ZNSSSTableManager : public RefCounter {
@@ -28,7 +28,8 @@ class ZNSSSTableManager : public RefCounter {
   ~ZNSSSTableManager();
 
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
-  Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) const;
+  Status FlushMemTable(ZNSMemTable* mem,
+                       std::vector<SSZoneMetaData>& metas) const;
   Status CopySSTable(const uint8_t level1, const uint8_t level2,
                      const SSZoneMetaData& meta,
                      SSZoneMetaData* new_meta) const;

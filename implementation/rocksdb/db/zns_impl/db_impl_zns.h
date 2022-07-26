@@ -218,7 +218,7 @@ class DBImplZNS : public DB {
   void BackgroundCompactionL0Call();
   void BackgroundCompactionL0();
   Status CompactMemtable();
-  Status FlushL0SSTables(SSZoneMetaData* meta);
+  Status FlushL0SSTables(std::vector<SSZoneMetaData>& metas);
 
   virtual Status PauseBackgroundWork() override;
   virtual Status ContinueBackgroundWork() override;
@@ -369,6 +369,7 @@ class DBImplZNS : public DB {
   Status bg_error_;
   bool forced_schedule_;
   std::array<std::vector<SSZoneMetaData*>, 2> reserved_comp_;
+  int reserve_claimed_ = -1;
 
   // diagnostics
   uint64_t flushes_;

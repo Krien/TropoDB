@@ -68,22 +68,39 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
 #endif
 }
 
-Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
+Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
+                                   std::vector<SSZoneMetaData>& metas) {
   Status s = Status::OK();
-  SSTableBuilder* builder = NewBuilder(meta);
-  {
-    InternalIterator* iter = mem->NewIterator();
-    iter->SeekToFirst();
-    if (!iter->Valid()) {
-      return Status::Corruption("No valid iterator in the memtable");
+  SSZoneMetaData meta;
+  SSTableBuilder* builder = NewBuilder(&meta);
+  InternalIterator* iter = mem->NewIterator();
+  iter->SeekToFirst();
+  if (!iter->Valid()) {
+    return Status::Corruption("No valid iterator in the memtable");
+  }
+  for (; iter->Valid(); iter->Next()) {
+    const Slice& key = iter->key();
+    const Slice& value = iter->value();
+    s = builder->Apply(key, value);
+    // Swap if necessary, we do not want enormous L0 -> L1 compactions.
+    if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
+         lba_size_ - 1) /
+            lba_size_ >=
+        (ZnsConfig::max_byte_sstable_l0 + lba_size_ - 1) / lba_size) {
+      builder->Finalise();
+      s = builder->Flush();
+      if (!s.ok()) {
+        break;
+      }
+      metas.push_back(meta);
+      delete builder;
+      builder = NewBuilder(&meta);
     }
-    for (; iter->Valid(); iter->Next()) {
-      const Slice& key = iter->key();
-      const Slice& value = iter->value();
-      s = builder->Apply(key, value);
-    }
+  }
+  if (s.ok() && builder->GetSize() > 0) {
     s = builder->Finalise();
     s = builder->Flush();
+    metas.push_back(meta);
   }
   delete builder;
   return s;
