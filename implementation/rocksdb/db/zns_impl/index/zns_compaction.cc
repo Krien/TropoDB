@@ -16,11 +16,8 @@
 namespace ROCKSDB_NAMESPACE {
 ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env)
     : first_level_(first_level),
-      max_lba_count_(((((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
-                        vset->lba_size_) +
-                       vset->zone_cap_ - 1) /
-                      vset->zone_cap_) *
-                     vset->zone_cap_),
+      max_lba_count_((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+                     vset->lba_size_),
       vset_(vset),
       version_(nullptr),
       busy_(false),
@@ -368,10 +365,11 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         if (drop) {
         } else {
           // estimate if flush before would be better...
+          uint64_t max_size = max_lba_count_;
           if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
                vset_->lba_size_ - 1) /
                   vset_->lba_size_ >=
-              max_lba_count_) {
+              max_size) {
             printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
             s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
             before = clock_->NowMicros();

@@ -479,7 +479,7 @@ Status DBImplZNS::MakeRoomForWrite(size_t size) {
     }
     if (allow_delay && versions_->NumLevelZones(0) > ZnsConfig::L0_slow_down) {
       mutex_.Unlock();
-      printf("SlowDown reached...\n");
+      // printf("SlowDown reached...\n");
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
