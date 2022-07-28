@@ -46,6 +46,7 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.lba_count = meta.lba_count;
   f.smallest = meta.smallest;
   f.largest = meta.largest;
+  // printf("Adding %lu %lu %lu \n", f.number, f.L0.lba, f.lba_count);
   new_ss_.push_back(std::make_pair(level, f));
 }
 

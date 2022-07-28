@@ -194,10 +194,11 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
   // LN
   int i = first_level_ == 0 ? 1 : 0;
   for (; i <= 1; i++) {
-    iterators[iterator_index++] = new LNIterator(
-        new LNZoneIterator(vset_->icmp_.user_comparator(), &targets_[i],
-                           first_level_ + i),
-        &GetLNIterator, vset_->znssstable_, vset_->icmp_.user_comparator());
+    iterators[iterator_index++] =
+        new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),
+                                          &targets_[i], first_level_ + i),
+                       &GetLNIterator, vset_->znssstable_,
+                       vset_->icmp_.user_comparator(), env_);
     // printf("Iterators... %d %lu\n", first_level_ + i, iterators_needed);
   }
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);

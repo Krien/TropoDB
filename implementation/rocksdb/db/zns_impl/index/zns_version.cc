@@ -150,10 +150,11 @@ void ZnsVersion::AddIterators(const ReadOptions& options,
   // lazily.
   for (int level = 1; level < ZnsConfig::level_count; level++) {
     if (!ss_[level].empty()) {
-      iters->push_back(new LNIterator(
-          new LNZoneIterator(vset_->icmp_.user_comparator(), &ss_[level],
-                             level),
-          &GetLNIterator, vset_->znssstable_, vset_->icmp_.user_comparator()));
+      iters->push_back(
+          new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),
+                                            &ss_[level], level),
+                         &GetLNIterator, vset_->znssstable_,
+                         vset_->icmp_.user_comparator(), nullptr));
     }
   }
 }

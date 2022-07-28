@@ -16,6 +16,7 @@ SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
       writer_(writer) {
   meta_->lba_count = 0;
   buffer_.clear();
+  buffer_.reserve(ZnsConfig::max_bytes_sstable_);
   kv_pair_offsets_.clear();
   if (use_encoding_) {
     kv_pair_offsets_.push_back(0);
