@@ -467,7 +467,8 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
 }
 
 bool ZnsVersionSet::OnlyNeedDeletes(uint8_t level) {
-  bool only_need = current_->ss_[level].size() == 0;
+  bool only_need = current_->ss_[level].size() == 0 ||
+                   (level > 0 && znssstable_->GetFractionFilled(level) > 0.85);
   if (only_need) {
     printf("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
            current_->ss_d_[level].size());
