@@ -61,7 +61,7 @@ struct ZonePrefetcher {
   bool quit_{false};
   size_t tail_{0};
   size_t tail_read_{0};
-  size_t index_{0};
+  size_t index_{1};  // thats right, the first entry is not prefetched.
   std::vector<std::pair<std::string, Iterator*>> its;
   void* arg_;
   const Comparator* cmp_;

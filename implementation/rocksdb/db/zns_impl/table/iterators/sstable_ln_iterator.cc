@@ -18,6 +18,9 @@ Slice LNZoneIterator::value() const {
   assert(Valid());
   // printf("Encoding %u %lu %lu %u ", (*slist_)[index_]->LN.lba_regions,
   //        (*slist_)[index_]->number, (*slist_)[index_]->lba_count, level_);
+  // This is necessary to prevent leaking data into buf. This causes validation
+  // checks to fail (corruption etc.), but should not cause failures itself.
+  memset(value_buf_, 0, sizeof(value_buf_));
   EncodeFixed8(value_buf_, (*slist_)[index_]->LN.lba_regions);
   for (size_t i = 0; i < (*slist_)[index_]->LN.lba_regions; i++) {
     EncodeFixed64(value_buf_ + 1 + i * 16, (*slist_)[index_]->LN.lbas[i]);
@@ -217,10 +220,10 @@ void LNIterator::SkipEmptyDataLbasForward() {
       }
       Slice handle = prefetcher_.its[prefetcher_.tail_read_].first;
       if (handle.compare(index_iter_.value()) != 0) {
-        printf("FATAL \n");
+        printf(
+            "FATAL error, LN iterator handle changed. This is "
+            "unrecoverable.\n");
         exit(-1);
-      } else {
-        printf("Great \n");
       }
       if (data_iter_.iter() != nullptr &&
           handle.compare(data_zone_handle_) == 0) {
