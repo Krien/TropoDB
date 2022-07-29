@@ -78,9 +78,12 @@ static void LNZonePrefetcher(void* prefetch) {
     }
 
     // Cleanup
-    while (zone_prefetcher->tail_read_ != zone_prefetcher->tail_) {
+    while (zone_prefetcher->tail_ + 1 < zone_prefetcher->tail_read_ &&
+           zone_prefetcher->tail_ < zone_prefetcher->its.size()) {
       // printf("Prefetching cleaning %lu \n", zone_prefetcher->tail_);
-      delete zone_prefetcher->its[zone_prefetcher->tail_].second;
+      // TODO: The iterator takes ownership of the data. Therefore, we can not
+      // do manual deletion. This leads to anti-patterns and strange behaviour.
+      // Investigate if there is chance of a memory-leak.
       zone_prefetcher->tail_++;
     }
 
@@ -202,25 +205,32 @@ void LNIterator::SkipEmptyDataLbasForward() {
       SetDataIterator(nullptr);
       return;
     }
-    // prefetch hack
     index_iter_.Next();
+    // prefetch hack
     if (index_iter_.Valid() && prefetching_) {
       prefetcher_.mut_.Lock();
-      while (prefetcher_.tail_read_ == prefetcher_.index_) {
+      prefetcher_.tail_read_++;
+      prefetcher_.waiting_.SignalAll();
+      while (prefetcher_.tail_read_ >= prefetcher_.index_) {
         // printf("Waiting for read to complete...\n");
         prefetcher_.waiting_.Wait();
       }
       Slice handle = prefetcher_.its[prefetcher_.tail_read_].first;
+      if (handle.compare(index_iter_.value()) != 0) {
+        printf("FATAL \n");
+        exit(-1);
+      } else {
+        printf("Great \n");
+      }
       if (data_iter_.iter() != nullptr &&
           handle.compare(data_zone_handle_) == 0) {
-        return;
+        prefetcher_.mut_.Unlock();
+      } else {
+        SetDataIterator(prefetcher_.its[prefetcher_.tail_read_].second);
+        data_zone_handle_.assign(handle.data(), handle.size());
+        // printf("Read %lu...\n", prefetcher_.tail_read_);
+        prefetcher_.mut_.Unlock();
       }
-      SetDataIterator(prefetcher_.its[prefetcher_.tail_read_].second);
-      data_zone_handle_.assign(handle.data(), handle.size());
-      prefetcher_.tail_read_++;
-      // printf("Read %lu...\n", prefetcher_.tail_read_);
-      prefetcher_.waiting_.SignalAll();
-      prefetcher_.mut_.Unlock();
     } else {
       InitDataZone();
     }
