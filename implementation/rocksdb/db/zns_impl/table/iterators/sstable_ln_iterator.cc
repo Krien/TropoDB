@@ -1,6 +1,7 @@
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 
 #include "db/dbformat.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
@@ -69,7 +70,8 @@ static void LNZonePrefetcher(void* prefetch) {
     zone_prefetcher->mut_.Lock();
 
     // Wait for tasks
-    while (zone_prefetcher->index_ - zone_prefetcher->tail_read_ > 3 ||
+    while (zone_prefetcher->index_ - zone_prefetcher->tail_read_ >
+               ZnsConfig::compaction_maximum_prefetches ||
            zone_prefetcher->index_ == zone_prefetcher->its.size()) {
       // printf("Prefetcher awaiting new task %lu %lu %lu\n",
       //        zone_prefetcher->tail_read_, zone_prefetcher->index_,
@@ -128,7 +130,7 @@ LNIterator::LNIterator(Iterator* ln_iterator,
       data_iter_(nullptr),
       cmp_(cmp),
       env_(env) {
-  if (env_ != nullptr) {
+  if (ZnsConfig::compaction_allow_prefetching && env_ != nullptr) {
     index_iter_.SeekToFirst();
     while (index_iter_.Valid()) {
       Slice handle = index_iter_.value();

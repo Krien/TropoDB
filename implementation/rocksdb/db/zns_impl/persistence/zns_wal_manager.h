@@ -3,8 +3,7 @@
 #ifndef ZNS_WAL_MANAGER_H
 #define ZNS_WAL_MANAGER_H
 
-#define WAL_MANAGER_MANAGES_CHANNELS
-
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"

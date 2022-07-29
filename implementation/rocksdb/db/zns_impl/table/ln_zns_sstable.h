@@ -3,6 +3,7 @@
 #ifndef LN_ZNS_SSTABLE_H
 #define LN_ZNS_SSTABLE_H
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
@@ -12,8 +13,6 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-static constexpr uint8_t number_of_concurrent_ln_readers = 4;
 
 class LNZnsSSTable : public ZnsSSTable {
  public:
@@ -61,7 +60,7 @@ class LNZnsSSTable : public ZnsSSTable {
   SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
   port::CondVar cv_;
-  std::array<uint8_t, number_of_concurrent_ln_readers> read_queue_;
+  std::array<uint8_t, ZnsConfig::number_of_concurrent_LN_readers> read_queue_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

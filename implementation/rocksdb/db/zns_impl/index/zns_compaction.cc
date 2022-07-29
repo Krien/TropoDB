@@ -38,46 +38,6 @@ ZnsCompaction::~ZnsCompaction() {
   }
 }
 
-void ZnsCompaction::DeferCompactionWrite(void* c) {
-  DeferredLNCompaction* deferred = reinterpret_cast<DeferredLNCompaction*>(c);
-  while (true) {
-    // Make progress
-    deferred->mutex_.Lock();
-    if (deferred->index_ >= deferred->deferred_builds_.size()) {
-      printf("Deferred awaiting new task\n");
-      if (deferred->last_) {
-        break;
-      }
-      deferred->new_task_.Wait();
-    }
-    SSTableBuilder* current_builder =
-        deferred->deferred_builds_[deferred->index_];
-    deferred->mutex_.Unlock();
-
-    // The meat of the function
-    printf("Deferred flush?\n");
-    Status s = current_builder->Flush();
-    if (!s.ok()) {
-      printf("error writing table\n");
-    }
-
-    // Acquire tasks
-    deferred->mutex_.Lock();
-    deferred->edit_->AddSSDefinition(
-        deferred->level_,
-        *(deferred->deferred_builds_[deferred->index_]->GetMeta()));
-    deferred->index_++;
-    delete current_builder;
-    printf("Deferred requesting new task\n");
-    deferred->new_task_.SignalAll();
-    deferred->mutex_.Unlock();
-  }
-  printf("Deferred done \n");
-  deferred->done_ = true;
-  deferred->new_task_.SignalAll();
-  deferred->mutex_.Unlock();
-}
-
 bool ZnsCompaction::HasOverlapWithOtherCompaction(
     std::vector<SSZoneMetaData*> metas) {
   for (const auto& target : metas) {
@@ -249,6 +209,46 @@ void ZnsCompaction::MarkStaleTargetsReusable(ZnsVersionEdit* edit) {
   }
 }
 
+void ZnsCompaction::DeferCompactionWrite(void* c) {
+  DeferredLNCompaction* deferred = reinterpret_cast<DeferredLNCompaction*>(c);
+  while (true) {
+    // Make progress
+    deferred->mutex_.Lock();
+    if (deferred->index_ >= deferred->deferred_builds_.size()) {
+      printf("Deferred awaiting new task\n");
+      if (deferred->last_) {
+        break;
+      }
+      deferred->new_task_.Wait();
+    }
+    SSTableBuilder* current_builder =
+        deferred->deferred_builds_[deferred->index_];
+    deferred->mutex_.Unlock();
+
+    // The meat of the function
+    printf("Deferred flush?\n");
+    Status s = current_builder->Flush();
+    if (!s.ok()) {
+      printf("error writing table\n");
+    }
+
+    // Acquire tasks
+    deferred->mutex_.Lock();
+    deferred->edit_->AddSSDefinition(
+        deferred->level_,
+        *(deferred->deferred_builds_[deferred->index_]->GetMeta()));
+    deferred->index_++;
+    delete current_builder;
+    printf("Deferred requesting new task\n");
+    deferred->new_task_.SignalAll();
+    deferred->mutex_.Unlock();
+  }
+  printf("Deferred done \n");
+  deferred->done_ = true;
+  deferred->new_task_.SignalAll();
+  deferred->mutex_.Unlock();
+}
+
 Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
                                    ZnsVersionEdit* edit, SSZoneMetaData* meta) {
   Status s = Status::OK();
@@ -256,27 +256,32 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
 
-  deferred_.mutex_.Lock();
-  if (deferred_.deferred_builds_.size() > deferred_.index_ &&
-      deferred_.deferred_builds_.size() - deferred_.index_ > 3) {
-    printf("Too many flushes, waiting\n");
-    deferred_.new_task_.Wait();
+  if (ZnsConfig::compaction_allow_deferring_writes) {
+    deferred_.mutex_.Lock();
+    while (deferred_.deferred_builds_.size() > deferred_.index_ &&
+           deferred_.deferred_builds_.size() - deferred_.index_ >
+               ZnsConfig::compaction_maximum_deferred_writes) {
+      // printf("Too many flushes, waiting\n");
+      deferred_.new_task_.Wait();
+    }
+    // printf("Adding new deferred flush \n");
+    deferred_.deferred_builds_.push_back(current_builder);
+    deferred_.new_task_.SignalAll();
+    deferred_.mutex_.Unlock();
+    metas_.push_back(new SSZoneMetaData);
+    current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1,
+                                                     metas_[metas_.size() - 1]);
+  } else {
+    // uint64_t before = clock_->NowMicros();
+    s = current_builder->Flush();
+    // printf("Time of flush to LN %lu \n", clock_->NowMicros() - before);
+    if (s.ok()) {
+      edit->AddSSDefinition(first_level_ + 1, *meta);
+    }
+    delete current_builder;
+    current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
   }
-  printf("Adding new deferred flush \n");
-  deferred_.deferred_builds_.push_back(current_builder);
-  deferred_.new_task_.SignalAll();
-  deferred_.mutex_.Unlock();
 
-  // uint64_t before = clock_->NowMicros();
-  // s = current_builder->Flush();
-  // printf("Time of flush to LN %lu \n", clock_->NowMicros() - before);
-  // // printf("adding... %u %lu %lu %s %s\n", first_level_ + 1,
-  // meta->LN.lbas[0],
-  // //        meta->lba_count, s.getState(), s.ok() ? "OK" : "NOK");
-
-  metas_.push_back(new SSZoneMetaData);
-  current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1,
-                                                   metas_[metas_.size() - 1]);
   *builder = current_builder;
   if (!s.ok()) {
     printf("error writing table\n");
@@ -307,22 +312,26 @@ bool ZnsCompaction::IsBaseLevelForKey(const Slice& user_key) {
 Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
   // printf("Starting compaction..\n");
   Status s = Status::OK();
+  SSZoneMetaData meta;
+  SSTableBuilder* builder;
   // Setup deferred thread
-  {
+  if (ZnsConfig::compaction_allow_deferring_writes) {
     deferred_.edit_ = edit;
     deferred_.level_ = first_level_ + 1;
-    printf("scheduling\n");
+    // printf("scheduling\n");
     env_->Schedule(&ZnsCompaction::DeferCompactionWrite, &(this->deferred_),
                    rocksdb::Env::LOW);
+    metas_.push_back(new SSZoneMetaData);
+    builder = vset_->znssstable_->NewBuilder(first_level_ + 1,
+                                             metas_[metas_.size() - 1]);
+  } else {
+    builder = vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
   }
   {
-    metas_.push_back(new SSZoneMetaData);
-    SSTableBuilder* builder = vset_->znssstable_->NewBuilder(
-        first_level_ + 1, metas_[metas_.size() - 1]);
     {
-      uint64_t before = clock_->NowMicros();
+      // uint64_t before = clock_->NowMicros();
       Iterator* merger = MakeCompactionIterator();
-      printf("Time to make iterator %lu \n", clock_->NowMicros() - before);
+      // printf("Time to make iterator %lu \n", clock_->NowMicros() - before);
       merger->SeekToFirst();
       if (!merger->Valid()) {
         delete merger;
@@ -335,7 +344,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
       SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
       SequenceNumber min_seq = vset_->LastSequence();
       const Comparator* ucmp = vset_->icmp_.user_comparator();
-      before = clock_->NowMicros();
+      // before = clock_->NowMicros();
       for (; merger->Valid(); merger->Next()) {
         const Slice& key = merger->key();
         const Slice& value = merger->value();
@@ -371,9 +380,14 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
                vset_->lba_size_ - 1) /
                   vset_->lba_size_ >=
               max_size) {
-            printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
-            s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
-            before = clock_->NowMicros();
+            // printf("Time for LN merge %lu \n", clock_->NowMicros() -
+            // before);
+            if (ZnsConfig::compaction_allow_deferring_writes) {
+              s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
+            } else {
+              s = FlushSSTable(&builder, edit, &meta);
+            }
+            // before = clock_->NowMicros();
             if (!s.ok()) {
               break;
             }
@@ -382,22 +396,31 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         }
       }
       if (s.ok() && builder->GetSize() > 0) {
-        printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
-        s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
+        // printf("Time for LN merge %lu \n", clock_->NowMicros() - before);
+        if (ZnsConfig::compaction_allow_deferring_writes) {
+          s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
+        } else {
+          s = FlushSSTable(&builder, edit, &meta);
+        }
       }
-      deferred_.mutex_.Lock();
-      deferred_.last_ = true;
-      deferred_.new_task_.SignalAll();
-      while (!deferred_.done_) {
-        deferred_.new_task_.Wait();
-        deferred_.mutex_.Unlock();
+      // Shutdown write thread
+      if (ZnsConfig::compaction_allow_deferring_writes) {
+        deferred_.mutex_.Lock();
+        deferred_.last_ = true;
+        deferred_.new_task_.SignalAll();
+        while (!deferred_.done_) {
+          deferred_.new_task_.Wait();
+          deferred_.mutex_.Unlock();
+        }
+        // printf("Deferred quiting \n");
       }
-      printf("Deferred quiting \n");
       delete merger;
     }
   }
-  for (int i = metas_.size() - 1; i >= 0; i--) {
-    delete metas_[i];
+  if (ZnsConfig::compaction_allow_deferring_writes) {
+    for (int i = metas_.size() - 1; i >= 0; i--) {
+      delete metas_[i];
+    }
   }
   return s;
 }

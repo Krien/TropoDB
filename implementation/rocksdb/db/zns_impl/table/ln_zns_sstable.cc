@@ -16,10 +16,10 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           number_of_concurrent_ln_readers, 2),
+           ZnsConfig::number_of_concurrent_LN_readers, 2),
       cv_(&mutex_) {
   // unset
-  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
     read_queue_[i] = 0;
   }
 }
@@ -85,17 +85,17 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
 // TODO: this is better than locking around the entire read, but we have to
 // investigate the performance.
 uint8_t LNZnsSSTable::request_read_queue() {
-  uint8_t picked_reader = number_of_concurrent_ln_readers;
+  uint8_t picked_reader = ZnsConfig::number_of_concurrent_LN_readers;
   mutex_.Lock();
-  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
     if (read_queue_[i] == 0) {
       picked_reader = i;
       break;
     }
   }
-  while (picked_reader >= number_of_concurrent_ln_readers) {
+  while (picked_reader >= ZnsConfig::number_of_concurrent_LN_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+    for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -111,7 +111,8 @@ uint8_t LNZnsSSTable::request_read_queue() {
 
 void LNZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
-  assert(reader < number_of_concurrent_ln_readers && read_queue_[reader] != 0);
+  assert(reader < ZnsConfig::number_of_concurrent_LN_readers &&
+         read_queue_[reader] != 0);
   read_queue_[reader] = 0;
   // printf("Released reader %u %u\n", reader, read_queue_[reader]);
   cv_.SignalAll();

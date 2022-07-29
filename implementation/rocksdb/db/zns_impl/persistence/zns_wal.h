@@ -3,9 +3,7 @@
 #ifndef ZNS_WAL_H
 #define ZNS_WAL_H
 
-#define WAL_BUFFERED
-#define WAL_UNORDERED
-
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
@@ -73,7 +71,7 @@ class ZNSWAL : public RefCounter {
   }
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
- inline size_t SpaceNeeded(const size_t size) {
+  inline size_t SpaceNeeded(const size_t size) {
 #ifdef WAL_BUFFERED
     return committer_.SpaceNeeded(size + pos_ + 2 * sizeof(uint64_t));
 #else

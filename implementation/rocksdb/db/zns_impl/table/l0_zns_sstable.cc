@@ -16,7 +16,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           number_of_concurrent_readers),
+           ZnsConfig::number_of_concurrent_L0_readers),
 #ifdef USE_COMMITTER
       committer_(&log_, info, true),
 #endif
@@ -25,7 +25,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
       zone_size_(info.zone_size),
       cv_(&mutex_) {
   // unset
-  for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
     read_queue_[i] = 0;
   }
 }
@@ -109,17 +109,17 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
 // TODO: this is better than locking around the entire read, but we have to
 // investigate the performance.
 uint8_t L0ZnsSSTable::request_read_queue() {
-  uint8_t picked_reader = number_of_concurrent_readers;
+  uint8_t picked_reader = ZnsConfig::number_of_concurrent_L0_readers;
   mutex_.Lock();
-  for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
     if (read_queue_[i] == 0) {
       picked_reader = i;
       break;
     }
   }
-  while (picked_reader >= number_of_concurrent_readers) {
+  while (picked_reader >= ZnsConfig::number_of_concurrent_L0_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+    for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -135,7 +135,8 @@ uint8_t L0ZnsSSTable::request_read_queue() {
 
 void L0ZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
-  assert(reader < number_of_concurrent_readers && read_queue_[reader] != 0);
+  assert(reader < ZnsConfig::number_of_concurrent_L0_readers &&
+         read_queue_[reader] != 0);
   read_queue_[reader] = 0;
   // printf("Released readerL0 %u %u \n", reader, read_queue_[reader]);
   cv_.SignalAll();

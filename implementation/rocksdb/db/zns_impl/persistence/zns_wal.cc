@@ -34,7 +34,7 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
       committer_(&log_, info, false)
 #ifdef WAL_BUFFERED
       ,
-      buffered_(ZnsConfig::use_write_buffering),
+      buffered_(ZnsConfig::wal_allow_buffering),
       buffsize_(info.zasl),
       buf_(0),
       pos_(0)
@@ -67,7 +67,7 @@ ZNSWAL::~ZNSWAL() {
 
 #ifdef WAL_BUFFERED
 Status ZNSWAL::BufferedAppend(const Slice& data) {
- Status s = Status::OK();
+  Status s = Status::OK();
   size_t sizeleft = buffsize_ - pos_;
   size_t sizeneeded = data.size();
   if (sizeneeded < sizeleft) {
@@ -91,7 +91,7 @@ Status ZNSWAL::BufferedAppend(const Slice& data) {
       pos_ += sizeneeded;
     }
   }
-    return s;
+  return s;
 }
 
 Status ZNSWAL::DataSync() {
@@ -165,10 +165,10 @@ Status ZNSWAL::Sync() {
 
 #ifdef WAL_UNORDERED
 Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
-  //printf("Replaying WAL\n");
+  // printf("Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    //printf("Replayed WAL\n");
+    // printf("Replayed WAL\n");
     return s;
   }
   // Used for each batch
@@ -199,7 +199,7 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     dat->assign(record.data() + 2 * sizeof(uint64_t), data_size);
     entries.push_back(std::make_pair(seq_nr, dat));
     entries_found++;
- }
+  }
   committer_.CloseCommitString(reader);
   // printf("Read WAL into dictionary, total of %lu entries\n", entries_found);
 
@@ -226,7 +226,7 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     // Ensure the sequence number is up to date.
     const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
                                     WriteBatchInternal::Count(&batch) - 1;
-    //printf("LAST SEQ %lu \n", last_seq);
+    // printf("LAST SEQ %lu \n", last_seq);
     if (last_seq > *seq) {
       *seq = last_seq;
     }

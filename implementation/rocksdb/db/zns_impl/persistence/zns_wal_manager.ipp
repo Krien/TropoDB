@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -44,7 +45,13 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
   channel_factory_->Ref();
   for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
     channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
-                                       max_zone_nr, true, 4);
+                                       max_zone_nr, ZnsConfig::wal_preserve_dma,
+#ifdef WAL_UNORDERED
+                                       ZnsConfig::wal_iodepth
+#else
+                                       1
+#endif
+    );
   }
 #endif
   for (size_t i = 0; i < N; ++i) {
@@ -289,7 +296,8 @@ void ZnsWALManager<N>::PrintAdditionalWALStatistics() {
     time_waiting_storage_squared_total +=
         wals_[i]->TimeSpendWaitingOnStorageSquaredTotal();
     time_waiting_storage_number += wals_[i]->TimeSpendWaitingOnStorageNumber();
-    time_waiting_storage_number_total += wals_[i]->TimeSpendWaitingOnStorageNumberTotal();
+    time_waiting_storage_number_total +=
+        wals_[i]->TimeSpendWaitingOnStorageNumberTotal();
     time_spent_replaying += wals_[i]->TimeSpendReplaying();
     time_spend_recovering += wals_[i]->TimeSpendRecovering();
     time_waiting_resets += wals_[i]->TimeSpendWaitingOnResets();
@@ -312,12 +320,13 @@ void ZnsWALManager<N>::PrintAdditionalWALStatistics() {
 
   avg = static_cast<double>(time_waiting_storage_total) /
         static_cast<double>(time_waiting_storage_number_total);
-  variance = std::sqrt(
-      static_cast<double>(
-          time_waiting_storage_squared_total * time_waiting_storage_number_total -
-          time_waiting_storage_total * time_waiting_storage_total) /
-      static_cast<double>(time_waiting_storage_number_total *
-                          time_waiting_storage_number_total));
+  variance =
+      std::sqrt(static_cast<double>(time_waiting_storage_squared_total *
+                                        time_waiting_storage_number_total -
+                                    time_waiting_storage_total *
+                                        time_waiting_storage_total) /
+                static_cast<double>(time_waiting_storage_number_total *
+                                    time_waiting_storage_number_total));
   printf(
       "\tWAL operations total: %lu, AVG time (μs) %.4f, StdDev (μs): %.2f \n",
       time_waiting_storage_number_total, avg, variance);

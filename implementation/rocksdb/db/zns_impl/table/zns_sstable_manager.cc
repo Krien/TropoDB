@@ -283,14 +283,11 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
     return {};
   }
   // Distribute
-  uint64_t distr =
-      std::accumulate(ZnsConfig::ss_distribution,
-                      ZnsConfig::ss_distribution + ZnsConfig::level_count, 0U);
-  zone_step = (num_zones / distr) * ZnsConfig::ss_distribution[0];
+  zone_step = ZnsConfig::L0_zones;
   zone_step = zone_step < ZnsConfig::min_ss_zone_count
                   ? ZnsConfig::min_ss_zone_count
                   : zone_step;
-  ranges[0] = std::make_pair(zone_head, zone_step);
+  ranges[0] = std::make_pair(zone_head, zone_head + zone_step);
   zone_head += zone_step;
   // Last zone will also get the remainer.
   zone_step = max_zone - zone_head;

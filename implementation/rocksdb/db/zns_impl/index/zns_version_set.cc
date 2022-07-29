@@ -256,7 +256,7 @@ void ZnsVersionSet::RecalculateScore() {
       score =
           (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
            ZnsConfig::ss_compact_treshold[i]) *
-          static_cast<double>(2 ^ (ZnsConfig::level_count - i));
+          ZnsConfig::ss_compact_modifier[i];
     } else {
       score = 0;
     }
@@ -488,8 +488,8 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
-  max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction
-                  ? ZnsConfig::max_lbas_compaction
+  max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction_l0
+                  ? ZnsConfig::max_lbas_compaction_l0
                   : max_lba_c;
 
   // Always pick the tail on L0

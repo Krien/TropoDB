@@ -3,8 +3,7 @@
 #ifndef L0_ZNS_SSTABLE_H
 #define L0_ZNS_SSTABLE_H
 
-//#define USE_COMMITTER
-
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/table/zns_sstable.h"
@@ -14,8 +13,6 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 namespace ROCKSDB_NAMESPACE {
-
-static constexpr uint8_t number_of_concurrent_readers = 4;
 
 // Like a Oroborous, an entire circle without holes.
 class L0ZnsSSTable : public ZnsSSTable {
@@ -72,7 +69,7 @@ class L0ZnsSSTable : public ZnsSSTable {
   // concurrently.
   port::Mutex mutex_;
   port::CondVar cv_;
-  std::array<uint8_t, number_of_concurrent_readers> read_queue_;
+  std::array<uint8_t, ZnsConfig::number_of_concurrent_L0_readers> read_queue_;
 };
 
 /**
