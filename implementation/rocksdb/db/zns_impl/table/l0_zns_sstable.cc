@@ -69,9 +69,11 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
 }
 
 Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
-                                   std::vector<SSZoneMetaData>& metas) {
+                                   std::vector<SSZoneMetaData>& metas,
+                                   uint8_t parallel_number) {
   Status s = Status::OK();
   SSZoneMetaData meta;
+  meta.L0.log_number = parallel_number;
   SSTableBuilder* builder = NewBuilder(&meta);
   InternalIterator* iter = mem->NewIterator();
   iter->SeekToFirst();

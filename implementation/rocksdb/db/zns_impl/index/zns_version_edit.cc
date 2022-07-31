@@ -35,6 +35,7 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.number = meta.number;
   if (level == 0) {
     f.L0.lba = meta.L0.lba;
+    f.L0.log_number = meta.L0.log_number;
   } else {
     f.LN.lba_regions = meta.LN.lba_regions;
     std::copy(meta.LN.lbas, meta.LN.lbas + f.LN.lba_regions, f.LN.lbas);
@@ -124,6 +125,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.number);
     if (level == 0) {
       PutVarint64(dst, m.L0.lba);
+      PutFixed8(dst, m.L0.log_number);
     } else {
       PutFixed8(dst, m.LN.lba_regions);
       for (size_t j = 0; j < m.LN.lba_regions; j++) {
@@ -159,6 +161,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.number);
     if (new_ss_[i].first == 0) {
       PutVarint64(dst, m.L0.lba);
+      PutFixed8(dst, m.L0.log_number);
     } else {
       PutFixed8(dst, m.LN.lba_regions);
       for (size_t j = 0; j < m.LN.lba_regions; j++) {
@@ -215,6 +218,7 @@ static bool GetLevel(Slice* input, uint8_t* level) {
 
 static bool DecodeL0(Slice* input, SSZoneMetaData* m) {
   return GetVarint64(input, &m->number) && GetVarint64(input, &m->L0.lba) &&
+         GetFixed8(input, &m->L0.log_number) &&
          GetVarint64(input, &m->numbers) && GetVarint64(input, &m->lba_count) &&
          GetInternalKey(input, &m->smallest) &&
          GetInternalKey(input, &m->largest);

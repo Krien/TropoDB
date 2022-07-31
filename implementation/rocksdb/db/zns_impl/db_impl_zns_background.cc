@@ -41,42 +41,50 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void DBImplZNS::MaybeScheduleFlush() {
+void DBImplZNS::MaybeScheduleFlush(uint8_t parallel_number) {
   // printf("Scheduling flush?\n");
   mutex_.AssertHeld();
-  if (bg_flush_scheduled_) {
+  if (bg_flush_scheduled_[parallel_number]) {
     return;
-  } else if ((imm_ == nullptr && wal_man_->WALAvailable())) {
+  } else if ((imm_[parallel_number] == nullptr &&
+              wal_man_[parallel_number]->WALAvailable())) {
     return;
   }
-  bg_flush_scheduled_ = true;
+  bg_flush_scheduled_[parallel_number] = true;
   // printf("Scheduled flush\n");
-  env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+  FlushData* dat = new FlushData;
+  dat->db = this;
+  dat->parallel_number = parallel_number;
+  env_->Schedule(&DBImplZNS::BGFlushWork, dat, rocksdb::Env::HIGH);
 }
 
-void DBImplZNS::BGFlushWork(void* db) {
-  reinterpret_cast<DBImplZNS*>(db)->BackgroundFlushCall();
+void DBImplZNS::BGFlushWork(void* data) {
+  FlushData* flush_data = reinterpret_cast<FlushData*>(data);
+  DBImplZNS* db = flush_data->db;
+  uint8_t parallel_number = flush_data->parallel_number;
+  db->BackgroundFlushCall(parallel_number);
+  delete flush_data;
 }
 
-void DBImplZNS::BackgroundFlushCall() {
+void DBImplZNS::BackgroundFlushCall(uint8_t parallel_number) {
   // printf("bg\n");
   MutexLock l(&mutex_);
   assert(bg_flush_scheduled_);
 #ifdef WALPerfTest
-  wal_man_->ResetOldWALs(&mutex_);
+  wal_man_[parallel_number]->ResetOldWALs(&mutex_);
   bg_flush_work_finished_signal_.SignalAll();
   return;
 #endif
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
-    BackgroundFlush();
+    BackgroundFlush(parallel_number);
   }
-  bg_flush_scheduled_ = false;
+  bg_flush_scheduled_[parallel_number] = false;
   forced_schedule_ = false;
   // cascading, but shutdown if ordered
   if (!shutdown_) {
-    MaybeScheduleFlush();
+    MaybeScheduleFlush(parallel_number);
     MaybeScheduleCompactionL0();
     MaybeScheduleCompaction(false);
   }
@@ -84,38 +92,39 @@ void DBImplZNS::BackgroundFlushCall() {
   // printf("bg done\n");
 }
 
-void DBImplZNS::BackgroundFlush() {
+void DBImplZNS::BackgroundFlush(uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
 
-  if (imm_ != nullptr) {
+  if (imm_[parallel_number] != nullptr) {
     printf("  Compact memtable...\n");
-    s = CompactMemtable();
+    s = CompactMemtable(parallel_number);
     if (!s.ok()) {
       printf("error during flushing\n");
     }
     return;
   }
-  if (!wal_man_->WALAvailable()) {
+  if (!wal_man_[parallel_number]->WALAvailable()) {
     // printf(" Trying to free WALS...\n");
-    s = wal_man_->ResetOldWALs(&mutex_);
+    s = wal_man_[parallel_number]->ResetOldWALs(&mutex_);
     return;
   }
 }
 
-Status DBImplZNS::CompactMemtable() {
+Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
   mutex_.AssertHeld();
   // We can not do a flush...
-  while (imm_->GetInternalSize() * 1.2 >
-         ss_manager_->SpaceRemainingInBytes(0)) {
+  while (imm_[parallel_number]->GetInternalSize() * 1.2 >
+         ss_manager_->SpaceRemainingInBytesL0(parallel_number)) {
     MaybeScheduleCompactionL0();
-    printf("WAITING, can not flush %f %f \n",
-           (float)imm_->GetInternalSize() / 1024. / 1024.,
-           (float)ss_manager_->SpaceRemaining(0) / 1024. / 1024.);
+    printf(
+        "WAITING, can not flush %f %f \n",
+        (float)imm_[parallel_number]->GetInternalSize() / 1024. / 1024.,
+        (float)ss_manager_->SpaceRemainingL0(parallel_number) / 1024. / 1024.);
     bg_work_l0_finished_signal_.Wait();
   }
-  assert(imm_ != nullptr);
-  assert(bg_flush_scheduled_);
+  assert(imm_[parallel_number] != nullptr);
+  assert(bg_flush_scheduled_[parallel_number]);
   Status s;
   // Flush and set new version
   {
@@ -124,7 +133,7 @@ Status DBImplZNS::CompactMemtable() {
     // ZnsVersion* current = versions_->current();
     // current->Ref();
     mutex_.Unlock();
-    s = FlushL0SSTables(metas);
+    s = FlushL0SSTables(metas, parallel_number);
     mutex_.Lock();
     // current->Unref();
     int level = 0;
@@ -139,19 +148,20 @@ Status DBImplZNS::CompactMemtable() {
     } else {
       printf("Fatal error \n");
     }
-    imm_->Unref();
-    imm_ = nullptr;
+    imm_[parallel_number]->Unref();
+    imm_[parallel_number] = nullptr;
     // wal
-    s = wal_man_->ResetOldWALs(&mutex_);
+    s = wal_man_[parallel_number]->ResetOldWALs(&mutex_);
     if (!s.ok()) return s;
     printf("Flushed memtable!!\n");
   }
   return s;
 }
 
-Status DBImplZNS::FlushL0SSTables(std::vector<SSZoneMetaData>& metas) {
+Status DBImplZNS::FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
+                                  uint8_t parallel_number) {
   Status s;
-  s = ss_manager_->FlushMemTable(imm_, metas);
+  s = ss_manager_->FlushMemTable(imm_[parallel_number], metas, parallel_number);
   flushes_++;
   return s;
 }
@@ -189,7 +199,6 @@ void DBImplZNS::BackgroundCompactionL0Call() {
   if (!shutdown_) {
     MaybeScheduleCompactionL0();
     MaybeScheduleCompaction(false);
-    MaybeScheduleFlush();
   }
   bg_work_l0_finished_signal_.SignalAll();
   bg_work_finished_signal_.SignalAll();
@@ -244,13 +253,13 @@ void DBImplZNS::BackgroundCompactionL0() {
     c->MarkStaleTargetsReusable(&edit);
     // printf("marked reusable\n");
     if (c->IsTrivialMove()) {
-      // printf("starting trivial move\n");
+      printf("starting trivial move L0\n");
       s = c->DoTrivialMove(&edit);
-      // printf("\t\ttrivial move\n");
+      printf("\t\ttrivial move L0\n");
     } else {
-      // printf("starting compaction\n");
+      printf("starting compaction L0\n");
       s = c->DoCompaction(&edit);
-      // printf("\t\tnormal compaction\n");
+      printf("\t\tnormal compaction L0\n");
     }
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session.
@@ -315,10 +324,10 @@ void DBImplZNS::BackgroundCompactionCall() {
   // cascading, but shutdown if ordered
   if (!shutdown_) {
     MaybeScheduleCompaction(false);
-    MaybeScheduleFlush();
   }
   bg_work_finished_signal_.SignalAll();
   bg_flush_work_finished_signal_.SignalAll();
+  bg_work_l0_finished_signal_.SignalAll();
   // printf("bg done\n");
 }
 
@@ -367,13 +376,12 @@ void DBImplZNS::BackgroundCompaction() {
     printf("  Compact LN...\n");
     // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
-    // printf("marked reusable\n");
     if (c->IsTrivialMove()) {
       // printf("starting trivial move\n");
       s = c->DoTrivialMove(&edit);
       // printf("\t\ttrivial move\n");
     } else {
-      // printf("starting compaction\n");
+      printf("starting compaction\n");
       s = c->DoCompaction(&edit);
       printf("\t\tnormal compaction\n");
     }

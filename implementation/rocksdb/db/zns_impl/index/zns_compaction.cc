@@ -120,10 +120,13 @@ bool ZnsCompaction::IsTrivialMove() const {
 Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   Status s = Status::OK();
   SSZoneMetaData* old_meta = targets_[0][0];
+  // printf("Copying %lu %lu %lu \n", old_meta->number, old_meta->L0.lba,
+  //        old_meta->lba_count);
   SSZoneMetaData meta;
   s = vset_->znssstable_->CopySSTable(first_level_, first_level_ + 1, *old_meta,
                                       &meta);
   meta.number = vset_->NewSSNumber();
+  // printf("Copied %lu %lu %lu \n", meta.number, meta.L0.lba, meta.lba_count);
   if (!s.ok()) {
     return s;
   }
@@ -412,7 +415,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
           deferred_.new_task_.Wait();
           deferred_.mutex_.Unlock();
         }
-        // printf("Deferred quiting \n");
+        printf("Deferred quiting \n");
       }
       delete merger;
     }

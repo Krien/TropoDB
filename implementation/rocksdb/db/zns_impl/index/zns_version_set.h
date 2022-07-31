@@ -74,12 +74,27 @@ class ZnsVersionSet {
   }
 
   bool NeedsL0Compaction() const {
-    return current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0] ||
-           NeedsL0CompactionForce();
+    bool needcompaction =
+        current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0] ||
+        NeedsL0CompactionForce();
+    if (!needcompaction) {
+      for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+        if (NeedsL0CompactionForceParallel(i)) {
+          return true;
+        }
+      }
+    }
+    return needcompaction;
   }
 
   bool NeedsL0CompactionForce() const {
     return znssstable_->GetFractionFilled(0) /
+               ZnsConfig::ss_compact_treshold_force[0] >=
+           1;
+  }
+
+  bool NeedsL0CompactionForceParallel(uint8_t parallel_number) const {
+    return znssstable_->GetFractionFilledL0(parallel_number) /
                ZnsConfig::ss_compact_treshold_force[0] >=
            1;
   }
@@ -116,7 +131,7 @@ class ZnsVersionSet {
   uint64_t lba_size_;
   uint64_t zone_cap_;
   uint64_t last_sequence_;
-  uint64_t ss_number_;
+  std::atomic<uint64_t> ss_number_;
   bool logged_;
   ZnsTableCache* table_cache_;
   Env* env_;

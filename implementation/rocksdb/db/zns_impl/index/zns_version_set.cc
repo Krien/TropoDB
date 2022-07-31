@@ -64,10 +64,12 @@ void ZnsVersionSet::GetLiveZones(const uint8_t level,
                                  std::set<uint64_t>& live) {
   for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
+    v->Ref();
     const std::vector<SSZoneMetaData*>& metas = v->ss_[level];
     for (auto& meta : metas) {
       live.insert(meta->number);
     }
+    v->Unref();
   }
 }
 
@@ -109,9 +111,9 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
   // Reclaim L0
   // Get all of the files that can be deleted as no reader uses it.
   std::set<uint64_t> live_zones;
-  std::vector<SSZoneMetaData*> tmp;
   GetLiveZones(0, live_zones);
   std::vector<SSZoneMetaData*> new_deleted_ss_l0;
+  std::vector<SSZoneMetaData*> tmp;
   for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
     SSZoneMetaData* todelete = current_->ss_d_[0][j];
     if (live_zones.count(todelete->number) == 0) {
@@ -131,9 +133,9 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
       return a->number < b->number;
     });
-    mutex_->Unlock();
+    // mutex_->Unlock();
     s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
-    mutex_->Lock();
+    // mutex_->Lock();
     current_->ss_d_[0].clear();
     current_->ss_d_[0] = new_deleted_ss_l0;
 
@@ -141,13 +143,11 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
       printf("error reclaiming L0\n");
       return s;
     }
-    cond->SignalAll();
   }
   printf("CUR DEL %lu  %lu \n", current_->ss_d_[0].size(),
          current_->ss_[0].size());
-
   s = LogAndApply(&edit);
-  // printf("DONE reclaiming \n");
+  printf("DONE reclaiming \n");
   return s;
 }
 
@@ -172,7 +172,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
         to_delete.push_back(todelete);
       }
     }
-    mutex_->Unlock();
+    // mutex_->Unlock();
     for (auto del : to_delete) {
       s = znssstable_->DeleteLNTable(i, *del);
       if (!s.ok()) {
@@ -180,7 +180,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
         return s;
       }
     }
-    mutex_->Lock();
+    // mutex_->Lock();
     current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);
@@ -488,7 +488,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   //        znssstable_->GetFractionFilled(level));
 
   // We must make sure that the compaction will not be too big!
-  uint64_t max_lba_c = znssstable_->SpaceRemaining(level + 1);
+  uint64_t max_lba_c = znssstable_->SpaceRemainingLN();
   max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction_l0
                   ? ZnsConfig::max_lbas_compaction_l0
                   : max_lba_c;
@@ -496,15 +496,35 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   // Always pick the tail on L0
   uint64_t L0index;
   if (level == 0) {
+    size_t l0_log_prio = 0;
+    uint64_t space_rem = znssstable_->SpaceRemainingL0(l0_log_prio);
+    for (size_t i = 1; i < ZnsConfig::lower_concurrency; i++) {
+      if (znssstable_->SpaceRemainingL0(i) < space_rem) {
+        l0_log_prio = i;
+        space_rem = znssstable_->SpaceRemainingL0(i);
+      }
+    }
     uint64_t number = 0;
     uint64_t index = 0;
     bool number_picked = false;
     for (size_t i = 0; i < current_->ss_[level].size(); i++) {
       SSZoneMetaData* m = current_->ss_[level][i];
-      if (m->number < number || !number_picked) {
+      if (m->L0.log_number == l0_log_prio &&
+          (m->number < number || !number_picked)) {
         number = m->number;
         index = i;
         number_picked = true;
+      }
+    }
+    if (!number_picked) {
+      for (size_t i = 0; i < current_->ss_[level].size(); i++) {
+        SSZoneMetaData* m = current_->ss_[level][i];
+        if (m->L0.log_number != l0_log_prio &&
+            (m->number < number || !number_picked)) {
+          number = m->number;
+          index = i;
+          number_picked = true;
+        }
       }
     }
     if (!number_picked) {
@@ -710,7 +730,10 @@ Status ZnsVersionSet::Recover() {
     for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
       std::vector<SSZoneMetaData*>& m = current_->ss_[i];
       for (size_t j = 0; j < m.size(); j++) {
-        ss_number_ = ss_number_ > m[j]->number ? ss_number_ : m[j]->number + 1;
+        uint64_t cur_ss_number = ss_number_;
+        uint64_t new_ss_number =
+            cur_ss_number > m[j]->number ? cur_ss_number : m[j]->number + 1;
+        ss_number_ = new_ss_number;
       }
     }
   }

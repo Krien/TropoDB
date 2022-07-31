@@ -25,37 +25,51 @@ ZNSSSTableManager::ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
   // Create tables
-  sstable_level_[0] = new L0ZnsSSTable(channel_factory_, info, ranges[0].first,
-                                       ranges[0].second);
-  sstable_level_[1] = new LNZnsSSTable(channel_factory_, info, ranges[1].first,
-                                       ranges[ranges.size() - 1].second);
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    sstable_level_[i] = new L0ZnsSSTable(channel_factory_, info,
+                                         ranges[i].first, ranges[i].second);
+  }
+  sstable_level_[ZnsConfig::lower_concurrency] = new LNZnsSSTable(
+      channel_factory_, info, ranges[ZnsConfig::lower_concurrency].first,
+      ranges[ZnsConfig::lower_concurrency].second);
+
   // Increase ranges
-  ranges_[0] = std::make_pair(ranges_[0].first * info.zone_cap,
-                              ranges_[0].second * info.zone_cap);
-  ranges_[1] =
-      std::make_pair(ranges_[1].first * info.zone_cap,
-                     ranges_[ranges.size() - 1].second * info.zone_cap);
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    ranges_[i] = std::make_pair(ranges_[i].first * info.zone_cap,
+                                ranges_[i].second * info.zone_cap);
+  }
+  ranges_[ZnsConfig::lower_concurrency] = std::make_pair(
+      ranges_[ZnsConfig::lower_concurrency].first * info.zone_cap,
+      ranges_[ZnsConfig::lower_concurrency].second * info.zone_cap);
 }
 
 ZNSSSTableManager::~ZNSSSTableManager() {
   // printf("Deleting SSTable manager.\n");
-  for (size_t i = 0; i < 2; i++) {
+  for (size_t i = 0; i < 1 + ZnsConfig::lower_concurrency; i++) {
     if (sstable_level_[i] != nullptr) delete sstable_level_[i];
   }
   channel_factory_->Unref();
   channel_factory_ = nullptr;
 }
 
-Status ZNSSSTableManager::FlushMemTable(
-    ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas) const {
-  return GetL0SSTableLog()->FlushMemTable(mem, metas);
+Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
+                                        std::vector<SSZoneMetaData>& metas,
+                                        uint8_t parallel_number) const {
+  Status s = GetL0SSTableLog(parallel_number)
+                 ->FlushMemTable(mem, metas, parallel_number);
+  return s;
 }
 
 Status ZNSSSTableManager::WriteSSTable(const uint8_t level,
                                        const Slice& content,
                                        SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->WriteSSTable(content, meta);
+  if (level == 0) {
+    return sstable_level_[meta->L0.log_number]->WriteSSTable(content, meta);
+  } else {
+    return sstable_level_[ZnsConfig::lower_concurrency]->WriteSSTable(content,
+                                                                      meta);
+  }
 }
 
 Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
@@ -65,18 +79,18 @@ Status ZNSSSTableManager::CopySSTable(const uint8_t level1,
   Status s = Status::OK();
   // We do not have to rewrite, all tables are in LN!!!
   if (level1 != 0) {
-    *new_meta = SSZoneMetaData(meta);
+    *new_meta = SSZoneMetaData::copy(meta);
     return s;
   } else {
     // Read and copy to LN
     Slice original;
-    s = ReadSSTable(level1 ? 1 : 0, &original, meta);
+    s = ReadSSTable(level1, &original, meta);
     if (!s.ok() || original.size() == 0) {
       return s;
     }
-    *new_meta = SSZoneMetaData(meta);
+    *new_meta = SSZoneMetaData::copy(meta);
 
-    s = sstable_level_[level2 ? 1 : 0]->WriteSSTable(original, new_meta);
+    s = sstable_level_[level2]->WriteSSTable(original, new_meta);
     delete[] original.data();
   }
 
@@ -92,60 +106,45 @@ uint64_t ZNSSSTableManager::GetBytesInLevel(
   return total;
 }
 
-bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
-                                             const Slice& slice) const {
-  assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->EnoughSpaceAvailable(slice);
-}
-
 Status ZNSSSTableManager::InvalidateSSZone(const uint8_t level,
                                            const SSZoneMetaData& meta) const {
-  assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->InvalidateSSZone(meta);
+  if (level == 0) {
+    return sstable_level_[meta.L0.log_number]->InvalidateSSZone(meta);
+  } else {
+    assert(level < ZnsConfig::level_count);
+    return sstable_level_[ZnsConfig::lower_concurrency]->InvalidateSSZone(meta);
+  }
 }
 
 Status ZNSSSTableManager::DeleteL0Table(
     const std::vector<SSZoneMetaData*>& metas,
     std::vector<SSZoneMetaData*>& remaining_metas) const {
   // Error handling
-  if (metas.size() == 0) {
-    return Status::OK();
-  }
-  return static_cast<L0ZnsSSTable*>(sstable_level_[0])
-      ->TryInvalidateSSZones(metas, remaining_metas);
-}
-
-Status ZNSSSTableManager::SetValidRangeAndReclaim(
-    uint64_t* live_tail, uint64_t* blocks, uint64_t blocks_to_delete) const {
-  // TODO: move to sstable
-  SSZoneMetaData meta;
-  uint64_t written_tail = sstable_level_[0]->GetTail();
-
-  meta.L0.lba = *live_tail;
-  uint64_t nexthead =
-      ((meta.L0.lba + blocks_to_delete) / zone_cap_) * zone_cap_;
-  meta.lba_count = nexthead - meta.L0.lba;
-
   Status s = Status::OK();
-  if (meta.lba_count != 0) {
-    // printf("test %lu %lu %lu %lu %lu\n", meta.L0.lba, meta.lba_count,
-    //        written_tail, *blocks, blocks_to_delete);
-    s = sstable_level_[0]->InvalidateSSZone(meta);
-  }
-  if (s.ok()) {
-    *blocks -= meta.lba_count;
-    *live_tail = sstable_level_[0]->GetTail();
-    // printf("New tail %lu \n", *live_tail);
-  } else {
-    printf("Error reclaiming L0? %lu %lu, true %lu\n", meta.L0.lba,
-           meta.lba_count, written_tail);
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    std::vector<SSZoneMetaData*> metas_for_log;
+    for (auto& m : metas) {
+      if (m->L0.log_number == i) {
+        metas_for_log.push_back(m);
+      }
+    }
+    if (metas_for_log.size() == 0) {
+      continue;
+    }
+    s = static_cast<L0ZnsSSTable*>(sstable_level_[i])
+            ->TryInvalidateSSZones(metas_for_log, remaining_metas);
   }
   return s;
 }
 
 Status ZNSSSTableManager::DeleteLNTable(const uint8_t level,
                                         const SSZoneMetaData& meta) const {
-  Status s = sstable_level_[level ? 1 : 0]->InvalidateSSZone(meta);
+  if (level == 0) {
+    printf("Invalid level for LN delete\n");
+    return Status::InvalidArgument();
+  }
+  Status s =
+      sstable_level_[ZnsConfig::lower_concurrency]->InvalidateSSZone(meta);
   return s;
 }
 
@@ -155,44 +154,65 @@ Status ZNSSSTableManager::Get(const uint8_t level,
                               const SSZoneMetaData& meta,
                               EntryStatus* status) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->Get(icmp, key_ptr, value_ptr, meta,
-                                            status);
+  if (level == 0) {
+    return sstable_level_[meta.L0.log_number]->Get(icmp, key_ptr, value_ptr,
+                                                   meta, status);
+  } else {
+    return sstable_level_[ZnsConfig::lower_concurrency]->Get(
+        icmp, key_ptr, value_ptr, meta, status);
+  }
 }
 
 Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
                                       const SSZoneMetaData& meta) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->ReadSSTable(sstable, meta);
+  if (level == 0) {
+    return sstable_level_[meta.L0.log_number]->ReadSSTable(sstable, meta);
+  } else {
+    return sstable_level_[ZnsConfig::lower_concurrency]->ReadSSTable(sstable,
+                                                                     meta);
+  }
 }
 
-L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog() const {
-  return static_cast<L0ZnsSSTable*>(sstable_level_[0]);
+L0ZnsSSTable* ZNSSSTableManager::GetL0SSTableLog(
+    uint8_t parallel_number) const {
+  return static_cast<L0ZnsSSTable*>(sstable_level_[parallel_number]);
 }
 
 Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
                                          const SSZoneMetaData& meta,
                                          const Comparator* cmp) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->NewIterator(meta, cmp);
+  if (level == 0) {
+    return sstable_level_[meta.L0.log_number]->NewIterator(meta, cmp);
+  } else {
+    return sstable_level_[ZnsConfig::lower_concurrency]->NewIterator(meta, cmp);
+  }
 }
 
 SSTableBuilder* ZNSSSTableManager::NewBuilder(const uint8_t level,
                                               SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
-  if (level > 1) {
-    return static_cast<LNZnsSSTable*>(sstable_level_[level ? 1 : 0])
-        ->NewLNBuilder(meta);
+  if (level == 0) {
+    return sstable_level_[meta->L0.log_number]->NewBuilder(meta);
   } else {
-    return sstable_level_[level ? 1 : 0]->NewBuilder(meta);
+    return level == 1
+               ? sstable_level_[ZnsConfig::lower_concurrency]->NewBuilder(meta)
+               : static_cast<LNZnsSSTable*>(
+                     sstable_level_[ZnsConfig::lower_concurrency])
+                     ->NewLNBuilder(meta);
   }
 }
 
 Status ZNSSSTableManager::Recover() {
   Status s = Status::OK();
   // Recover L0
-  s = static_cast<L0ZnsSSTable*>(sstable_level_[0])->Recover();
-  if (!s.ok()) {
-    printf("Error recovering L0\n");
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    s = static_cast<L0ZnsSSTable*>(sstable_level_[i])->Recover();
+    if (!s.ok()) {
+      printf("Error recovering L0-%lu\n", i);
+      return s;
+    }
   }
   return s;
 }
@@ -203,9 +223,10 @@ Status ZNSSSTableManager::Recover(const std::string& frag) {
     return s;
   }
   // Recover LN
-  s = static_cast<LNZnsSSTable*>(sstable_level_[1])->Recover(frag);
+  s = static_cast<LNZnsSSTable*>(sstable_level_[ZnsConfig::lower_concurrency])
+          ->Recover(frag);
   if (!s.ok()) {
-    printf("Error recovering > L%u \n", 1);
+    printf("Error recovering LN\n");
     return s;
   }
 
@@ -214,16 +235,21 @@ Status ZNSSSTableManager::Recover(const std::string& frag) {
 
 std::string ZNSSSTableManager::GetFragmentedLogData() {
   assert(level > 0);  // L0 does not work!!
-  LNZnsSSTable* table = static_cast<LNZnsSSTable*>(sstable_level_[1]);
+  LNZnsSSTable* table =
+      static_cast<LNZnsSSTable*>(sstable_level_[ZnsConfig::lower_concurrency]);
   return table->Encode();
 }
 
-double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
+double ZNSSSTableManager::GetFractionFilledL0(
+    const uint8_t parallel_number) const {
   assert(level < ZnsConfig::level_count);
-  uint64_t space_available =
-      sstable_level_[level ? 1 : 0]->SpaceAvailable() / lba_size_;
-  uint64_t total_space =
-      ranges_[level ? 1 : 0].second - ranges_[level ? 1 : 0].first;
+  uint64_t space_available = 0;
+  uint64_t total_space = 0;
+
+  space_available +=
+      sstable_level_[parallel_number]->SpaceAvailable() / lba_size_;
+  total_space +=
+      ranges_[parallel_number].second - ranges_[parallel_number].first;
 
   double fract = (double)(total_space - space_available) / (double)total_space;
   // printf("Space available %lu, Total space %lu, fraction %f\n",
@@ -232,14 +258,64 @@ double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   return fract;
 }
 
-uint64_t ZNSSSTableManager::SpaceRemainingInBytes(const uint8_t level) const {
+double ZNSSSTableManager::GetFractionFilled(const uint8_t level) const {
   assert(level < ZnsConfig::level_count);
-  return sstable_level_[level ? 1 : 0]->SpaceAvailable();
+  uint64_t space_available = 0;
+  uint64_t total_space = 0;
+  if (level == 0) {
+    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+      space_available += sstable_level_[i]->SpaceAvailable() / lba_size_;
+      total_space += ranges_[i].second - ranges_[i].first;
+    }
+  } else {
+    space_available =
+        sstable_level_[ZnsConfig::lower_concurrency]->SpaceAvailable() /
+        lba_size_;
+    total_space = ranges_[ZnsConfig::lower_concurrency].second -
+                  ranges_[ZnsConfig::lower_concurrency].first;
+  }
+  double fract = (double)(total_space - space_available) / (double)total_space;
+  // printf("Space available %lu, Total space %lu, fraction %f\n",
+  // space_available,
+  //        total_space, fract);
+  return fract;
 }
 
-uint64_t ZNSSSTableManager::SpaceRemaining(const uint8_t level) const {
+bool ZNSSSTableManager::EnoughSpaceAvailable(const uint8_t level,
+                                             const Slice& slice) const {
   assert(level < ZnsConfig::level_count);
-  return SpaceRemainingInBytes(level ? 1 : 0) / lba_size_;
+  if (level == 0) {
+    // TODO: Not used for L0 so not tested
+    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+      if (!sstable_level_[i]->EnoughSpaceAvailable(slice)) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    return sstable_level_[ZnsConfig::lower_concurrency]->EnoughSpaceAvailable(
+        slice);
+  }
+}
+
+uint64_t ZNSSSTableManager::SpaceRemainingInBytesL0(
+    uint8_t parallel_number) const {
+  assert(level < ZnsConfig::level_count);
+  return sstable_level_[parallel_number]->SpaceAvailable();
+}
+
+// TODO: investigate
+uint64_t ZNSSSTableManager::SpaceRemainingL0(uint8_t parallel_number) const {
+  assert(level < ZnsConfig::level_count);
+  return SpaceRemainingInBytesL0(parallel_number) / lba_size_;
+}
+
+uint64_t ZNSSSTableManager::SpaceRemainingInBytesLN() const {
+  return sstable_level_[ZnsConfig::lower_concurrency]->SpaceAvailable();
+}
+
+uint64_t ZNSSSTableManager::SpaceRemainingLN() const {
+  return SpaceRemainingInBytesLN() / lba_size_;
 }
 
 size_t ZNSSSTableManager::FindSSTableIndex(
@@ -262,11 +338,16 @@ size_t ZNSSSTableManager::FindSSTableIndex(
 
 std::vector<ZNSDiagnostics> ZNSSSTableManager::IODiagnostics() {
   std::vector<ZNSDiagnostics> diags;
-  for (size_t level = 0; level < 2; level++) {
-    ZNSDiagnostics diag = sstable_level_[level ? 1 : 0]->GetDiagnostics();
-    diag.name_ = "L" + std::to_string(level);
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    ZNSDiagnostics diag = sstable_level_[i]->GetDiagnostics();
+    diag.name_ = "L0-" + std::to_string(i);
     diags.push_back(diag);
   }
+  ZNSDiagnostics diag =
+      sstable_level_[ZnsConfig::lower_concurrency]->GetDiagnostics();
+  diag.name_ = "LN";
+  diags.push_back(diag);
+
   return diags;
 }
 
@@ -287,15 +368,21 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
   zone_step = zone_step < ZnsConfig::min_ss_zone_count
                   ? ZnsConfig::min_ss_zone_count
                   : zone_step;
-  ranges[0] = std::make_pair(zone_head, zone_head + zone_step);
-  zone_head += zone_step;
+  zone_step /= ZnsConfig::lower_concurrency;
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    ranges[i] = std::make_pair(zone_head, zone_head + zone_step);
+    zone_head += zone_step;
+  }
   // Last zone will also get the remainer.
   zone_step = max_zone - zone_head;
-  ranges[1] = std::make_pair(zone_head, zone_head + zone_step);
+  ranges[ZnsConfig::lower_concurrency] =
+      std::make_pair(zone_head, zone_head + zone_step);
 
-  std::cout << std::left << "L0" << std::setw(13) << "" << std::right
-            << std::setw(25) << ranges[0].first << std::setw(25)
-            << ranges[0].second << "\n";
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    std::cout << std::left << "L0-" << i << std::setw(13) << "" << std::right
+              << std::setw(25) << ranges[i].first << std::setw(25)
+              << ranges[i].second << "\n";
+  }
   std::cout << std::left << "LN" << std::setw(13) << "" << std::right
             << std::setw(25) << ranges[1].first << std::setw(25)
             << ranges[1].second << "\n";

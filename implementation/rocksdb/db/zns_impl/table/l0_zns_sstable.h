@@ -29,7 +29,8 @@ class L0ZnsSSTable : public ZnsSSTable {
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
              std::string* value, const SSZoneMetaData& meta,
              EntryStatus* entry) override;
-  Status FlushMemTable(ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas);
+  Status FlushMemTable(ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas,
+                       uint8_t parallel_number);
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status TryInvalidateSSZones(const std::vector<SSZoneMetaData*>& metas,
                               std::vector<SSZoneMetaData*>& remaining_metas);
