@@ -105,7 +105,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
       // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
       // &status);
       if (s.ok()) {
-        if (status != EntryStatus::found) {
+        if (status == EntryStatus::notfound) {
           continue;
         }
         znssstable->Unref();
