@@ -64,14 +64,17 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
     printf("Error appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
   }
+  meta->lba_count = 0;
   meta->LN.lba_regions = 0;
   for (auto ptr : ptrs) {
     meta->LN.lbas[meta->LN.lba_regions] = ptr.first * zone_cap_;
     meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_cap_;
-    meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
+    // strictly safer, but not really necessary. If errors occur, investigate
+    // this line.
+    // meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
     meta->LN.lba_regions++;
   }
-
+  meta->lba_count += (content.size() + lba_size_ - 1) / lba_size_;
   // printf("Added %lu of %u regions of %lu lbas, for size of %lu \n",
   //        meta->number, meta->LN.lba_regions, meta->lba_count,
   //        content.size());
