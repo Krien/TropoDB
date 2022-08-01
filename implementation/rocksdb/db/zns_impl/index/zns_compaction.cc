@@ -230,18 +230,25 @@ void ZnsCompaction::DeferCompactionWrite(void* c) {
 
     // The meat of the function
     printf("Deferred flush?\n");
-    Status s = current_builder->Flush();
+    Status s = Status::OK();
+    if (current_builder == nullptr) {
+      printf("Deferred flush builder == nullptr");
+      s = Status::Corruption();
+    } else {
+      s = current_builder->Flush();
+    }
+    // TODO: error must be stored in deferred data to propogate the issue.
+    deferred->mutex_.Lock();
     if (!s.ok()) {
       printf("error writing table\n");
+    } else {
+      deferred->edit_->AddSSDefinition(deferred->level_,
+                                       *(current_builder->GetMeta()));
+      delete current_builder;
+      deferred->deferred_builds_[deferred->index_] = nullptr;
     }
-
     // Acquire tasks
-    deferred->mutex_.Lock();
-    deferred->edit_->AddSSDefinition(
-        deferred->level_,
-        *(deferred->deferred_builds_[deferred->index_]->GetMeta()));
     deferred->index_++;
-    delete current_builder;
     printf("Deferred requesting new task\n");
     deferred->new_task_.SignalAll();
     deferred->mutex_.Unlock();

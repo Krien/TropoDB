@@ -133,9 +133,11 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
       return a->number < b->number;
     });
-    // mutex_->Unlock();
+    // safe, but ONLY because L0 thread is the only one adding and deleting from
+    // L0.
+    mutex_->Unlock();
     s = znssstable_->DeleteL0Table(tmp, new_deleted_ss_l0);
-    // mutex_->Lock();
+    mutex_->Lock();
     current_->ss_d_[0].clear();
     current_->ss_d_[0] = new_deleted_ss_l0;
 
@@ -172,7 +174,9 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
         to_delete.push_back(todelete);
       }
     }
-    // mutex_->Unlock();
+    // safe, but ONLY because LN thread is the only one adding and deleting from
+    // LN.
+    mutex_->Unlock();
     for (auto del : to_delete) {
       s = znssstable_->DeleteLNTable(i, *del);
       if (!s.ok()) {
@@ -180,7 +184,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
         return s;
       }
     }
-    // mutex_->Lock();
+    mutex_->Lock();
     current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);

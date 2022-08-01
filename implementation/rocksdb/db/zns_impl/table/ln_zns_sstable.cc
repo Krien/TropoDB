@@ -71,10 +71,10 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
     meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_cap_;
     // strictly safer, but not really necessary. If errors occur, investigate
     // this line.
-    // meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
+    meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
     meta->LN.lba_regions++;
   }
-  meta->lba_count += (content.size() + lba_size_ - 1) / lba_size_;
+  // meta->lba_count += (content.size() + lba_size_ - 1) / lba_size_;
   // printf("Added %lu of %u regions of %lu lbas, for size of %lu \n",
   //        meta->number, meta->LN.lba_regions, meta->lba_count,
   //        content.size());
@@ -161,6 +161,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     uint64_t from = meta.LN.lbas[i];
     uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
+      printf("LN delete out of range\n");
       return Status::Corruption("Invalid metadata");
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));

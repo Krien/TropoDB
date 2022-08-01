@@ -308,7 +308,7 @@ Status DBImplZNS::InitDB(const DBOptions& options,
     wal_man_[i]->Ref();
     zone_head += zone_step;
   }
-  zone_step = device_info.max_lba / device_info.zone_size - zone_head;
+  zone_step = device_info.max_lba / device_info.zone_size - zone_head - 1;
   // If only we had access to C++23.
   ss_manager_ =
       ZNSSSTableManager::NewZNSSTableManager(channel_factory_, device_info,

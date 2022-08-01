@@ -101,8 +101,8 @@ static void LNZonePrefetcher(void* prefetch) {
 
     // Get more iterators
     // printf("Prefetch %lu \n", zone_prefetcher->index_);
-    zone_prefetcher->mut_.Unlock();
     std::string handle = zone_prefetcher->its[zone_prefetcher->index_].first;
+    zone_prefetcher->mut_.Unlock();
     Iterator* iter = (*(zone_prefetcher->zonefunc_))(
         zone_prefetcher->arg_, Slice(handle), zone_prefetcher->cmp_);
     zone_prefetcher->mut_.Lock();
