@@ -136,11 +136,13 @@ Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
     s = FlushL0SSTables(metas, parallel_number);
     mutex_.Lock();
     // current->Unref();
+    uint64_t l0_number = versions_->NewSSNumberL0();
     int level = 0;
     if (s.ok() && metas.size() > 0) {
       for (auto& meta : metas) {
         if (meta.lba_count > 0) {
           meta.number = versions_->NewSSNumber();
+          meta.L0.number = l0_number;
           edit.AddSSDefinition(level, meta);
         }
       }

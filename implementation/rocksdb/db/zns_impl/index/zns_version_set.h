@@ -54,6 +54,8 @@ class ZnsVersionSet {
     last_sequence_ = s;
   }
   inline uint64_t NewSSNumber() { return ss_number_++; }
+  inline uint64_t NewSSNumberL0() { return ss_number_l0_++; }
+
   inline int NumLevelZones(uint8_t level) const {
     assert(level < ZnsConfig::level_count);
     return current_->ss_[level].size();
@@ -132,6 +134,7 @@ class ZnsVersionSet {
   uint64_t zone_cap_;
   uint64_t last_sequence_;
   std::atomic<uint64_t> ss_number_;
+  std::atomic<uint64_t> ss_number_l0_;
   bool logged_;
   ZnsTableCache* table_cache_;
   Env* env_;

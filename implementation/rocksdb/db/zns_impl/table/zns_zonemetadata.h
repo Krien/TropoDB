@@ -32,6 +32,7 @@ struct SSZoneMetaData {
   struct {
     uint64_t lba{0};        // Lba when no regions are used
     uint8_t log_number{0};  // circular log number
+    uint64_t number;        // Used for versioning with multiple L0 threads.
   } L0;
   struct {
     uint8_t lba_regions{0};        // Number of start lbas (legal from 1 to 8)

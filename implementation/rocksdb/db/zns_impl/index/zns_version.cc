@@ -70,7 +70,13 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
-      return a->number > b->number;
+      if (a->L0.number > b->L0.number) {
+        return true;
+      } else if (a->L0.number < b->L0.number) {
+        return false;
+      } else {
+        return a->number > b->number;
+      }
     });
     for (uint32_t i = 0; i < tmp.size(); i++) {
       s = vset_->table_cache_->Get(options, *tmp[i], 0, internal_key, value,

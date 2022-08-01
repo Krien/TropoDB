@@ -741,6 +741,18 @@ Status ZnsVersionSet::Recover() {
       }
     }
   }
+  if (ss_number_l0_ == 0) {
+    for (uint8_t i = 0; i < 1; i++) {
+      std::vector<SSZoneMetaData*>& m = current_->ss_[i];
+      for (size_t j = 0; j < m.size(); j++) {
+        uint64_t cur_ss_number = ss_number_l0_;
+        uint64_t new_ss_number = cur_ss_number > m[j]->L0.number
+                                     ? cur_ss_number
+                                     : m[j]->L0.number + 1;
+        ss_number_l0_ = new_ss_number;
+      }
+    }
+  }
   return Status::OK();
 }
 
