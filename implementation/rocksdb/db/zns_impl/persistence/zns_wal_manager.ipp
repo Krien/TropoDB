@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "db/write_batch_internal.h"
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
@@ -26,22 +27,56 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                                 const SZD::DeviceInfo& info,
                                 const uint64_t min_zone_nr,
                                 const uint64_t max_zone_nr)
-    : wal_head_(0), wal_tail_(N - 1), current_wal_(nullptr) {
+    :
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+      channel_factory_(channel_factory),
+#endif
+      wal_head_(0),
+      wal_tail_(N - 1),
+      current_wal_(nullptr) {
   assert((max_zone_nr - min_zone_nr) % N == 0);
   uint64_t wal_range = (max_zone_nr - min_zone_nr) / N;
   assert(wal_range % info.zone_cap_ == 0);
   uint64_t wal_walker = min_zone_nr;
 
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  // WalManager is the boss of the channels. Prevents stale channels.
+  write_channels_ = new SZD::SZDChannel*[ZnsConfig::wal_concurrency];
+  channel_factory_->Ref();
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+    channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
+                                       max_zone_nr, ZnsConfig::wal_preserve_dma,
+#ifdef WAL_UNORDERED
+                                       ZnsConfig::wal_iodepth
+#else
+                                       1
+#endif
+    );
+  }
+#endif
   for (size_t i = 0; i < N; ++i) {
     ZNSWAL* newwal =
-        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range);
+        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+                   ZnsConfig::wal_concurrency, write_channels_
+#else
+                   ZnsConfig::wal_concurrency / N, nullptr
+#endif
+        );
+#ifndef WAL_MANAGER_MANAGES_CHANNELS
     std::cout << std::left << "WAL" << std::setw(12) << i << std::right
               << std::setw(25) << wal_walker << std::setw(25)
               << wal_walker + wal_range << "\n";
+#endif
     newwal->Ref();
     wals_[i] = newwal;
     wal_walker += wal_range;
   }
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  std::cout << std::left << "WALS" << std::setw(11) << "" << std::right
+            << std::setw(25) << min_zone_nr << std::setw(25) << max_zone_nr
+            << "\n";
+#endif
 }
 
 template <std::size_t N>
@@ -52,6 +87,12 @@ ZnsWALManager<N>::~ZnsWALManager() {
       (*i)->Unref();
     }
   }
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+    channel_factory_->unregister_channel(write_channels_[i]);
+  }
+  channel_factory_->Unref();
+#endif
 }
 
 template <std::size_t N>
@@ -184,12 +225,129 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
 template <std::size_t N>
 std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
   std::vector<ZNSDiagnostics> diags;
+#ifdef WAL_MANAGER_MANAGES_CHANNELS
+  ZNSDiagnostics diag;
+  diag.name_ = "WALS";
+  diag.append_operations_counter_ = 0;
+  diag.bytes_written_ = 0;
+  diag.bytes_read_ = 0;
+  diag.read_operations_counter_ = 0;
+  diag.zones_erased_counter_ = 0;
+  for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+    diag.append_operations_counter_ +=
+        write_channels_[i]->GetAppendOperationsCounter();
+    diag.bytes_written_ += write_channels_[i]->GetBytesWritten();
+    if (i == 0) {
+      diag.append_operations_ = write_channels_[i]->GetAppendOperations();
+    } else {
+      std::vector<uint64_t> tmp = write_channels_[i]->GetAppendOperations();
+      std::vector<uint64_t> tmp2 = std::vector<uint64_t>(tmp.size(), 0);
+      std::transform(diag.append_operations_.begin(),
+                     diag.append_operations_.end(), tmp.begin(), tmp2.begin(),
+                     std::plus<uint64_t>());
+      diag.append_operations_ = tmp2;
+    }
+  }
+
+  for (size_t i = 0; i < N; i++) {
+    ZNSDiagnostics waldiag = wals_[i]->GetDiagnostics();
+    diag.bytes_read_ += waldiag.bytes_read_;
+    diag.read_operations_counter_ += waldiag.read_operations_counter_;
+    diag.zones_erased_counter_ += waldiag.zones_erased_counter_;
+    if (i == 0) {
+      diag.zones_erased_ = waldiag.zones_erased_;
+    } else {
+      std::vector<uint64_t> tmp(diag.zones_erased_);
+      tmp.insert(tmp.end(), waldiag.zones_erased_.begin(),
+                 waldiag.zones_erased_.end());
+      diag.zones_erased_ = tmp;
+    }
+  }
+  diags.push_back(diag);
+#else
   for (size_t i = 0; i < N; i++) {
     ZNSDiagnostics diag = wals_[i]->GetDiagnostics();
     diag.name_ = "WAL" + std::to_string(i);
     diags.push_back(diag);
   }
+#endif
   return diags;
+}
+
+template <std::size_t N>
+void ZnsWALManager<N>::PrintAdditionalWALStatistics() {
+  uint64_t time_waiting_storage = 0;
+  uint64_t time_waiting_storage_squared = 0;
+  uint64_t time_waiting_storage_total = 0;
+  uint64_t time_waiting_storage_squared_total = 0;
+  uint64_t time_waiting_storage_number = 0;
+  uint64_t time_waiting_storage_number_total = 0;
+  uint64_t time_spent_replaying = 0;
+  uint64_t time_spend_recovering = 0;
+  uint64_t time_waiting_resets = 0;
+  uint64_t time_waiting_resets_numbers = 0;
+  uint64_t time_waiting_resets_squares = 0;
+
+  for (size_t i = 0; i < N; i++) {
+    time_waiting_storage += wals_[i]->TimeSpendWaitingOnStorage();
+    time_waiting_storage_squared +=
+        wals_[i]->TimeSpendWaitingOnStorageSquared();
+    time_waiting_storage_total += wals_[i]->TimeSpendWaitingOnStorageTotal();
+    time_waiting_storage_squared_total +=
+        wals_[i]->TimeSpendWaitingOnStorageSquaredTotal();
+    time_waiting_storage_number += wals_[i]->TimeSpendWaitingOnStorageNumber();
+    time_waiting_storage_number_total +=
+        wals_[i]->TimeSpendWaitingOnStorageNumberTotal();
+    time_spent_replaying += wals_[i]->TimeSpendReplaying();
+    time_spend_recovering += wals_[i]->TimeSpendRecovering();
+    time_waiting_resets += wals_[i]->TimeSpendWaitingOnResets();
+    time_waiting_resets_numbers += wals_[i]->TimeSpendWaitingOnResetsNumber();
+    time_waiting_resets_squares += wals_[i]->TimeSpendWaitingOnResetsSquared();
+  }
+  double avg = static_cast<double>(time_waiting_storage) /
+               static_cast<double>(time_waiting_storage_number);
+  double variance =
+      std::sqrt(static_cast<double>(
+                    time_waiting_storage_squared * time_waiting_storage_number -
+                    time_waiting_storage * time_waiting_storage) /
+                static_cast<double>(time_waiting_storage_number *
+                                    time_waiting_storage_number));
+  printf("WAL statistics: \n");
+  printf(
+      "\tWAL operations on storage: %lu, AVG time (μs): %.4f, StdDev (μs): "
+      "%.2f \n",
+      time_waiting_storage_number, avg, variance);
+
+  avg = static_cast<double>(time_waiting_storage_total) /
+        static_cast<double>(time_waiting_storage_number_total);
+  variance =
+      std::sqrt(static_cast<double>(time_waiting_storage_squared_total *
+                                        time_waiting_storage_number_total -
+                                    time_waiting_storage_total *
+                                        time_waiting_storage_total) /
+                static_cast<double>(time_waiting_storage_number_total *
+                                    time_waiting_storage_number_total));
+  printf(
+      "\tWAL operations total: %lu, AVG time (μs) %.4f, StdDev (μs): %.2f \n",
+      time_waiting_storage_number_total, avg, variance);
+
+  avg = static_cast<double>(time_waiting_resets) /
+        static_cast<double>(time_waiting_resets_numbers);
+  variance =
+      std::sqrt(static_cast<double>(time_waiting_resets_squares *
+                                        time_waiting_resets_numbers -
+                                    time_waiting_resets * time_waiting_resets) /
+                static_cast<double>(time_waiting_resets_numbers *
+                                    time_waiting_resets_numbers));
+  printf(
+      "\tWAL reset operations total: %lu, AVG time (μs) %.4f, StdDev (μs): "
+      "%.2f \n",
+      time_waiting_resets_numbers, avg, variance);
+
+  printf(
+      "\tWAL time spent on replaying (μs): %lu, recovering zone heads (μs): "
+      "%lu \n",
+      time_spent_replaying, time_spend_recovering);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

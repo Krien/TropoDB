@@ -22,6 +22,7 @@ void ZnsVersionEdit::Clear() {
   has_deleted_range_ = false;
   compact_pointers_.clear();
   fragmented_data_.clear();
+  has_fragmented_data_ = false;
   has_comparator_ = false;
   comparator_.clear();
   has_next_ss_number = false;
@@ -34,6 +35,8 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.number = meta.number;
   if (level == 0) {
     f.L0.lba = meta.L0.lba;
+    f.L0.log_number = meta.L0.log_number;
+    f.L0.number = meta.L0.number;
   } else {
     f.LN.lba_regions = meta.LN.lba_regions;
     std::copy(meta.LN.lbas, meta.LN.lbas + f.LN.lba_regions, f.LN.lbas);
@@ -45,6 +48,7 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.lba_count = meta.lba_count;
   f.smallest = meta.smallest;
   f.largest = meta.largest;
+  // printf("Adding %lu %lu %lu \n", f.number, f.L0.lba, f.lba_count);
   new_ss_.push_back(std::make_pair(level, f));
 }
 
@@ -52,7 +56,11 @@ void ZnsVersionEdit::RemoveSSDefinition(const uint8_t level,
                                         const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
   deleted_ss_pers_.push_back(std::make_pair(level, meta));
-  // printf("Deleting %lu \n", meta.number);
+}
+
+void ZnsVersionEdit::RemoveSSDefinitionOnlyMeta(const uint8_t level,
+                                                const SSZoneMetaData& meta) {
+  deleted_ss_.insert(std::make_pair(level, meta.number));
 }
 
 // For debugging
@@ -118,6 +126,8 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.number);
     if (level == 0) {
       PutVarint64(dst, m.L0.lba);
+      PutFixed8(dst, m.L0.log_number);
+      PutVarint64(dst, m.L0.number);
     } else {
       PutFixed8(dst, m.LN.lba_regions);
       for (size_t j = 0; j < m.LN.lba_regions; j++) {
@@ -153,6 +163,8 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, m.number);
     if (new_ss_[i].first == 0) {
       PutVarint64(dst, m.L0.lba);
+      PutFixed8(dst, m.L0.log_number);
+      PutVarint64(dst, m.L0.number);
     } else {
       PutFixed8(dst, m.LN.lba_regions);
       for (size_t j = 0; j < m.LN.lba_regions; j++) {
@@ -176,10 +188,9 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 #endif
 
   // Fragmented logs
-  for (auto frag : fragmented_data_) {
+  if (has_fragmented_data_) {
     PutVarint32(dst, static_cast<uint32_t>(ZnsVersionTag::kFragmentedData));
-    PutFixed8(dst, frag.first);
-    PutLengthPrefixedSlice(dst, frag.second);
+    PutLengthPrefixedSlice(dst, Slice(fragmented_data_));
   }
 
 #ifdef VERSION_LEAK
@@ -210,7 +221,9 @@ static bool GetLevel(Slice* input, uint8_t* level) {
 
 static bool DecodeL0(Slice* input, SSZoneMetaData* m) {
   return GetVarint64(input, &m->number) && GetVarint64(input, &m->L0.lba) &&
-         GetVarint64(input, &m->numbers) && GetVarint64(input, &m->lba_count) &&
+         GetFixed8(input, &m->L0.log_number) &&
+         GetVarint64(input, &m->L0.number) && GetVarint64(input, &m->numbers) &&
+         GetVarint64(input, &m->lba_count) &&
          GetInternalKey(input, &m->smallest) &&
          GetInternalKey(input, &m->largest);
 }
@@ -314,8 +327,9 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
         break;
       case ZnsVersionTag::kFragmentedData:
         frag.clear();
-        if (GetLevel(&input, &level) && GetLengthPrefixedSlice(&input, &frag)) {
-          fragmented_data_.push_back(std::make_pair(level, frag.ToString()));
+        if (GetLengthPrefixedSlice(&input, &frag)) {
+          fragmented_data_ = frag.ToString();
+          has_fragmented_data_ = true;
         } else {
           msg = "fragmented log";
         }

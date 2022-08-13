@@ -16,7 +16,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           number_of_concurrent_readers),
+           ZnsConfig::number_of_concurrent_L0_readers),
 #ifdef USE_COMMITTER
       committer_(&log_, info, true),
 #endif
@@ -25,7 +25,7 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
       zone_size_(info.zone_size),
       cv_(&mutex_) {
   // unset
-  for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
     read_queue_[i] = 0;
   }
 }
@@ -68,22 +68,41 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
 #endif
 }
 
-Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
+Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
+                                   std::vector<SSZoneMetaData>& metas,
+                                   uint8_t parallel_number) {
   Status s = Status::OK();
-  SSTableBuilder* builder = NewBuilder(meta);
-  {
-    InternalIterator* iter = mem->NewIterator();
-    iter->SeekToFirst();
-    if (!iter->Valid()) {
-      return Status::Corruption("No valid iterator in the memtable");
+  SSZoneMetaData meta;
+  meta.L0.log_number = parallel_number;
+  SSTableBuilder* builder = NewBuilder(&meta);
+  InternalIterator* iter = mem->NewIterator();
+  iter->SeekToFirst();
+  if (!iter->Valid()) {
+    return Status::Corruption("No valid iterator in the memtable");
+  }
+  for (; iter->Valid(); iter->Next()) {
+    const Slice& key = iter->key();
+    const Slice& value = iter->value();
+    s = builder->Apply(key, value);
+    // Swap if necessary, we do not want enormous L0 -> L1 compactions.
+    if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
+         lba_size_ - 1) /
+            lba_size_ >=
+        (ZnsConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
+      builder->Finalise();
+      s = builder->Flush();
+      if (!s.ok()) {
+        break;
+      }
+      metas.push_back(meta);
+      delete builder;
+      builder = NewBuilder(&meta);
     }
-    for (; iter->Valid(); iter->Next()) {
-      const Slice& key = iter->key();
-      const Slice& value = iter->value();
-      s = builder->Apply(key, value);
-    }
+  }
+  if (s.ok() && builder->GetSize() > 0) {
     s = builder->Finalise();
     s = builder->Flush();
+    metas.push_back(meta);
   }
   delete builder;
   return s;
@@ -92,17 +111,17 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) {
 // TODO: this is better than locking around the entire read, but we have to
 // investigate the performance.
 uint8_t L0ZnsSSTable::request_read_queue() {
-  uint8_t picked_reader = number_of_concurrent_readers;
+  uint8_t picked_reader = ZnsConfig::number_of_concurrent_L0_readers;
   mutex_.Lock();
-  for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
     if (read_queue_[i] == 0) {
       picked_reader = i;
       break;
     }
   }
-  while (picked_reader >= number_of_concurrent_readers) {
+  while (picked_reader >= ZnsConfig::number_of_concurrent_L0_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < number_of_concurrent_readers; i++) {
+    for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -118,7 +137,8 @@ uint8_t L0ZnsSSTable::request_read_queue() {
 
 void L0ZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
-  assert(reader < number_of_concurrent_readers && read_queue_[reader] != 0);
+  assert(reader < ZnsConfig::number_of_concurrent_L0_readers &&
+         read_queue_[reader] != 0);
   read_queue_[reader] = 0;
   // printf("Released readerL0 %u %u \n", reader, read_queue_[reader]);
   cv_.SignalAll();
@@ -190,14 +210,14 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   if (metas.size() == 0) {
     return Status::Corruption();
   }
-  remaining_metas.clear();
   SSZoneMetaData* prev = metas[0];
+  SSZoneMetaData* mock = metas[0];
   // GUARANTEE, first deleted is equal to write tail
   if (log_.GetWriteTail() != prev->L0.lba) {
     uint64_t i = 0;
     while (i < metas.size()) {
       SSZoneMetaData* m = metas[i];
-      // printf("Readding %lu \n", m->number);
+      // printf("Readding first %lu \n", m->number);
       remaining_metas.push_back(m);
       i++;
     }
@@ -214,15 +234,18 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     SSZoneMetaData* m = metas[i];
     // Get adjacents
     if (prev->number == m->number) {
+      exit(-1);
       continue;
     }
     if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
       break;
     }
-    // printf("Deleting %lu \n", m->number);
+    // printf("Deleting %lu %lu %lu\n", m->number, m->L0.lba,
+    //        m->L0.lba + m->lba_count);
     blocks += m->lba_count;
     prev = m;
-    if (blocks > zone_cap_) {
+    if (blocks >= zone_cap_) {
+      mock->number = prev->number;
       blocks_to_delete += blocks;
       upto = i + 1;
       blocks = 0;
@@ -230,11 +253,12 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   }
   if (blocks_to_delete % zone_cap_ != 0) {
     uint64_t safe = (blocks_to_delete / zone_cap_) * zone_cap_;
-    prev->lba_count = blocks_to_delete - safe;
-    blocks_to_delete -= blocks_to_delete - safe;
-    prev->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
-    remaining_metas.push_back(prev);
-    // printf("Mock delete %lu %lu \n", prev->L0.lba, prev->lba_count);
+    mock->lba_count = blocks_to_delete - safe;
+    blocks_to_delete = safe;
+    mock->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
+    remaining_metas.push_back(mock);
+    // printf("Mock delete %lu %lu %lu \n", mock->number, mock->L0.lba,
+    //        mock->lba_count);
   }
   Status s = Status::OK();
   blocks_to_delete = (blocks_to_delete / zone_cap_) * zone_cap_;
@@ -247,7 +271,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   i = upto;
   while (i < metas.size()) {
     SSZoneMetaData* m = metas[i];
-    // printf("Readding %lu \n", m->number);
+    // printf("Readding %lu %lu %lu \n", m->number, m->L0.lba, m->lba_count);
     remaining_metas.push_back(m);
     i++;
   }
@@ -272,14 +296,14 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   }
   char* data = (char*)sstable.data();
   if (ZnsConfig::use_sstable_encoding) {
-    uint32_t size = DecodeFixed32(data);
-    uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    uint64_t size = DecodeFixed64(data);
+    uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      printf("Reading corrupt L0 header %u %u \n", size, count);
+      printf("Reading corrupt L0 header %lu %lu \n", size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
-    uint32_t count = DecodeFixed32(data);
+    uint64_t count = DecodeFixed32(data);
     return new SSTableIterator(data, sstable.size(), (size_t)count,
                                &ZNSEncoding::ParseNextNonEncoded, cmp);
   }

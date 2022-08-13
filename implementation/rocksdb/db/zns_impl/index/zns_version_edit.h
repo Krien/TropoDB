@@ -31,6 +31,8 @@ class ZnsVersionEdit {
   void Clear();
   void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   void RemoveSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
+  void RemoveSSDefinitionOnlyMeta(const uint8_t level,
+                                  const SSZoneMetaData& meta);
   // Used for Manifest logic
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
@@ -55,11 +57,11 @@ class ZnsVersionEdit {
     deleted_range_ = range;
     has_deleted_range_ = true;
   }
-  void AddFragmentedData(uint8_t level, const Slice& fragmented_data) {
+  void AddFragmentedData(const Slice& fragmented_data) {
     // Important! Do use strings as Slice copies will not work correctly with
     // strings holding calloced C-strings...
-    fragmented_data_.push_back(
-        std::make_pair(level, fragmented_data.ToString()));
+    fragmented_data_ = fragmented_data.ToString();
+    has_fragmented_data_ = true;
   }
   void AddDeletedSSTable(uint8_t level, const SSZoneMetaData& meta) {
     deleted_ss_pers_.push_back(std::make_pair(level, meta));
@@ -71,7 +73,8 @@ class ZnsVersionEdit {
 
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
-  std::vector<std::pair<uint8_t, std::string>> fragmented_data_;
+  std::string fragmented_data_;
+  bool has_fragmented_data_;
   DeletedZoneRange deleted_range_;
   bool has_deleted_range_;
   std::vector<std::pair<uint8_t, SSZoneMetaData>> deleted_ss_pers_;

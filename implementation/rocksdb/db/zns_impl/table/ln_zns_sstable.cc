@@ -16,10 +16,10 @@ LNZnsSSTable::LNZnsSSTable(SZD::SZDChannelFactory* channel_factory,
                            const uint64_t max_zone_nr)
     : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           number_of_concurrent_ln_readers),
+           ZnsConfig::number_of_concurrent_LN_readers, 2),
       cv_(&mutex_) {
   // unset
-  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
     read_queue_[i] = 0;
   }
 }
@@ -38,13 +38,18 @@ SSTableBuilder* LNZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
   return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
 }
 
+SSTableBuilder* LNZnsSSTable::NewLNBuilder(SSZoneMetaData* meta) {
+  return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding, 1);
+}
+
 bool LNZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
   return log_.SpaceLeft(slice.size(), false);
 }
 
 uint64_t LNZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 
-Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
+                                  uint8_t writer) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     printf("out of space LN %lu %lu \n", content.size() / lba_size_,
@@ -53,39 +58,47 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   }
 
   std::vector<std::pair<uint64_t, uint64_t>> ptrs;
-  if (!FromStatus(log_.Append(content.data(), content.size(), ptrs, false))
+  if (!FromStatus(
+           log_.Append(content.data(), content.size(), ptrs, false, writer))
            .ok()) {
     printf("Error appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
   }
+  meta->lba_count = 0;
   meta->LN.lba_regions = 0;
   for (auto ptr : ptrs) {
     meta->LN.lbas[meta->LN.lba_regions] = ptr.first * zone_cap_;
     meta->LN.lba_region_sizes[meta->LN.lba_regions] = ptr.second * zone_cap_;
+    // strictly safer, but not really necessary. If errors occur, investigate
+    // this line.
     meta->lba_count += meta->LN.lba_region_sizes[meta->LN.lba_regions];
     meta->LN.lba_regions++;
   }
-
+  // meta->lba_count += (content.size() + lba_size_ - 1) / lba_size_;
   // printf("Added %lu of %u regions of %lu lbas, for size of %lu \n",
   //        meta->number, meta->LN.lba_regions, meta->lba_count,
   //        content.size());
   return Status::OK();
 }
 
+Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+  return WriteSSTable(content, meta, 0);
+}
+
 // TODO: this is better than locking around the entire read, but we have to
 // investigate the performance.
 uint8_t LNZnsSSTable::request_read_queue() {
-  uint8_t picked_reader = number_of_concurrent_ln_readers;
+  uint8_t picked_reader = ZnsConfig::number_of_concurrent_LN_readers;
   mutex_.Lock();
-  for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
     if (read_queue_[i] == 0) {
       picked_reader = i;
       break;
     }
   }
-  while (picked_reader >= number_of_concurrent_ln_readers) {
+  while (picked_reader >= ZnsConfig::number_of_concurrent_LN_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < number_of_concurrent_ln_readers; i++) {
+    for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_LN_readers; i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -101,7 +114,8 @@ uint8_t LNZnsSSTable::request_read_queue() {
 
 void LNZnsSSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
-  assert(reader < number_of_concurrent_ln_readers && read_queue_[reader] != 0);
+  assert(reader < ZnsConfig::number_of_concurrent_LN_readers &&
+         read_queue_[reader] != 0);
   read_queue_[reader] = 0;
   // printf("Released reader %u %u\n", reader, read_queue_[reader]);
   cv_.SignalAll();
@@ -147,6 +161,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     uint64_t from = meta.LN.lbas[i];
     uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
+      printf("LN delete out of range\n");
       return Status::Corruption("Invalid metadata");
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
@@ -164,14 +179,14 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   }
   char* data = (char*)sstable.data();
   if (ZnsConfig::use_sstable_encoding) {
-    uint32_t size = DecodeFixed32(data);
-    uint32_t count = DecodeFixed32(data + sizeof(uint32_t));
+    uint64_t size = DecodeFixed64(data);
+    uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0) {
-      printf("SIZE %u COUNT %u \n", size, count);
+      printf("SIZE %lu COUNT %lu \n", size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
-    uint32_t count = DecodeFixed32(data);
+    uint64_t count = DecodeFixed64(data);
     return new SSTableIterator(data, sstable.size(), (size_t)count,
                                &ZNSEncoding::ParseNextNonEncoded, cmp);
   }

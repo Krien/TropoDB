@@ -11,13 +11,15 @@ namespace ROCKSDB_NAMESPACE {
 class ZnsSSTable;
 class SSTableBuilder {
  public:
-  SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta, bool use_encoding);
+  SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta, bool use_encoding,
+                 int8_t writer = -1);
   ~SSTableBuilder();
   uint64_t EstimateSizeImpact(const Slice& key, const Slice& value) const;
   Status Apply(const Slice& key, const Slice& value);
   Status Finalise();
   Status Flush();
   uint64_t GetSize() const { return (uint64_t)buffer_.size(); }
+  SSZoneMetaData* GetMeta() { return meta_; }
 
  private:
   // Used for generating the string
@@ -32,6 +34,8 @@ class SSTableBuilder {
   // References
   ZnsSSTable* table_;
   SSZoneMetaData* meta_;
+  // force different writer
+  int8_t writer_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

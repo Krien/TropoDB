@@ -39,13 +39,13 @@ Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
 }
 
 bool ZNSMemTable::Get(const ReadOptions& options, const LookupKey& lkey,
-                      std::string* value, Status* s) {
+                      std::string* value, Status* s, SequenceNumber* seq) {
   ReadOptions roptions;
   SequenceNumber max_covering_tombstone_seq = 0;
   MergeContext merge_context;
-  return this->mem_->GetMemTable()->Get(lkey, value, /*timestamp=*/nullptr, s,
-                                        &merge_context,
-                                        &max_covering_tombstone_seq, roptions);
+  return mem_->GetMemTable()->Get(lkey, value, /*timestamp=*/nullptr, s,
+                                  &merge_context, &max_covering_tombstone_seq,
+                                  seq, roptions);
 }
 
 bool ZNSMemTable::ShouldScheduleFlush() {

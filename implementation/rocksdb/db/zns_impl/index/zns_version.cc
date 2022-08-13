@@ -70,7 +70,13 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
-      return a->number > b->number;
+      if (a->L0.number > b->L0.number) {
+        return true;
+      } else if (a->L0.number < b->L0.number) {
+        return false;
+      } else {
+        return a->number > b->number;
+      }
     });
     for (uint32_t i = 0; i < tmp.size(); i++) {
       s = vset_->table_cache_->Get(options, *tmp[i], 0, internal_key, value,
@@ -105,7 +111,7 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
       // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
       // &status);
       if (s.ok()) {
-        if (status != EntryStatus::found) {
+        if (status == EntryStatus::notfound) {
           continue;
         }
         znssstable->Unref();
@@ -150,10 +156,11 @@ void ZnsVersion::AddIterators(const ReadOptions& options,
   // lazily.
   for (int level = 1; level < ZnsConfig::level_count; level++) {
     if (!ss_[level].empty()) {
-      iters->push_back(new LNIterator(
-          new LNZoneIterator(vset_->icmp_.user_comparator(), &ss_[level],
-                             level),
-          &GetLNIterator, vset_->znssstable_, vset_->icmp_.user_comparator()));
+      iters->push_back(
+          new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),
+                                            &ss_[level], level),
+                         &GetLNIterator, vset_->znssstable_,
+                         vset_->icmp_.user_comparator(), nullptr));
     }
   }
 }

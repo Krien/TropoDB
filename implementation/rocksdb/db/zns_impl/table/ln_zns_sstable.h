@@ -3,6 +3,7 @@
 #ifndef LN_ZNS_SSTABLE_H
 #define LN_ZNS_SSTABLE_H
 
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
@@ -13,8 +14,6 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-static constexpr uint8_t number_of_concurrent_ln_readers = 4;
-
 class LNZnsSSTable : public ZnsSSTable {
  public:
   LNZnsSSTable(SZD::SZDChannelFactory* channel_factory_,
@@ -24,6 +23,7 @@ class LNZnsSSTable : public ZnsSSTable {
   bool EnoughSpaceAvailable(const Slice& slice) const override;
   uint64_t SpaceAvailable() const override;
   SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
+  SSTableBuilder* NewLNBuilder(SSZoneMetaData* meta);
   Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
@@ -32,6 +32,8 @@ class LNZnsSSTable : public ZnsSSTable {
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status InvalidateSSZone(const SSZoneMetaData& meta) override;
   Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) override;
+  Status WriteSSTable(const Slice& content, SSZoneMetaData* meta,
+                      uint8_t writer);
   Status Recover() override;
   Status Recover(const std::string& from);
   std::string Encode();
@@ -58,7 +60,7 @@ class LNZnsSSTable : public ZnsSSTable {
   SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
   port::CondVar cv_;
-  std::array<uint8_t, number_of_concurrent_ln_readers> read_queue_;
+  std::array<uint8_t, ZnsConfig::number_of_concurrent_LN_readers> read_queue_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

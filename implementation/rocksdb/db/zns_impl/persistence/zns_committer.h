@@ -3,8 +3,7 @@
 #ifndef ZNS_COMMITER_H
 #define ZNS_COMMITER_H
 
-#define DIRECT_COMMIT
-
+#include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "rocksdb/slice.h"
@@ -37,6 +36,14 @@ struct ZnsCommitReader {
   std::string scratch;
 };
 
+struct ZnsCommitReaderString {
+  uint64_t commit_start;
+  uint64_t commit_end;
+  uint64_t commit_ptr;
+  std::string* in;
+  std::string scratch;
+};
+
 /**
  * @brief ZnsCommiter is a helper class that can be used for persistent commits
  * in a log. It requires external synchronisation and verification!
@@ -49,8 +56,10 @@ class ZnsCommitter {
   ZnsCommitter& operator=(const ZnsCommitter&) = delete;
   ~ZnsCommitter();
 
+  size_t SpaceNeeded(size_t data_size) const;
+  bool SpaceEnough(size_t size) const;
   bool SpaceEnough(const Slice& data) const;
-  Status CommitToString(const Slice& in, std::string* out);
+  Status CommitToCharArray(const Slice& in, char** out);
   Status Commit(const Slice& data, uint64_t* lbas = nullptr);
   Status SafeCommit(const Slice& data, uint64_t* lbas = nullptr);
 
@@ -61,6 +70,10 @@ class ZnsCommitter {
   bool SeekCommitReader(ZnsCommitReader& reader, Slice* record);
   // Can not be called without first getting the commit
   bool CloseCommit(ZnsCommitReader& reader);
+
+  Status GetCommitReaderString(std::string* in, ZnsCommitReaderString* reader);
+  bool SeekCommitReaderString(ZnsCommitReaderString& reader, Slice* record);
+  bool CloseCommitString(ZnsCommitReaderString& reader);
 
   // Clears buffer if it is filled.
   void ClearBuffer() {

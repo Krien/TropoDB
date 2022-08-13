@@ -66,25 +66,32 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       ss_manager_(nullptr),
       manifest_(nullptr),
       table_cache_(nullptr),
-      wal_man_(nullptr),
       versions_(nullptr),
-      // Will be initialised even later
-      wal_(nullptr),
-      mem_(nullptr),
-      imm_(nullptr),
-      tmp_batch_(new WriteBatch),
       // State
+      bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
+      bg_flush_work_finished_signal_(&mutex_),
+      bg_compaction_l0_scheduled_(false),
       bg_compaction_scheduled_(false),
       shutdown_(false),
       bg_error_(Status::OK()),
       forced_schedule_(false),
       // diag
       flushes_(0) {
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    wal_man_[i] = nullptr;
+    wal_[i] = nullptr;
+    mem_[i] = nullptr;
+    imm_[i] = nullptr;
+    bg_flush_scheduled_[i] = false;
+    tmp_batch_[i] = new WriteBatch;
+    wal_reserved_[i] = 0;
+  }
   for (uint8_t i = 0; i < ZnsConfig::level_count - 1; i++) {
     compactions_[i] = 0;
   }
-  env_->SetBackgroundThreads(1, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(2, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(5, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
@@ -117,6 +124,9 @@ void DBImplZNS::IODiagnostics() {
   }
   std::cout << "SSTable layout: \n";
   std::cout << versions_->DebugString();
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    wal_man_[i]->PrintAdditionalWALStatistics();
+  }
   std::cout << "==== raw IO metrics ==== \n";
   std::cout << std::left << std::setw(10) << "Metric " << std::right
             << std::setw(15) << "Append (ops)" << std::setw(25)
@@ -146,15 +156,18 @@ void DBImplZNS::IODiagnostics() {
     AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
   }
   {
-    std::vector<ZNSDiagnostics> diags = wal_man_->IODiagnostics();
-    for (auto& diag : diags) {
-      PrintIOColumn(diag);
-      totaldiag.bytes_written_ += diag.bytes_written_;
-      totaldiag.append_operations_counter_ += diag.append_operations_counter_;
-      totaldiag.bytes_read_ += diag.bytes_read_;
-      totaldiag.read_operations_counter_ += diag.read_operations_counter_;
-      totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
-      AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
+    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+      std::vector<ZNSDiagnostics> diags = wal_man_[i]->IODiagnostics();
+      for (auto& diag : diags) {
+        diag.name_ += i;
+        PrintIOColumn(diag);
+        totaldiag.bytes_written_ += diag.bytes_written_;
+        totaldiag.append_operations_counter_ += diag.append_operations_counter_;
+        totaldiag.bytes_read_ += diag.bytes_read_;
+        totaldiag.read_operations_counter_ += diag.read_operations_counter_;
+        totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
+        AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
+      }
     }
   }
   {
@@ -180,21 +193,37 @@ void DBImplZNS::IODiagnostics() {
 DBImplZNS::~DBImplZNS() {
   printf("Shutdown \n");
   mutex_.Lock();
-  while (bg_compaction_scheduled_) {
+  while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
+         AnyFlushScheduled()) {
     shutdown_ = true;
     printf("busy, wait before closing\n");
-    bg_work_finished_signal_.Wait();
+    if (bg_compaction_l0_scheduled_) {
+      bg_work_l0_finished_signal_.Wait();
+    }
+    if (bg_compaction_scheduled_) {
+      bg_work_finished_signal_.Wait();
+    }
+    if (AnyFlushScheduled()) {
+      bg_flush_work_finished_signal_.Wait();
+    }
+  }
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    if (wal_[i] != nullptr) {
+      wal_[i]->Sync();
+    }
   }
   mutex_.Unlock();
 
   IODiagnostics();
 
   if (versions_ != nullptr) delete versions_;
-  if (mem_ != nullptr) mem_->Unref();
-  if (imm_ != nullptr) imm_->Unref();
-  if (tmp_batch_ != nullptr) delete tmp_batch_;
-  if (wal_ != nullptr) wal_->Unref();
-  if (wal_man_ != nullptr) wal_man_->Unref();
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    if (mem_[i] != nullptr) mem_[i]->Unref();
+    if (imm_[i] != nullptr) imm_[i]->Unref();
+    if (wal_[i] != nullptr) wal_[i]->Unref();
+    if (wal_man_[i] != nullptr) wal_man_[i]->Unref();
+    if (tmp_batch_[i] != nullptr) delete tmp_batch_[i];
+  }
   if (ss_manager_ != nullptr) ss_manager_->Unref();
   if (manifest_ != nullptr) manifest_->Unref();
   if (table_cache_ != nullptr) delete table_cache_;
@@ -272,12 +301,14 @@ Status DBImplZNS::InitDB(const DBOptions& options,
   zone_head += zone_step;
 
   zone_step = ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal;
-  wal_man_ = new ZnsWALManager<ZnsConfig::wal_count>(
-      channel_factory_, device_info, zone_head, zone_step + zone_head);
-  wal_man_->Ref();
-  zone_head += zone_step;
-
-  zone_step = device_info.max_lba / device_info.zone_size - zone_head;
+  zone_step /= ZnsConfig::lower_concurrency;
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    wal_man_[i] = new ZnsWALManager<ZnsConfig::wal_manager_zone_count>(
+        channel_factory_, device_info, zone_head, zone_step + zone_head);
+    wal_man_[i]->Ref();
+    zone_head += zone_step;
+  }
+  zone_step = device_info.max_lba / device_info.zone_size - zone_head - 1;
   // If only we had access to C++23.
   ss_manager_ =
       ZNSSSTableManager::NewZNSSTableManager(channel_factory_, device_info,
@@ -290,8 +321,11 @@ Status DBImplZNS::InitDB(const DBOptions& options,
   std::cout << std::setfill('_') << std::setw(76) << "\n" << std::setfill(' ');
   zone_head = device_info.max_lba / device_info.zone_size;
 
-  mem_ = new ZNSMemTable(options, internal_comparator_, max_write_buffer_size_);
-  mem_->Ref();
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    mem_[i] =
+        new ZNSMemTable(options, internal_comparator_, max_write_buffer_size_);
+    mem_[i]->Ref();
+  }
 
   Options opts(options, ColumnFamilyOptions());
   table_cache_ = new ZnsTableCache(opts, internal_comparator_, 1024 * 1024 * 4,
@@ -299,7 +333,7 @@ Status DBImplZNS::InitDB(const DBOptions& options,
 
   versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
                                 device_info.lba_size, device_info.zone_cap,
-                                table_cache_);
+                                table_cache_, this->env_);
 
   return Status::OK();
 }
@@ -307,21 +341,25 @@ Status DBImplZNS::InitDB(const DBOptions& options,
 Status DBImplZNS::InitWAL() {
   mutex_.AssertHeld();
   Status s;
-  // We must force flush all WALs if there is not enough space.
-  if (!wal_man_->WALAvailable()) {
-    if (mem_->GetInternalSize() > 0) {
-      imm_ = mem_;
-      mem_ = new ZNSMemTable(options_, internal_comparator_,
-                             max_write_buffer_size_);
-      mem_->Ref();
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    // We must force flush all WALs if there is not enough space.
+    if (!wal_man_[i]->WALAvailable()) {
+      if (mem_[i]->GetInternalSize() > 0) {
+        imm_[i] = mem_[i];
+        mem_[i] = new ZNSMemTable(options_, internal_comparator_,
+                                  max_write_buffer_size_);
+        mem_[i]->Ref();
+      }
+      MaybeScheduleFlush(i);
+      while (!wal_man_[i]->WALAvailable()) {
+        bg_flush_work_finished_signal_.Wait();
+      }
     }
-    MaybeScheduleCompaction(true);
-    while (!wal_man_->WALAvailable()) {
-      bg_work_finished_signal_.Wait();
-    }
+    wal_[i] = wal_man_[i]->GetCurrentWAL(&mutex_);
+    wal_[i]->Ref();
   }
-  wal_ = wal_man_->GetCurrentWAL(&mutex_);
-  wal_->Ref();
+  MaybeScheduleCompactionL0();
+  MaybeScheduleCompaction(true);
   return s;
 }
 
@@ -357,6 +395,10 @@ Status DBImplZNS::Open(
   }
   if (s.ok()) {
     // impl->RemoveObsoleteZones();
+    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+      impl->MaybeScheduleFlush(i);
+    }
+    impl->MaybeScheduleCompactionL0();
     impl->MaybeScheduleCompaction(false);
   }
   impl->mutex_.Unlock();
@@ -368,12 +410,30 @@ Status DBImplZNS::Open(
   return s;
 }
 
+bool DBImplZNS::AnyFlushScheduled() {
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    if (bg_flush_scheduled_[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 Status DBImplZNS::Close() {
   mutex_.Lock();
-  while (bg_compaction_scheduled_) {
-    // printf("busy, wait before closing\n");
+  while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
+         AnyFlushScheduled()) {
     shutdown_ = true;
-    bg_work_finished_signal_.Wait();
+    printf("busy, wait before closing\n");
+    if (bg_compaction_l0_scheduled_) {
+      bg_work_l0_finished_signal_.Wait();
+    }
+    if (bg_compaction_scheduled_) {
+      bg_work_finished_signal_.Wait();
+    }
+    if (AnyFlushScheduled()) {
+      bg_flush_work_finished_signal_.Wait();
+    }
   }
   mutex_.Unlock();
   // TODO: close device.
@@ -399,7 +459,9 @@ Status DBImplZNS::Recover() {
 
   // Recover WAL and head
   SequenceNumber old_seq;
-  s = wal_man_->Recover(mem_, &old_seq);
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    s = wal_man_[i]->Recover(mem_[i], &old_seq);
+  }
   if (!s.ok()) return s;
   versions_->SetLastSequence(old_seq);
   return s;
@@ -436,7 +498,7 @@ Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
   return Write(opt, &batch);
 }
 
-Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
+Status DBImplZNS::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
@@ -446,46 +508,62 @@ Status DBImplZNS::MakeRoomForWrite(Slice log_entry) {
       s = bg_error_;
       return s;
     }
-    if (allow_delay && versions_->NeedsFlushing()) {
+    if (allow_delay && versions_->NumLevelZones(0) > ZnsConfig::L0_slow_down) {
       mutex_.Unlock();
+      // printf("SlowDown reached...\n");
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
-    } else if (!mem_->ShouldScheduleFlush() && wal_->SpaceLeft(log_entry)) {
+    } else if (!mem_[parallel_number]->ShouldScheduleFlush() &&
+               wal_[parallel_number]->SpaceLeft(size)) {
       // space left in memory table
       break;
-    } else if (imm_ != nullptr) {
+    } else if (imm_[parallel_number] != nullptr) {
       // flush is scheduled, wait...
-      bg_work_finished_signal_.Wait();
-    } else if (versions_->NeedsFlushing()) {
-      // printf("waiting for compaction\n");
-      MaybeScheduleCompaction(false);
-      bg_work_finished_signal_.Wait();
-    } else if (!wal_man_->WALAvailable()) {
-      bg_work_finished_signal_.Wait();
+      // printf("Imm already scheduled\n");
+      bg_flush_work_finished_signal_.Wait();
+    } else if (versions_->NeedsL0Compaction()) {
+      // No more space in L0... Better to wait till compaction is done
+      printf("Force L0\n");
+      MaybeScheduleCompactionL0();
+      bg_work_l0_finished_signal_.Wait();
+    } else if (!wal_man_[parallel_number]->WALAvailable()) {
+      printf("Out of WALs\n");
+      bg_flush_work_finished_signal_.Wait();
     } else {
       // create new WAL
-      wal_->Sync();
-      wal_->Close();
-      wal_->Unref();
-      s = wal_man_->NewWAL(&mutex_, &wal_);
-      wal_->Ref();
+      wal_[parallel_number]->Sync();
+      wal_[parallel_number]->Close();
+      wal_[parallel_number]->Unref();
+      s = wal_man_[parallel_number]->NewWAL(&mutex_, &wal_[parallel_number]);
+      wal_[parallel_number]->Ref();
+#ifdef WALPerfTest
+      // Drop all that was in the memtable (NOT PERSISTENT!)
+      mem_[parallel_number]->Unref();
+      mem_[parallel_number] = new ZNSMemTable(options_, internal_comparator_,
+                                              max_write_buffer_size_);
+      mem_[parallel_number]->Ref();
+      env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+#else
       // printf("Reset WAL\n");
       // Switch to fresh memtable
-      imm_ = mem_;
-      mem_ = new ZNSMemTable(options_, internal_comparator_,
-                             max_write_buffer_size_);
-      mem_->Ref();
-      MaybeScheduleCompaction(false);
+      imm_[parallel_number] = mem_[parallel_number];
+      mem_[parallel_number] = new ZNSMemTable(options_, internal_comparator_,
+                                              max_write_buffer_size_);
+      mem_[parallel_number]->Ref();
+      MaybeScheduleFlush(parallel_number);
+      MaybeScheduleCompactionL0();
+#endif
     }
   }
   return Status::OK();
-}
+}  // namespace ROCKSDB_NAMESPACE
 
-WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
+WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer,
+                                       uint8_t parallel_number) {
   mutex_.AssertHeld();
-  assert(!writers_.empty());
-  Writer* first = writers_.front();
+  assert(!writers_[parallel_number].empty());
+  Writer* first = writers_[parallel_number].front();
   WriteBatch* result = first->batch;
   assert(result != nullptr);
 
@@ -495,19 +573,19 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
   size_t max_size =
-      max_write_buffer_size_ -
-      512;  // TODO: if max_write_buffer_size_ < 512 then all hell breaks loose!
+      max_write_buffer_size_ - 512;  // TODO: if max_write_buffer_size_ < 512
+                                     // then all hell breaks loose!
   // if (size <= (128 << 10)) {
   //   max_size = size + (128 << 10);
   // }
-  if (max_size > wal_->SpaceAvailable()) {
-    max_size = wal_->SpaceAvailable();
+  if (max_size > wal_[parallel_number]->SpaceAvailable()) {
+    max_size = wal_[parallel_number]->SpaceAvailable();
   }
 
   *last_writer = first;
-  std::deque<Writer*>::iterator iter = writers_.begin();
+  std::deque<Writer*>::iterator iter = writers_[parallel_number].begin();
   ++iter;  // Advance past "first"
-  for (; iter != writers_.end(); ++iter) {
+  for (; iter != writers_[parallel_number].end(); ++iter) {
     Writer* w = *iter;
     if (w->batch != nullptr) {
       size += WriteBatchInternal::ByteSize(w->batch);
@@ -519,7 +597,7 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer) {
       // Append to *result
       if (result == first->batch) {
         // Switch to temporary batch instead of disturbing caller's batch
-        result = tmp_batch_;
+        result = tmp_batch_[parallel_number];
         assert(WriteBatchInternal::Count(result) == 0);
         WriteBatchInternal::Append(result, first->batch);
       }
@@ -536,27 +614,36 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   Writer w(&mutex_);
   w.batch = updates;
   w.done = false;
-
   MutexLock l(&mutex_);
-  writers_.push_back(&w);
-  while (!w.done && &w != writers_.front()) {
+
+  uint8_t striped_index = writer_striper_;
+  writer_striper_ = writer_striper_ + 1 == ZnsConfig::lower_concurrency
+                        ? 0
+                        : writer_striper_ + 1;
+  writers_[striped_index].push_back(&w);
+  while (!w.done && &w != writers_[striped_index].front()) {
     w.cv.Wait();
   }
   if (w.done) {
     return w.status;
   }
 
-  s = MakeRoomForWrite(
-      updates == nullptr ? Slice("") : WriteBatchInternal::Contents(updates));
+  s = MakeRoomForWrite(updates == nullptr
+                           ? 0
+                           : WriteBatchInternal::Contents(updates).size() +
+                                 wal_reserved_[striped_index],
+                       striped_index);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   // Write to what is needed
   if (s.ok() && updates != nullptr) {
-    WriteBatch* write_batch = BuildBatchGroup(&last_writer);
+    WriteBatch* write_batch = BuildBatchGroup(&last_writer, striped_index);
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(write_batch);
     {
-      wal_->Ref();
+      wal_reserved_[striped_index] =
+          WriteBatchInternal::Contents(write_batch).size();
+      wal_[striped_index]->Ref();
       mutex_.Unlock();
       // buffering does not really make sense at the moment.
       // later we might decide to implement "FSync" or "ZoneSync", then it
@@ -565,32 +652,33 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
       //        max_write_buffer_size_,
       //        WriteBatchInternal::Contents(write_batch).size());
       if (!options.sync) {
-        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
-                               last_sequence + 1);
+        s = wal_[striped_index]->Append(
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
       } else {
-        s = wal_->DirectAppend(WriteBatchInternal::Contents(write_batch),
-                               last_sequence + 1);
-        s = wal_->Sync();
+        s = wal_[striped_index]->Append(
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
+        s = wal_[striped_index]->Sync();
       }
       // write to memtable
-      assert(this->mem_ != nullptr);
+      assert(mem_[striped_index] != nullptr);
       if (s.ok()) {
-        s = mem_->Write(options, write_batch);
+        s = mem_[striped_index]->Write(options, write_batch);
         if (!s.ok()) {
           printf("Error writing to memtable %s\n", s.getState());
         }
       }
       mutex_.Lock();
-      wal_->Unref();
+      wal_[striped_index]->Unref();
     }
-    if (write_batch == tmp_batch_) tmp_batch_->Clear();
-
+    if (write_batch == tmp_batch_[striped_index]) {
+      tmp_batch_[striped_index]->Clear();
+    }
     versions_->SetLastSequence(last_sequence);
   }
 
   while (true) {
-    Writer* ready = writers_.front();
-    writers_.pop_front();
+    Writer* ready = writers_[striped_index].front();
+    writers_[striped_index].pop_front();
     if (ready != &w) {
       ready->status = s;
       ready->done = true;
@@ -599,8 +687,8 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
     if (ready == last_writer) break;
   }
 
-  if (!writers_.empty()) {
-    writers_.front()->cv.Signal();
+  if (!writers_[striped_index].empty()) {
+    writers_[striped_index].front()->cv.Signal();
   }
 
   return s;
@@ -610,30 +698,62 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
                       std::string* value) {
   MutexLock l(&mutex_);
   Status s;
-  // This is absolutely necessary for locking logic because private pointers can
-  // be changed in background work.
-  ZNSMemTable* mem = mem_;
-  ZNSMemTable* imm = imm_;
+  value->clear();
+  // This is absolutely necessary for locking logic because private pointers
+  // can be changed in background work.
+  std::vector<ZNSMemTable*> mem;
+  std::vector<ZNSMemTable*> imm;
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    mem.push_back(mem_[i]);
+    imm.push_back(imm_[i]);
+    mem[i]->Ref();
+    if (imm[i] != nullptr) imm[i]->Ref();
+  }
+
   ZnsVersion* current = versions_->current();
-  mem->Ref();
-  if (imm != nullptr) imm->Ref();
+
   current->Ref();
   LookupKey lkey(key, versions_->LastSequence());
   {
     mutex_.Unlock();
-    if (mem->Get(options, lkey, value, &s)) {
-    } else if (imm != nullptr && imm->Get(options, lkey, value, &s)) {
-      // printf("read from immutable!\n");
-      // Done
-    } else {
+    SequenceNumber seq;
+    SequenceNumber seq_pot;
+    bool found = false;
+    std::string tmp;
+    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+      if (mem[i]->Get(options, lkey, &tmp, &s, &seq_pot)) {
+        if (!found) {
+          found = true;
+          seq = seq_pot;
+          *value = tmp;
+        } else if (seq_pot > seq) {
+          seq = seq_pot;
+          *value = tmp;
+        }
+      } else if (imm[i] != nullptr &&
+                 imm[i]->Get(options, lkey, &tmp, &s, &seq_pot)) {
+        if (!found) {
+          found = true;
+          seq = seq_pot;
+          *value = tmp;
+        } else if (seq_pot > seq) {
+          seq = seq_pot;
+          *value = tmp;
+        }
+      }
+    }
+    if (!found) {
       s = current->Get(options, lkey, value);
     }
     mutex_.Lock();
   }
 
   // Ensures that old data can be removed.
-  mem->Unref();
-  if (imm != nullptr) imm->Unref();
+  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    mem[i]->Unref();
+    if (imm[i] != nullptr) imm[i]->Unref();
+  }
+
   current->Unref();
   // printf("Gotten \n");
 

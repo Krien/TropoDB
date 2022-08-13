@@ -1,19 +1,22 @@
 #include "db/zns_impl/table/zns_sstable_builder.h"
 
 #include "db/zns_impl/config.h"
+#include "db/zns_impl/table/ln_zns_sstable.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
-                               bool use_encoding)
+                               bool use_encoding, int8_t writer)
     : started_(false),
       kv_numbers_(0),
       counter_(0),
       use_encoding_(use_encoding),
       table_(table),
-      meta_(meta) {
+      meta_(meta),
+      writer_(writer) {
   meta_->lba_count = 0;
   buffer_.clear();
+  buffer_.reserve(ZnsConfig::max_bytes_sstable_);
   kv_pair_offsets_.clear();
   if (use_encoding_) {
     kv_pair_offsets_.push_back(0);
@@ -79,19 +82,24 @@ Status SSTableBuilder::Finalise() {
   // TODO: this is not a bottleneck, but it is ugly...
   std::string preamble;
   uint64_t expect_size =
-      buffer_.size() + (kv_pair_offsets_.size() + 2) * sizeof(uint32_t);
+      buffer_.size() + (kv_pair_offsets_.size() + 2) * sizeof(uint64_t);
   if (use_encoding_) {
-    PutFixed32(&preamble, expect_size);
+    PutFixed64(&preamble, expect_size);
   }
-  PutFixed32(&preamble, kv_pair_offsets_.size());
+  PutFixed64(&preamble, kv_pair_offsets_.size());
   for (size_t i = 0; i < kv_pair_offsets_.size(); i++) {
-    PutFixed32(&preamble, kv_pair_offsets_[i]);
+    PutFixed64(&preamble, kv_pair_offsets_[i]);
   }
   buffer_ = preamble.append(buffer_);
   return Status::OK();
 }
 
 Status SSTableBuilder::Flush() {
-  return table_->WriteSSTable(Slice(buffer_), meta_);
+  if (writer_ != -1) {
+    return static_cast<LNZnsSSTable*>(table_)->WriteSSTable(Slice(buffer_),
+                                                            meta_, writer_);
+  } else {
+    return table_->WriteSSTable(Slice(buffer_), meta_);
+  }
 }
 }  // namespace ROCKSDB_NAMESPACE

@@ -19,13 +19,30 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+struct DeferredLNCompaction {
+  port::Mutex mutex_;
+  port::CondVar new_task_;  // In cas deferred is waiting for main
+  bool last_{false};        // Signal that we do not want anything to do anymore
+  bool done_{false};
+  std::vector<SSTableBuilder*> deferred_builds_;
+  uint8_t index_{0};
+  uint8_t level_{0};
+  ZnsVersionEdit* edit_{nullptr};
+  DeferredLNCompaction() : new_task_(&mutex_) {}
+};
+
 class ZnsCompaction {
  public:
-  ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level);
+  ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env);
   ~ZnsCompaction();
 
   void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
   bool IsTrivialMove() const;
+  bool IsBusy() const { return busy_; }
+  bool HasOverlapWithOtherCompaction(std::vector<SSZoneMetaData*> metas);
+  void GetCompactionTargets(std::vector<SSZoneMetaData*>* metas);
+
   Status DoTrivialMove(ZnsVersionEdit* edit);
   Iterator* MakeCompactionIterator();
   Status DoCompaction(ZnsVersionEdit* edit);
@@ -37,6 +54,8 @@ class ZnsCompaction {
   Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
                       SSZoneMetaData* meta);
   bool IsBaseLevelForKey(const Slice& user_key);
+
+  static void DeferCompactionWrite(void* c);
 
   // Meta
   uint8_t first_level_;
@@ -50,6 +69,14 @@ class ZnsCompaction {
   size_t level_ptrs_[ZnsConfig::level_count];
 
   std::vector<SSZoneMetaData*> grandparents_;
+  bool busy_;
+
+  SystemClock* const clock_;
+
+  // Deferred
+  Env* env_;
+  DeferredLNCompaction deferred_;
+  std::vector<SSZoneMetaData*> metas_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

@@ -16,6 +16,7 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_table_cache.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
+#include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -30,7 +31,7 @@ class ZnsVersionSet {
   ZnsVersionSet(const InternalKeyComparator& icmp,
                 ZNSSSTableManager* znssstable, ZnsManifest* manifest,
                 const uint64_t lba_size, const uint64_t zone_cap,
-                ZnsTableCache* table_cache);
+                ZnsTableCache* table_cache, Env* env);
   ZnsVersionSet(const ZnsVersionSet&) = delete;
   ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
   ~ZnsVersionSet();
@@ -43,7 +44,8 @@ class ZnsVersionSet {
   void GetLiveZones(const uint8_t level, std::set<uint64_t>& live);
   void GetSaveDeleteRange(const uint8_t level,
                           std::pair<uint64_t, uint64_t>* range);
-  Status ReclaimStaleSSTables();
+  Status ReclaimStaleSSTablesL0(port::Mutex* mutex_, port::CondVar* cond);
+  Status ReclaimStaleSSTablesLN(port::Mutex* mutex_, port::CondVar* cond);
 
   inline ZnsVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
@@ -52,6 +54,8 @@ class ZnsVersionSet {
     last_sequence_ = s;
   }
   inline uint64_t NewSSNumber() { return ss_number_++; }
+  inline uint64_t NewSSNumberL0() { return ss_number_l0_++; }
+
   inline int NumLevelZones(uint8_t level) const {
     assert(level < ZnsConfig::level_count);
     return current_->ss_[level].size();
@@ -71,11 +75,30 @@ class ZnsVersionSet {
            current_->compaction_level_ != ZnsConfig::level_count + 1;
   }
 
-  bool NeedsFlushing() const {
+  bool NeedsL0Compaction() const {
+    bool needcompaction =
+        current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0] ||
+        NeedsL0CompactionForce();
+    if (!needcompaction) {
+      for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+        if (NeedsL0CompactionForceParallel(i)) {
+          return true;
+        }
+      }
+    }
+    return needcompaction;
+  }
+
+  bool NeedsL0CompactionForce() const {
     return znssstable_->GetFractionFilled(0) /
-                   ZnsConfig::ss_compact_treshold_force[0] >=
-               1 ||
-           current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0];
+               ZnsConfig::ss_compact_treshold_force[0] >=
+           1;
+  }
+
+  bool NeedsL0CompactionForceParallel(uint8_t parallel_number) const {
+    return znssstable_->GetFractionFilledL0(parallel_number) /
+               ZnsConfig::ss_compact_treshold_force[0] >=
+           1;
   }
 
   void GetRange(const std::vector<SSZoneMetaData*>& inputs,
@@ -84,8 +107,9 @@ class ZnsVersionSet {
                  const std::vector<SSZoneMetaData*>& inputs2,
                  InternalKey* smallest, InternalKey* largest);
   void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
-  bool OnlyNeedDeletes();
-  ZnsCompaction* PickCompaction();
+  bool OnlyNeedDeletes(uint8_t level);
+  ZnsCompaction* PickCompaction(uint8_t level,
+                                const std::vector<SSZoneMetaData*>& busy);
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
   Status Recover();
@@ -109,9 +133,11 @@ class ZnsVersionSet {
   uint64_t lba_size_;
   uint64_t zone_cap_;
   uint64_t last_sequence_;
-  uint64_t ss_number_;
+  std::atomic<uint64_t> ss_number_;
+  std::atomic<uint64_t> ss_number_l0_;
   bool logged_;
   ZnsTableCache* table_cache_;
+  Env* env_;
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
@@ -150,7 +176,7 @@ class ZnsVersionSet::Builder {
   };
 
   std::pair<uint64_t, uint64_t> ss_deleted_range_;
-  std::vector<std::pair<uint8_t, Slice>> fragmented_data_;
+  Slice fragmented_data_;
 
   ZnsVersionSet* vset_;
   ZnsVersion* base_;

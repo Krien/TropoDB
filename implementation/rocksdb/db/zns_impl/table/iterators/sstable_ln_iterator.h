@@ -53,10 +53,26 @@ class LNZoneIterator : public Iterator {
 
 typedef Iterator* (*NewZoneIteratorFunction)(void*, const Slice&,
                                              const Comparator*);
+
+struct ZonePrefetcher {
+  port::Mutex mut_;
+  port::CondVar waiting_;
+  bool done_{false};
+  bool quit_{false};
+  size_t tail_{0};
+  size_t tail_read_{0};
+  size_t index_{1};  // thats right, the first entry is not prefetched.
+  std::vector<std::pair<std::string, Iterator*>> its;
+  void* arg_;
+  const Comparator* cmp_;
+  NewZoneIteratorFunction zonefunc_;
+  ZonePrefetcher() : waiting_(&mut_) {}
+};
+
 class LNIterator : public Iterator {
  public:
   LNIterator(Iterator* ln_iterator, NewZoneIteratorFunction zone_function,
-             void* arg, const Comparator* cmp);
+             void* arg, const Comparator* cmp, Env* env = nullptr);
   ~LNIterator() override;
   bool Valid() const override { return data_iter_.Valid(); }
   Slice key() const override {
@@ -87,6 +103,9 @@ class LNIterator : public Iterator {
   IteratorWrapper data_iter_;
   std::string data_zone_handle_;
   const Comparator* cmp_;
+  Env* env_;
+  bool prefetching_{false};
+  ZonePrefetcher prefetcher_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

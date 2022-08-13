@@ -11,6 +11,8 @@
 #ifndef DB_IMPL_ZNS_H
 #define DB_IMPL_ZNS_H
 
+//#define WALPerfTest
+
 #include <atomic>
 #include <deque>
 #include <functional>
@@ -63,6 +65,7 @@ struct MemTableInfo;
 class ColumnFamilyMemTables;
 class WriteBufferManager;
 class ZnsTableCache;
+struct FlushData;
 
 class DBImplZNS : public DB {
  public:
@@ -202,13 +205,23 @@ class DBImplZNS : public DB {
       std::vector<std::string>* const output_file_names = nullptr,
       CompactionJobInfo* compaction_job_info = nullptr) override;
 
-  Status MakeRoomForWrite(Slice log_entry);
+  Status MakeRoomForWrite(size_t size, uint8_t parallel_number);
+  void MaybeScheduleFlush(uint8_t parallel_number);
+  bool AnyFlushScheduled();
   void MaybeScheduleCompaction(bool force);
-  static void BGWork(void* db);
-  void BackgroundCall();
+  void MaybeScheduleCompactionL0();
+  static void BGFlushWork(void* db);
+  static void BGCompactionWork(void* db);
+  static void BGCompactionL0Work(void* db);
+  void BackgroundFlushCall(uint8_t parallel_number);
+  void BackgroundFlush(uint8_t parallel_number);
+  Status FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
+                         uint8_t parallel_number);
+  Status CompactMemtable(uint8_t parallel_number);
+  void BackgroundCompactionCall();
   void BackgroundCompaction();
-  Status CompactMemtable();
-  Status FlushL0SSTables(SSZoneMetaData* meta);
+  void BackgroundCompactionL0Call();
+  void BackgroundCompactionL0();
 
   virtual Status PauseBackgroundWork() override;
   virtual Status ContinueBackgroundWork() override;
@@ -318,8 +331,10 @@ class DBImplZNS : public DB {
  private:
   struct Writer;
   Status Recover();
-  Status RemoveObsoleteZones();
-  WriteBatch* BuildBatchGroup(Writer** last_writer);
+  Status RemoveObsoleteZonesL0();
+  Status RemoveObsoleteZonesLN();
+
+  WriteBatch* BuildBatchGroup(Writer** last_writer, uint8_t parallel_number);
 
   // Should remain constant after construction
   const DBOptions options_;
@@ -333,29 +348,46 @@ class DBImplZNS : public DB {
   ZNSSSTableManager* ss_manager_;
   ZnsManifest* manifest_;
   ZnsTableCache* table_cache_;
-  ZnsWALManager<ZnsConfig::wal_count>* wal_man_;
+  std::array<ZnsWALManager<ZnsConfig::wal_manager_zone_count>*,
+             ZnsConfig::lower_concurrency>
+      wal_man_;
   ZnsVersionSet* versions_;
   size_t max_write_buffer_size_;
 
   // Dynamic data objects, protected by mutex
-  ZNSWAL* wal_;
-  ZNSMemTable* mem_;
-  ZNSMemTable* imm_;
-  std::deque<Writer*> writers_;
-  WriteBatch* tmp_batch_;
+  std::array<ZNSWAL*, ZnsConfig::lower_concurrency> wal_;
+  std::array<ZNSMemTable*, ZnsConfig::lower_concurrency> mem_;
+  std::array<ZNSMemTable*, ZnsConfig::lower_concurrency> imm_;
+  std::array<std::deque<Writer*>, ZnsConfig::lower_concurrency> writers_;
+  WriteBatch* tmp_batch_[ZnsConfig::lower_concurrency];
+  uint8_t writer_striper_{0};
 
   // Threading variables
   port::Mutex mutex_;
+  port::Mutex meta_mutex_;
+  port::CondVar bg_work_l0_finished_signal_;
   port::CondVar bg_work_finished_signal_;
+  port::CondVar bg_flush_work_finished_signal_;
+  bool bg_compaction_l0_scheduled_;
   bool bg_compaction_scheduled_;
+  std::array<bool, ZnsConfig::lower_concurrency> bg_flush_scheduled_;
   bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
+  std::array<std::vector<SSZoneMetaData*>, 2> reserved_comp_;
+  int reserve_claimed_ = -1;
+  std::array<size_t, ZnsConfig::lower_concurrency> wal_reserved_;
 
   // diagnostics
   uint64_t flushes_;
   std::array<uint64_t, ZnsConfig::level_count - 1> compactions_;
 };
+
+struct FlushData {
+  DBImplZNS* db;
+  uint8_t parallel_number;
+};
+
 }  // namespace ROCKSDB_NAMESPACE
 #endif
 #endif

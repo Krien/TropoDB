@@ -3,6 +3,8 @@
 #ifndef ZNS_SSTABLE_MANAGER_H
 #define ZNS_SSTABLE_MANAGER_H
 
+#include <optional>
+
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
@@ -26,7 +28,8 @@ class ZNSSSTableManager : public RefCounter {
   ~ZNSSSTableManager();
 
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
-  Status FlushMemTable(ZNSMemTable* mem, SSZoneMetaData* meta) const;
+  Status FlushMemTable(ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas,
+                       uint8_t parallel_number) const;
   Status CopySSTable(const uint8_t level1, const uint8_t level2,
                      const SSZoneMetaData& meta,
                      SSZoneMetaData* new_meta) const;
@@ -41,34 +44,35 @@ class ZNSSSTableManager : public RefCounter {
                           const SSZoneMetaData& meta) const;
   Status DeleteL0Table(const std::vector<SSZoneMetaData*>& metas,
                        std::vector<SSZoneMetaData*>& remaining_metas) const;
-  Status SetValidRangeAndReclaim(uint64_t* live_tail, uint64_t* blocks,
-                                 uint64_t blocks_to_delete) const;
   Status DeleteLNTable(const uint8_t level, const SSZoneMetaData& meta) const;
-  L0ZnsSSTable* GetL0SSTableLog() const;
+  L0ZnsSSTable* GetL0SSTableLog(uint8_t parallel_number) const;
   Iterator* NewIterator(const uint8_t level, const SSZoneMetaData& meta,
                         const Comparator* cmp) const;
   SSTableBuilder* NewBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   // Used for persistency
-  Status Recover(const std::vector<std::pair<uint8_t, std::string>>& frag);
-  std::string GetFragmentedLogData(const uint8_t level);
+  Status Recover();
+  Status Recover(const std::string& frag);
+  std::string GetFragmentedLogData();
   // Used for compaction
+  double GetFractionFilledL0(const uint8_t parallel_number) const;
   double GetFractionFilled(const uint8_t level) const;
-  uint64_t SpaceRemaining(const uint8_t level) const;
-  // Used for cleaning
-  void GetDefaultRange(const uint8_t level,
-                       std::pair<uint64_t, uint64_t>* range) const;
-  void GetRange(const uint8_t level, const std::vector<SSZoneMetaData*>& metas,
-                std::pair<uint64_t, uint64_t>* range) const;
-  // Utils
-  static size_t FindSSTableIndex(const Comparator* icmp,
+  uint64_t SpaceRemainingL0(uint8_t parallel_number) const;
+  uint64_t SpaceRemainingInBytesL0(uint8_t parallel_number) const;
+  uint64_t SpaceRemainingLN() const;
+  uint64_t SpaceRemainingInBytesLN() const;
+
+  // util
+  uint64_t GetBytesInLevel(const std::vector<SSZoneMetaData*>& metas);
+  static size_t FindSSTableIndex(const Comparator* cmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
   std::vector<ZNSDiagnostics> IODiagnostics();
 
  private:
-  using RangeArray =
-      std::array<std::pair<uint64_t, uint64_t>, ZnsConfig::level_count>;
-  using SSTableArray = std::array<ZnsSSTable*, ZnsConfig::level_count>;
+  using RangeArray = std::array<std::pair<uint64_t, uint64_t>,
+                                1 + ZnsConfig::lower_concurrency>;
+  using SSTableArray =
+      std::array<ZnsSSTable*, 1 + ZnsConfig::lower_concurrency>;
 
   ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);
