@@ -1,4 +1,5 @@
 #!/bin/bash
+# NO LONGER USED, obsolete
 set -e
 
 DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
