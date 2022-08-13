@@ -262,7 +262,7 @@ run_long_performance() {
     DB_BENCH_PARAMS="$EXTRA_DB_BENCH_ARGS --num=$NUM --compression_type=none --value_size=$VALUE_SIZE --key_size=16 --use_direct_io_for_flush_and_compaction"
     DB_BENCH_PARAMS="$DB_BENCH_PARAMS --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8"
     DB_BENCH_PARAMS="$DB_BENCH_PARAMS --target_file_size_base=$ZONE_CAP --write_buffer_size=$WB_SIZE  --histogram "
-    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --benchmarks=readwhilewriting --use_existing_db --threads=$THREADS --duration=$DURATION --benchmark_write_rate_limit=$WRITE_RATE_LIMIT"
+    DB_BENCH_PARAMS="$DB_BENCH_PARAMS --benchmarks=readwhilewriting --use_existing_db --threads=$THREADS --duration=$DURATION --benchmark_write_rate_limit=$WRITE_RATE_LIMIT --seed=42"
 
     echo "$(tput setaf 3)Running long performance readwhilewriting $(tput sgr 0)"
     TEST_OUT="./output/long_readwhilewriting_${TARGET}"
@@ -286,6 +286,103 @@ run_long_performance() {
     if [[ -n $BLOCKCNT ]]; then
         kill $bpfpid
     fi
+}
+
+run_bench_wal_test() {
+    ZONE_CAP=512    # Alter for device
+    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100))
+    # ^ Taken from ZenFS?
+    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+
+    # Make sure that workload_sz is less than WAL size, for this test
+    # We will not test large I/O for this test, just many small benchmarks
+    # and flushes and compaction should NOT occur as it will interfere
+    WORKLOAD_SZ=50737418240
+
+    echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
+    TEST_OUT="./output/wall_bench_${TARGET}"
+    diag_func > $TEST_OUT
+    SECONDS=0
+    BENCHMARKS=fillrandom
+    for VALUE_SIZE in 8000; do
+            START_SECONDS=$SECONDS
+            NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
+            #NUM=1000000
+            ../db_bench $EXTRA_DB_BENCH_ARGS                \
+                --num=$NUM                                  \
+                --compression_type=none                     \
+                --value_size=$VALUE_SIZE --key_size=16      \
+                --use_direct_io_for_flush_and_compaction    \
+                --use_direct_reads                          \
+                --max_bytes_for_level_multiplier=4          \
+                --max_background_jobs=8                     \
+                --target_file_size_base=$ZONE_CAP           \
+                --write_buffer_size=$WB_SIZE                \
+                --histogram                                 \
+                --benchmarks=$BENCHMARKS                    \
+                --seed=69                                   \
+                --use_existing_db=0
+             echo ""
+            echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+            diag_func >> $TEST_OUT
+    done
+}
+
+run_bench_wal_recover_test() {
+    ZONE_CAP=512    # Alter for device
+    TARGET_FILE_SIZE_BASE=$(($ZONE_CAP * 2 * 95 / 100))
+    # ^ Taken from ZenFS?
+    WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
+
+    # Make sure that workload_sz is less than WAL size, for this test
+    # We will not test large I/O for this test, just many small benchmarks
+    # and flushes and compaction should NOT occur as it will interfere
+    WORKLOAD_SZ=3387949056
+
+    echo "$(tput setaf 3)Running quick performance fillseq $(tput sgr 0)"
+    TEST_OUT="./output/wall_recover_bench_${TARGET}"
+    diag_func > $TEST_OUT
+    SECONDS=0
+    BENCHMARKS=fillrandom
+    VALUE_SIZE=124000
+    SEEDS=(42 80 30 500 10);
+    for SEED in "${SEEDS[@]}"; do
+            START_SECONDS=$SECONDS
+            NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
+            #NUM=1000000
+            ../db_bench $EXTRA_DB_BENCH_ARGS                \
+                --num=$NUM                                  \
+                --compression_type=none                     \
+                --value_size=$VALUE_SIZE --key_size=16      \
+                --use_direct_io_for_flush_and_compaction    \
+                --use_direct_reads                          \
+                --max_bytes_for_level_multiplier=4          \
+                --max_background_jobs=8                     \
+                --target_file_size_base=$ZONE_CAP           \
+                --write_buffer_size=$WB_SIZE                \
+                --histogram                                 \
+                --benchmarks=$BENCHMARKS                    \
+                --seed=$SEED                                \
+                --use_existing_db=0 > /dev/null
+             echo ""
+            echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+         ../db_bench $EXTRA_DB_BENCH_ARGS                   \
+                --num=1                                     \
+                --compression_type=none                     \
+                --value_size=$VALUE_SIZE --key_size=16      \
+                --use_direct_io_for_flush_and_compaction    \
+                --use_direct_reads                          \
+                --max_bytes_for_level_multiplier=4          \
+                --max_background_jobs=8                     \
+                --target_file_size_base=$ZONE_CAP           \
+                --write_buffer_size=$WB_SIZE                \
+                --histogram                                 \
+                --benchmarks=overwrite                      \
+                --seed=$SEED                                \
+                --use_existing_db=1 | tee -a $TEST_OUT
+             echo ""
+            echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
+     done
 }
 
 run_bench() {
@@ -353,6 +450,12 @@ run_bench() {
     ;;
     "long")
         run_long_performance
+    ;;
+    "wal")
+        run_bench_wal_test
+    ;;
+    "wal_recover")
+        run_bench_wal_recover_test
     ;;
     *)
         default_perf
