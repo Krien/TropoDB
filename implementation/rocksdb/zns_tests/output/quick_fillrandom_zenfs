@@ -1,0 +1,483 @@
+{
+  "critical_warning":0,
+  "temperature":309,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":121863127.0,
+  "data_units_written":291368892.0,
+  "host_read_commands":5958634494.0,
+  "host_write_commands":8442233585.0,
+  "controller_busy_time":10277.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":306,
+  "temperature_sensor_2":305,
+  "temperature_sensor_3":310,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     100 bytes each (50 bytes after compression)
+Entries:    100000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    11062.6 MB (estimated)
+FileSize:   6294.3 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :       5.448 micros/op 183558 ops/sec;   20.3 MB/s
+Microseconds per write:
+Count: 100000000 Average: 5.4478  StdDev: 8.29
+Min: 1  Median: 4.6760  Max: 8019
+Percentiles: P50: 4.68 P75: 5.84 P99: 11.44 P99.9: 22.16 P99.99: 519.07
+------------------------------------------------------
+[       0,       1 ]    99945   0.100%   0.100% 
+(       1,       2 ]  2387122   2.387%   2.487% 
+(       2,       3 ] 10707413  10.707%  13.194% ##
+(       3,       4 ] 22267350  22.267%  35.462% ####
+(       4,       6 ] 43013459  43.013%  78.475% #########
+(       6,      10 ] 20223702  20.224%  98.699% ####
+(      10,      15 ]  1044638   1.045%  99.744% 
+(      15,      22 ]   155677   0.156%  99.899% 
+(      22,      34 ]    52878   0.053%  99.952% 
+(      34,      51 ]    14160   0.014%  99.966% 
+(      51,      76 ]     1849   0.002%  99.968% 
+(      76,     110 ]      205   0.000%  99.968% 
+(     110,     170 ]    12193   0.012%  99.981% 
+(     170,     250 ]     1890   0.002%  99.982% 
+(     250,     380 ]     1740   0.002%  99.984% 
+(     380,     580 ]     8311   0.008%  99.993% 
+(     580,     870 ]     6764   0.007%  99.999% 
+(     870,    1300 ]      612   0.001% 100.000% 
+(    1300,    1900 ]       76   0.000% 100.000% 
+(    1900,    2900 ]        8   0.000% 100.000% 
+(    2900,    4400 ]        3   0.000% 100.000% 
+(    6600,    9900 ]        5   0.000% 100.000% 
+
+Test duration for val size 100 0h 9m 6s
+{
+  "critical_warning":0,
+  "temperature":306,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":121908511.0,
+  "data_units_written":291456792.0,
+  "host_read_commands":5958657340.0,
+  "host_write_commands":8442284668.0,
+  "controller_busy_time":10286.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":303,
+  "temperature_sensor_2":302,
+  "temperature_sensor_3":307,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     200 bytes each (100 bytes after compression)
+Entries:    50000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    10299.7 MB (estimated)
+FileSize:   5531.3 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :       5.136 micros/op 194711 ops/sec;   40.1 MB/s
+Microseconds per write:
+Count: 50000000 Average: 5.1358  StdDev: 10.49
+Min: 1  Median: 4.2936  Max: 18048
+Percentiles: P50: 4.29 P75: 5.53 P99: 10.00 P99.9: 21.58 P99.99: 603.36
+------------------------------------------------------
+[       0,       1 ]    43996   0.088%   0.088% 
+(       1,       2 ]  1525280   3.051%   3.139% #
+(       2,       3 ]  7216570  14.433%  17.572% ###
+(       3,       4 ] 13233567  26.467%  44.039% #####
+(       4,       6 ] 20302255  40.605%  84.643% ########
+(       6,      10 ]  7187162  14.374%  99.018% ###
+(      10,      15 ]   340493   0.681%  99.699% 
+(      15,      22 ]   107173   0.214%  99.913% 
+(      22,      34 ]    18044   0.036%  99.949% 
+(      34,      51 ]     9191   0.018%  99.967% 
+(      51,      76 ]      574   0.001%  99.969% 
+(      76,     110 ]      307   0.001%  99.969% 
+(     110,     170 ]     2476   0.005%  99.974% 
+(     170,     250 ]      265   0.001%  99.975% 
+(     250,     380 ]      279   0.001%  99.975% 
+(     380,     580 ]     6971   0.014%  99.989% 
+(     580,     870 ]     4928   0.010%  99.999% 
+(     870,    1300 ]      413   0.001% 100.000% 
+(    1300,    1900 ]       42   0.000% 100.000% 
+(    1900,    2900 ]        6   0.000% 100.000% 
+(    2900,    4400 ]        1   0.000% 100.000% 
+(    6600,    9900 ]        5   0.000% 100.000% 
+(   14000,   22000 ]        2   0.000% 100.000% 
+
+Test duration for val size 200 0h 4m 19s
+{
+  "critical_warning":0,
+  "temperature":307,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":121946451.0,
+  "data_units_written":291531749.0,
+  "host_read_commands":5958678146.0,
+  "host_write_commands":8442333621.0,
+  "controller_busy_time":10291.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":304,
+  "temperature_sensor_2":303,
+  "temperature_sensor_3":308,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     400 bytes each (200 bytes after compression)
+Entries:    25000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    9918.2 MB (estimated)
+FileSize:   5149.8 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :       4.813 micros/op 207764 ops/sec;   82.4 MB/s
+Microseconds per write:
+Count: 25000000 Average: 4.8132  StdDev: 11.82
+Min: 1  Median: 3.8496  Max: 7589
+Percentiles: P50: 3.85 P75: 5.13 P99: 9.88 P99.9: 21.94 P99.99: 684.61
+------------------------------------------------------
+[       0,       1 ]    26894   0.108%   0.108% 
+(       1,       2 ]  1109203   4.437%   4.544% #
+(       2,       3 ]  4915657  19.663%  24.207% ####
+(       3,       4 ]  7589748  30.359%  54.566% ######
+(       4,       6 ]  9076154  36.305%  90.871% #######
+(       6,      10 ]  2097177   8.389%  99.259% ##
+(      10,      15 ]   109937   0.440%  99.699% 
+(      15,      22 ]    50686   0.203%  99.902% 
+(      22,      34 ]     9204   0.037%  99.939% 
+(      34,      51 ]     4277   0.017%  99.956% 
+(      51,      76 ]      183   0.001%  99.956% 
+(      76,     110 ]       38   0.000%  99.957% 
+(     110,     170 ]      157   0.001%  99.957% 
+(     170,     250 ]       30   0.000%  99.957% 
+(     250,     380 ]       65   0.000%  99.958% 
+(     380,     580 ]     6760   0.027%  99.985% 
+(     580,     870 ]     3687   0.015%  99.999% 
+(     870,    1300 ]      118   0.000% 100.000% 
+(    1300,    1900 ]       21   0.000% 100.000% 
+(    1900,    2900 ]        2   0.000% 100.000% 
+(    2900,    4400 ]        1   0.000% 100.000% 
+(    6600,    9900 ]        1   0.000% 100.000% 
+
+Test duration for val size 400 0h 2m 2s
+{
+  "critical_warning":0,
+  "temperature":307,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":121974513.0,
+  "data_units_written":291596222.0,
+  "host_read_commands":5958692775.0,
+  "host_write_commands":8442373541.0,
+  "controller_busy_time":10293.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":304,
+  "temperature_sensor_2":303,
+  "temperature_sensor_3":308,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     1000 bytes each (500 bytes after compression)
+Entries:    10000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    9689.3 MB (estimated)
+FileSize:   4921.0 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :       5.838 micros/op 171296 ops/sec;  166.0 MB/s
+Microseconds per write:
+Count: 10000000 Average: 5.8378  StdDev: 20.32
+Min: 1  Median: 4.3403  Max: 6985
+Percentiles: P50: 4.34 P75: 5.67 P99: 13.74 P99.9: 391.63 P99.99: 807.57
+------------------------------------------------------
+[       0,       1 ]     5570   0.056%   0.056% 
+(       1,       2 ]   280541   2.805%   2.861% #
+(       2,       3 ]  1480477  14.805%  17.666% ###
+(       3,       4 ]  2594192  25.942%  43.608% #####
+(       4,       6 ]  3757314  37.573%  81.181% ########
+(       6,      10 ]  1657202  16.572%  97.753% ###
+(      10,      15 ]   166900   1.669%  99.422% 
+(      15,      22 ]    32750   0.328%  99.749% 
+(      22,      34 ]     8146   0.081%  99.831% 
+(      34,      51 ]      785   0.008%  99.839% 
+(      51,      76 ]       92   0.001%  99.840% 
+(      76,     110 ]       63   0.001%  99.840% 
+(     110,     170 ]     4070   0.041%  99.881% 
+(     170,     250 ]      846   0.008%  99.889% 
+(     250,     380 ]      608   0.006%  99.896% 
+(     380,     580 ]     7636   0.076%  99.972% 
+(     580,     870 ]     2304   0.023%  99.995% 
+(     870,    1300 ]      309   0.003%  99.998% 
+(    1300,    1900 ]      147   0.001% 100.000% 
+(    1900,    2900 ]       38   0.000% 100.000% 
+(    2900,    4400 ]        9   0.000% 100.000% 
+(    6600,    9900 ]        1   0.000% 100.000% 
+
+Test duration for val size 1000 0h 1m 0s
+{
+  "critical_warning":0,
+  "temperature":308,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":121992814.0,
+  "data_units_written":291647711.0,
+  "host_read_commands":5958701968.0,
+  "host_write_commands":8442405048.0,
+  "controller_busy_time":10294.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":305,
+  "temperature_sensor_2":304,
+  "temperature_sensor_3":309,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     2000 bytes each (1000 bytes after compression)
+Entries:    5000000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    9613.0 MB (estimated)
+FileSize:   4844.7 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :       6.679 micros/op 149730 ops/sec;  287.9 MB/s
+Microseconds per write:
+Count: 5000000 Average: 6.6786  StdDev: 30.36
+Min: 1  Median: 4.7258  Max: 8039
+Percentiles: P50: 4.73 P75: 5.78 P99: 14.28 P99.9: 574.98 P99.99: 1043.06
+------------------------------------------------------
+[       0,       1 ]        1   0.000%   0.000% 
+(       1,       2 ]    19378   0.388%   0.388% 
+(       2,       3 ]   388162   7.763%   8.151% ##
+(       3,       4 ]  1230151  24.603%  32.754% #####
+(       4,       6 ]  2376074  47.521%  80.275% ##########
+(       6,      10 ]   860185  17.204%  97.479% ###
+(      10,      15 ]    88763   1.775%  99.254% 
+(      15,      22 ]    21262   0.425%  99.680% 
+(      22,      34 ]     5743   0.115%  99.794% 
+(      34,      51 ]      404   0.008%  99.802% 
+(      51,      76 ]       61   0.001%  99.804% 
+(      76,     110 ]       18   0.000%  99.804% 
+(     110,     170 ]       10   0.000%  99.804% 
+(     170,     250 ]        9   0.000%  99.804% 
+(     250,     380 ]        6   0.000%  99.805% 
+(     380,     580 ]     4896   0.098%  99.902% 
+(     580,     870 ]     4181   0.084%  99.986% 
+(     870,    1300 ]      487   0.010%  99.996% 
+(    1300,    1900 ]      138   0.003%  99.999% 
+(    1900,    2900 ]       47   0.001% 100.000% 
+(    2900,    4400 ]       19   0.000% 100.000% 
+(    4400,    6600 ]        1   0.000% 100.000% 
+(    6600,    9900 ]        4   0.000% 100.000% 
+
+Test duration for val size 2000 0h 0m 35s
+{
+  "critical_warning":0,
+  "temperature":309,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":122003228.0,
+  "data_units_written":291691963.0,
+  "host_read_commands":5958707190.0,
+  "host_write_commands":8442435017.0,
+  "controller_busy_time":10294.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":306,
+  "temperature_sensor_2":305,
+  "temperature_sensor_3":310,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Keys:       16 bytes each (+ 0 bytes user-defined timestamp)
+Values:     8000 bytes each (4000 bytes after compression)
+Entries:    1250000
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    9555.8 MB (estimated)
+FileSize:   4787.4 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: NoCompression
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+DB path: [rocksdbtest/dbbench]
+fillrandom   :      17.541 micros/op 57007 ops/sec;  435.8 MB/s
+Microseconds per write:
+Count: 1250000 Average: 17.5415  StdDev: 93.75
+Min: 4  Median: 9.1812  Max: 7976
+Percentiles: P50: 9.18 P75: 12.06 P99: 33.40 P99.9: 1649.73 P99.99: 2785.59
+------------------------------------------------------
+(       3,       4 ]       40   0.003%   0.003% 
+(       4,       6 ]    35606   2.848%   2.852% #
+(       6,      10 ]   741037  59.283%  62.135% ############
+(      10,      15 ]   390814  31.265%  93.400% ######
+(      15,      22 ]    51825   4.146%  97.546% #
+(      22,      34 ]    19141   1.531%  99.077% 
+(      34,      51 ]     1590   0.127%  99.204% 
+(      51,      76 ]      129   0.010%  99.215% 
+(      76,     110 ]       17   0.001%  99.216% 
+(     110,     170 ]       44   0.004%  99.219% 
+(     170,     250 ]        8   0.001%  99.220% 
+(     250,     380 ]       15   0.001%  99.221% 
+(     380,     580 ]     2927   0.234%  99.455% 
+(     580,     870 ]     3176   0.254%  99.710% 
+(     870,    1300 ]     1393   0.111%  99.821% 
+(    1300,    1900 ]     1695   0.136%  99.957% 
+(    1900,    2900 ]      472   0.038%  99.994% 
+(    2900,    4400 ]       64   0.005%  99.999% 
+(    4400,    6600 ]        6   0.000% 100.000% 
+(    6600,    9900 ]        1   0.000% 100.000% 
+
+Test duration for val size 8000 0h 0m 23s
+{
+  "critical_warning":0,
+  "temperature":309,
+  "avail_spare":100,
+  "spare_thresh":10,
+  "percent_used":0,
+  "endurance_grp_critical_warning_summary":0,
+  "data_units_read":122009162.0,
+  "data_units_written":291732024.0,
+  "host_read_commands":5958710161.0,
+  "host_write_commands":8442460895.0,
+  "controller_busy_time":10295.0,
+  "power_cycles":15.0,
+  "power_on_hours":5778.0,
+  "unsafe_shutdowns":10.0,
+  "media_errors":0.0,
+  "num_err_log_entries":60330895.0,
+  "warning_temp_time":0,
+  "critical_comp_time":0,
+  "temperature_sensor_1":306,
+  "temperature_sensor_2":305,
+  "temperature_sensor_3":310,
+  "thm_temp1_trans_count":0,
+  "thm_temp2_trans_count":0,
+  "thm_temp1_total_time":0,
+  "thm_temp2_total_time":0
+}

@@ -1,0 +1,4 @@
+# Running db_bench with parameters:  --use_zns=true --db=0000:00:04.0 --num=1000000000 --compression_type=none --value_size=1000 --key_size=16 --use_direct_io_for_flush_and_compaction --use_direct_reads --max_bytes_for_level_multiplier=4 --max_background_jobs=8 --target_file_size_base=512 --write_buffer_size=2147483648  --histogram  --benchmarks=overwrite --use_existing_db
+diag
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
