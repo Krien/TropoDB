@@ -340,7 +340,7 @@ run_bench_wal_test() {
     diag_func > $TEST_OUT
     SECONDS=0
     BENCHMARKS=fillrandom
-    for VALUE_SIZE in 8000; do
+    for VALUE_SIZE in 200 400 2000 8000 16000 32000; do
             START_SECONDS=$SECONDS
             NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
             #NUM=1000000
@@ -356,7 +356,7 @@ run_bench_wal_test() {
                 --write_buffer_size=$WB_SIZE                \
                 --histogram                                 \
                 --benchmarks=$BENCHMARKS                    \
-                --seed=69                                   \
+                --seed=42                                   \
                 --use_existing_db=0
              echo ""
             echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
