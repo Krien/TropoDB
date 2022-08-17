@@ -4,6 +4,19 @@ out/
 doc_doxygen/
 build_version.cc
 
+# Latex
+*.aux
+*.bbi
+*.blg
+*.bbl
+*.brf
+*.lof
+*.log
+*.lot
+*.nlo
+*.toc
+*/svg-inkscape
+
 #ninja
 *.ninja*
 
