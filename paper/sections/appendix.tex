@@ -1,0 +1,313 @@
+\chapter{Appendix}
+\label{sec:appendix}
+\section{Artifact Description: TropoDB}
+\subsection{Abstract}
+This artifact description describes how to setup TropoDB and reproduce the results as seen in the thesis.
+We describe how to obtain the software, setup the same benchmarking environment and do the benchmarking. 
+The software consists out of multiple parts: the database TropoDB, a modified variant of db\_bench to support TropoDB, a library to interface with SPDK and ZNS known as SimpleZNSDevice (SZD) 
+and a set of benchmarks and plotting tools to get the plots seen in the thesis and benchmark fio.
+
+\subsection{Artifact Check-list (Meta-information)}
+\begin{itemize}
+    \item Program: TropoDB (\url{https://github.com/Krien/TropoDB}), SimpleZNSDevice (\url{https://github.com/Krien/SimpleZNSDevice}), SPDK fio benchmarks, 
+    raw benchmark data and plotting tools (\url{https://github.com/Krien/ZNS_SPDK_Benchmarks})
+    \item Compilation: C++17, CMake 3.16, Python3 (Python3 is needed for the plotting tools only)
+    \item Experiments: Experiments and configurations for TropoDB experiments are maintained in \url{https://github.com/Krien/TropoDB/tree/master/implementation/rocksdb/zns_tests}. 
+    SPDK fio experiments are maintained in \url{https://github.com/Krien/ZNS_SPDK_Benchmarks/tree/main/SPDK}.
+    The reset test for SPDK is available in \url{https://github.com/Krien/SimpleZNSDevice/tree/main/tools/reset_perf}.
+    \item Publicly available?: Source code publicly available.
+    \item Code licenses (if publicly available)?: TropoDB is dual licensed because it copies RocksDBs license, which is a combination of the LevelDB License, Apache license and the GPLv2 license.
+     SZD is MIT Licensed and the SPDK fio benchmarks are MIT licensed.
+\end{itemize}
+  
+\subsection{Description}
+\textbf{How to access}\\
+It is not necessary to retrieve SZD or SPDK manually as the correct versions already come as git submodules with TropoDB. The software needed to run TropoDB with benchmarks included can thus be obtained from Github with:
+
+\begin{verbatim}
+$ git clone https://github.com/Krien/TropoDB
+$ git submodule update --init
+\end{verbatim}
+The implementation can then be found in ``implementation/rocksdb''. An initial investigation for LevelDB can be found in ``implementation/db'' 
+and a CMake script to support ZenFS in modified RocksDB can be found in ``implementation/zenfs\_cmake''.
+
+The fio benchmarks and plot tools can be obtained from Github with:
+\begin{verbatim}
+$ git clone https://github.com/Krien/ZNS_SPDK_Benchmarks
+\end{verbatim}
+
+\textbf{Software Dependencies}\\
+The software will only run on GNU/Linux. Note that more software dependencies are required than listed below, but the full extent is not known and highly dependent on the kernel version and configuration used. Dependencies needed to run TropoDB (pinned versions other versions might work as well):
+\begin{itemize}
+    \item SPDK v22.05 \\(commit c58d5161e9cb9a83b71f308f4e39a0a30ca75014)
+    \item DPDK 21.11.0
+    \item All RocksDB v7.0 dependencies
+\end{itemize}
+Additional dependencies needed to run the benchmarks for TropoDB:
+\begin{itemize}
+    \item RocksDB v7.0 \\(commit 062396af15ea9b295ea72d98cac32206f3dcf299)
+    \item ZenFS v2.1.0 \\(commit a0ced69391d3ff3b6663d4749c1af190753798ef)
+    \item F2FS-tools v1.15.0 \\(commit  64f2596142800c215cb40a658ebd5793ed37c936)
+    \item nvme 2.0 \\(git 2.0-113-geca80c9)
+    \item libnvme 1.0 \\(git 1.0-157-g1d62f8a)
+    \item NVMe-CLI \\(commit eca80c919ee988a67e956e524550887cee831cfb)
+    \item BPFtrace \\(git v0.15.0-43-g7667)
+    \item Zoned\_BPFTrace \\(commit 2db55de45ebcb3b9c8b263fe431e869f96b5ff8c)
+    
+\end{itemize}
+Dependencies needed to run the fio test:
+\begin{itemize}
+    \item SPDK v22.05 \\(commit c58d5161e9cb9a83b71f308f4e39a0a30ca75014)
+    \item DPDK 21.11.0
+    \item fio \\(git 3.30-73-gd622)
+\end{itemize}
+Dependencies needed to make the plots:
+\begin{itemize}
+    \item Python 3 (see the requirements.txt in the projects to install the library dependencies)
+\end{itemize}
+
+\subsection{Software and hardware configuration}
+All tests are run on top of QEMU 6.1.0 with KVM enabled.
+
+\textbf{Hardware configuration host}
+\begin{itemize}
+    \item a 20-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with two sockets connected in NUMA mode. Each socket comes with a total of 10 physical cores and 2 threads for each core.
+    \item 256GB of DDR4 DRAM
+    \item 7TB ZNS SSD, model WZS4C8T4TDSP303
+    \item 280 GB Optane SSD, model INTEL SSDPE21D280GA
+    \item 447 GB SATA SSD, model INTEL SSDSC2kB48
+\end{itemize}
+
+\textbf{Hardware configuration host for the NUMA test}
+\begin{itemize}
+    \item a 20-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with two sockets connected in NUMA mode. Each socket comes with a total of 10 physical cores and 1 thread for each core.
+    \item 256GB of DDR4 DRAM
+    \item 7TB ZNS SSD, model WZS4C8T4TDSP303
+    \item 447 GB SATA SSD, model INTEL SSDSC2kB48
+\end{itemize}
+
+\textbf{Hardware configuration VM}
+\begin{itemize}
+    \item a 10-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with one socket of 10 physical cores and 2 threads. Using just one NUMA node.
+    \item 128GB of DRAM, the amount accessible by one NUMA node.
+    \item 7TB ZNS SSD, Western Digital Ultrastar DC ZN540
+    \item Various 8GB emulated generic ZNS SSDs (for testing)
+    \item Various 1GB emulated generic ZNS SSDs (for testing)
+    \item 160.8 GB Optane SSD, model INTEL SSDPE21D280GA (a partition of the device)
+    \item 447 GB SATA SSD, model INTEL SSDSC2kB48
+\end{itemize}
+
+\textbf{Virtual machine/Operating System configuration}
+The server running on the physical machine was running an older Operating System configuration than was required for the experiments. This was Ubuntu 20.04.2 LTS with kernel version 5.12. The server could not be updated, so a VM was used instead. The VM used QEMU 6.1.0 with KVM enabled, running Ubuntu 20.04.4 LTS with kernel version 5.17.1. The VM was running its image from the SATA SSD. The 280GB Optane SSD was made accessible with paravirtualisation and the ZNS SSD as made accessible with PCIe passthrough. The VM uses just 160.8GB of the the Optane SSD. The reason for this is that the VM is only allowed to use one partition that was configured on the host Linux machine, this also lead to the decision to use paravirtualisation and not passthrough. The VM was forced to just use one NUMA node with the help of numactl.
+
+\textbf{Operating systems used}\\
+The host runs Ubuntu 20.04.2 LTS with kernel version 5.12.
+The guest OS in the VM runs Ubuntu 20.04.4 LTS with kernel version 5.17.1. The software will not run on non GNU/Linux Operating systems.
+
+\subsection{Installation}
+Installation is divided into a few steps that we will each describe individually.
+Not every installation is necessary for every functionality. Further on, the installation instructions on the repository will always be more to date and in-depth. The installation instructions given here should serve as a guideline only.
+
+\textbf{Install TropoDB}\\
+TropoDB comes prebundled with SZD and SPDK, but it does not automatically install SPDK.
+To install SPDK and DPDK navigate to ``implementation/rocksdb/third-party/SimpleZNSDevice/dependencies/SPDK''. Then follow the default install instructions for SPDK in the README file present in this directory. If you do not want to install globally, only built the project.
+At this point navigate back to the ``implementation/rocksdb'' directory present in the TropoDB repo and call:
+\begin{verbatim}
+    $ cmake -DCMAKE_BUILD_TYPE=Release .
+    $ make -j $nprocs
+\end{verbatim}
+At this point TropoDB should be in a functional state. When at any point configurations need to be changed, alter ``implementation/rocksdb/db/zns\_impl/config.h'' and rebuild the project. This must also be done for some of the benchmarks.
+
+\textbf{Install plain RocksDB with similar tests}\\
+While it is possible to also test ZenFS and F2FS from TropoDB we do not advise this for benchmarks. Instead we advise using the exact same version of RocksDB that TropoDB originated from. This can be retrieved and installed with:
+\begin{verbatim}
+    $ git clone https://github.com/facebook/rocksdb/
+    $ git checkout 062396af15ea9b295ea72d98cac32206f3dcf299
+    $ cd rocksdb
+    $ mkdir build
+    $ cd ./build
+    $ cmake -DCMAKE_BUILD_TYPE=Release ..
+    $ make -j $nprocs
+    $ cd ..
+    $ cp -r <TROPODB_DIR>/implementation/rocksdb/zns_tests ./zns_tests
+\end{verbatim}
+Notice how we copy a directory from TropoDB to RocksDB. This directory contains the benchmarking scripts we want to run.
+
+\textbf{Install ZenFS for RocksDB}\\
+After cloning the ZenFS version we have used, it is as simple as moving the cloned directory to ``rocksdb/plugins/'' and calling:
+\begin{verbatim}
+    $ cd <ROCKSDB_DIR>
+    $ DEBUG_LEVEL=0 ROCKSDB_PLUGINS=zenfs make
+    $ cd plugin/zenfs/util
+    $ make -j $nprocs
+\end{verbatim}
+Note that we no longer use CMake for ZenFS as this is not supported.
+
+\textbf{Install F2FS-tools}\\
+After cloning the F2FS-tools version we used. Do:
+\begin{verbatim}
+    $ cd f2fs-tools
+    $ ./configure
+    $ make # DO NOT INSTALL!
+\end{verbatim}
+Remember where f2fs-tools is installed and for every test that needs F2FS, use the binary present in ``f2fs-tools/mkfs/mkfs.f2fs''.
+
+\textbf{Install zoned\_bpftrace}\\
+After ensuring that BPFtrace is installed and the kernel is properly configured, it is only required to clone the repository:
+\begin{verbatim}
+    $ git clone https://github.com/indraneel-m/zoned_bpftrace
+\end{verbatim}
+
+\textbf{Install fio for SPDK}\\
+Installing fio for SPDK as done in the experiments is:
+\begin{verbatim}
+    $ cd <FIO_DIR>
+    $ ./configure
+    $ make -j $nprocs
+    $ make install
+    $ cd TropoDB/implementation/rocksdb/third-party/SimpleZNSDevice/dependencies/SPDK
+    $ ./configure --with-fio=<absolute path to earlier installed fio repo>
+    $ make -j
+\end{verbatim}
+Now whenever calling fio for SPDK, this needs to be done with:
+\begin{verbatim}
+LD_LIBRARY_PATH=<SPDK_DIR>/build/lib LD_PRELOAD=<SPDK_DIR>/build/fio/spdk_nvme fio
+\end{verbatim}
+
+\textbf{Installing the SPDK reset test}\\
+The custom reset test is present in the SZD repository, but needs an extra build command. This can be done with:
+\begin{verbatim}
+    $ cd <SZD_DIR>
+    $ cmake -DSZD_TOOLS="reset_perf" .
+    $ make -j reset_perf
+\end{verbatim}
+
+\textbf{Installing the plotting tools}
+After having cloned \url{https://github.com/Krien/ZNS_SPDK_Benchmarks}, move to the directory of ZNS\_SPDK\_Benchmarks. Then for either fio or TropoDB plots move to their directory. It should be enough to run (provided venv is used for Python3 environments):
+\begin{verbatim}
+    $ python3 -m venv venv
+    $ source venv/bin/activate
+    $ pip install -r requirements.txt
+\end{verbatim}
+
+\subsection{Experiment workflow}
+Many of the experiments conducted are different and require different tools to run. The results of the tests are also not automatically stored along with the rest of the results. These were moved to  \url{https://github.com/Krien/ZNS_SPDK_Benchmarks} manually. How to reproduce the results of the individual benchmarks will be told here.
+
+\subsubsection{TropoDB experiments}
+All experiments for TropoDB are run by the ``benchmark.sh'' script in: \\ ``TropoDB/implementation/rocksdb/zns\_tests''. The test given here contains derivatives of ZenFS tests and comes with various options. It also allows automatically setting up file systems and the ZNS environment for TropoDB. Further on, it allows deleting file systems and TropoDBs environment. For the individual test we will explain how to run them. Beware that all tests wipe the drive used. Further on, always use absolute paths for environment variables, this prevents pathing errors in some of the bash scripts. \\
+
+\textbf{Running db\_bench with TropoDB}\\
+Running db\_bench for TropoDB is not much different than running it for RocksDB. The only requirement is that the device to use is no longer binded to the kernel and that a flag is set in db\_bench. This can be done with:
+\begin{verbatim}
+    $ export PCI_ALLOWED=${PCI_ADDR} # PCI_ADDR of device to use
+    $ <SPDK_DIR>/scripts/setup.sh
+    $ <TROPODB_DIR>/db_bench --use_zns=true --db=$PCI_ADDR
+\end{verbatim}
+
+\textbf{WAL append tests}\\
+WAL append tests are run by first properly setting the config file. The following configurations need to be altered after each test:
+\begin{itemize}
+    \item the directive WALPerfTest is set.
+    \item The directive WAL\_BUFFERED is unset.
+    \item For ordered appends WAL\_UNORDERED is unset. It is set for unordered appends.
+    \item wal\_iodepth is set to the proper queue depth (1 for ordered appends).
+\end{itemize}
+The configurations used can also be found in `implementation/rocksdb/zns\_tests/configs`. In the configs: `WAL\_ordered.h`, `WAL\_unordered\_depth2.h`, `WAL\_unordered\_depth4.h`, `WAL\_unordered\_depth16.h`, `WAL\_unordered\_depth64.h` to be precise.
+Then the test is run with: 
+\begin{verbatim}
+    # Run next command to bind dev/ to SPDK. If already done skip
+    $ ./zns_tests/benchmark.sh setup znslsm $device_name 
+    $ ./zns_tests/benchmark.sh run wal znslsm $PCI_ADDR $PCI_ADDR
+    $ ./zns_tests/benchmark.sh clean znslsm $PCI_ADDR
+\end{verbatim}
+Output is present in ``./output/wall\_bench\_\$valsize''
+\\
+\textbf{WAL recovery tests}\\
+WAL recovery tests are run by first properly setting the config file. The following configurations need to be altered after each test:
+\begin{itemize}
+    \item The directive WAL\_BUFFERED is unset.
+    \item For ordered appends WAL\_UNORDERED is unset. It is set for unordered appends.
+    \item wal\_iodepth is set to the proper queue depth: 1 for ordered appends, 4 for ordered.
+\end{itemize}
+This configuration is also present in `implementation/rocksdb/zns\_tests/configs/WAL\_recovery\_test.h`.
+Then the test is run with: 
+\begin{verbatim}
+    # Run next command to bind dev/ to SPDK. If already done skip
+    $ ./zns_tests/benchmark.sh setup znslsm $device_name 
+    $ ./zns_tests/benchmark.sh run wal_recover znslsm $PCI_ADDR $PCI_ADDR
+    $ ./zns_tests/benchmark.sh clean znslsm $PCI_ADDR
+\end{verbatim}
+Output is present in ``./output/wall\_recover\_bench\_\$valsize''
+
+\textbf{TropoDB latency tests}\\
+For this test we need to test ZenFS and F2FS as well, which requires some extra steps.
+First we will describe how to run the TropoDB test.
+Set the config file to the default config (`implementation/rocksdb/db/zns\_impl/default\_config.h`.
+Then do: 
+\begin{verbatim}
+    # Run next command to bind dev/ to SPDK. If already done skip
+    $ ./zns_tests/benchmark.sh setup znslsm $device_name 
+    $ ./zns_tests/benchmark.sh run long znslsm $PCI_ADDR $PCI_ADDR
+    $ ./zns_tests/benchmark.sh clean znslsm $PCI_ADDR
+\end{verbatim}
+Output is present in ``./output/long\_fillrandom\_TropoDB'', ``./output/long\_filloverwrite\_TropoDB'' and ``./output/long\_readwhilewriting\_TropoDB''.
+
+For ZenFS and F2FS move to the RocksDB directory and do:
+\begin{verbatim}
+    # Setup BPFTrace Reset script
+    export BLOCKCNT=<PATH_TO_ZONED_BPFTRACE>
+    # F2FS
+    $ ./zns_tests/benchmark.sh setup f2fs $mntpath $znsdev $nvmedev
+    $ ./zns_tests/benchmark.sh run long f2fs $mntpath $znsdev
+    $ ./zns_tests/benchmark.sh clean f2fs $mntpath $znsdev
+    # ZenFS
+    $ ./zns_tests/benchmark.sh setup zenfs $znsdev 
+    $ ./zns_tests/benchmark.sh run long zenfs $znsdev $znsdev
+    $ ./zns_tests/benchmark.sh clean zenfs $znsdev $znsdev
+\end{verbatim}
+Output is present in ``./output/long\_fillrandom\_F2FS'', ``./output/long\_filloverwrite\_F2FS'', ``./output/long\_readwhilewriting\_F2FS'', ``./output/long\_fillrandom\_ZenFS'', ``./output/long\_filloverwrite\_ZenFS'' and ``./output/long\_readwhilewriting\_ZenFS''. Additionally for each file there will also be an extra file ending with ``\_BPF''. This file contains the zone resets.
+
+\textbf{TropoDB L0 size test}\\
+This test can be run the same as the TropoDB latency tests, but only for TropoDB and it needs to be run three times. Each time with a different configuration. It requires setting ``L0\_zones'' to 50, 100 and 200. Once for each test. The configurationss are also present in `implementation/rocksdb/zns\_tests/configs/` with the config files: `L0\_50\_zones.h`, `default.h` and `L0\_200\_zones.h`.
+
+
+\textbf{TropoDB higher concurrency test}\\
+This test can be run the same as the TropoDB latency tests, but only for TropoDB and it needs to be run three times. Each time with a different configuration. It requires setting ``lower\_concurrency' to 1, 2 and 3. Once for each test. The configurations are also present in `implementation/rocksdb/zns\_tests/configs/` with the config files: `default.h`, `parallelism2.h` and `parallelism3.h`.
+
+\subsubsection{SPDK fio tests}
+The fio tests require little to setup and should be automatic. Move to the SPDK directory of \url{https://github.com/Krien/ZNS_SPDK_Benchmarks}. Then before running any test call:
+\begin{verbatim}
+    $ export PCI_ALLOWED=${PCI_ADDR} # PCI_ADDR of device to use
+    $ <SPDK_DIR>/scripts/setup.sh
+\end{verbatim}
+Then alter in all ``.fio'' files, the line ``filename=trtype=PCIe traddr=0000.00.04.0 ns=2'' to match the device used for the test. Then all tests can be run with:
+\begin{verbatim}
+    # Please provide a path to the SPDK_DIR
+    $ SPDK_DIR=<SPDK_DIR> ./test_append.sh
+    $ LD_LIBRARY_PATH=<SPDK_DIR>/build/lib LD_PRELOAD=<SPDK_DIR>/build/fio/spdk_nvme \ 
+    fio fill.fio
+    $ SPDK_DIR=<SPDK_DIR> ./read_test.sh
+\end{verbatim}
+Data will be written to ``./data/writes/out\_\$bs'' with one file for each block size and ``./data/reads/out\_read\_\$blksize'' with one file for each block size. 
+
+\subsubsection{SPDK custom reset tests}
+Running the reset test requires first filling the device. This can be done either with reset\_perf or with fio. The results we have shown are done with fio. The test can then be run with:
+\begin{verbatim}
+    $ export PCI_ALLOWED=${PCI_ADDR} # PCI_ADDR of device to use
+    $ <SPDK_DIR>/scripts/setup.sh
+    $ LD_LIBRARY_PATH=<SPDK_DIR>/build/lib LD_PRELOAD=<SPDK_DIR>/build/fio/spdk_nvme \ 
+    fio fill.fio # See the fio tests
+    $ cd TropoDB/implementation/rocksdb/third-party/SimpleZNSDevice
+    $ ./bin/reset_perf $PCI_ADDR 0 > reset_out
+\end{verbatim}
+Alternatively the device can be filled with reset\_perf first with:
+\begin{verbatim}
+    $ export PCI_ALLOWED=${PCI_ADDR} # PCI_ADDR of device to use
+    $ <SPDK_DIR>/scripts/setup.sh
+    $ cd TropoDB/implementation/rocksdb/third-party/SimpleZNSDevice
+    $ ./bin/reset_perf $PCI_ADDR 1 > reset_out
+\end{verbatim}
+
+\section{Self reflection}
+I have learned a lot from this thesis. Many of the theory and tools used to retrieve the end results were not familiar to me beforehand. This required a large investment in time to become more acquainted. I had to become more proficient with C, C++ and CMake to both understand already existing code and write a new implementation. Additionally, I needed to better understand GNU/Linux as a whole: user-space, filesystems, BPF, perf and the virtual filesystem itself among others. In order, to compete with the already existing alternatives, it was required to better understand the alternatives. This required investigating ZenFS, F2FS, SPDK, LevelDB and RocksDB. However, most time was spent in writing code. Most of the C code was written in the first month, but modifying the key-value store and C++ code of SZD extended took several months. Notably, it took a month to get an initial working implementation for a small simple emulated ZNS device (unlimited active zones, no zone capacities). Then another month to make it function on real hardware stably up to 100 GB and one additional month to get all benchmarking tooling online and reach 1TB with the key-value store. In general, setting up benchmarking and debugging large workloads took more time than adding new changes themselves. From this point onwards, therefore, minimal changes were added as testing each change took considerable work. In the next month, we got the key-value store up to 2TB and managed to stabilise the performance of TropoDB. The time to complete benchmarks went from 39 hours for the fillrandom workload to about 8 hours. In this month, we also conducted all raw performance tests for SPDK and ZNS.
+The last month was spent on writing the paper, trying out multiple TropoDB configurations and plotting the results. The database was no longer altered significantly. I mention all of the steps explicitly, as they showcase how the work conducted varied wildly as time passed. In all months some implementation code had to be added, which is expected when building a key-value store, but interestingly most of it was spent on hunting for concurrency bugs, configuring benchmarks and creating and tweaking diagnostic tools for ZNS SPDK. As a result, I have been able to get an idea of most layers involved when creating a key-value store. From measuring performance of storage, to configuring the storage, to tweaking the LSM-tree itself, to creating benchmarking tooling and tests and reporting the results. The result took a lot of hard work, but there is lot learned. Especially things that I would do differently. For example, first benchmarking the raw performance instead of creating a key-value store first or investigating if the existing approach taken properly fits the use case (LevelDBs design). Another important lesson, is scope. As a lot needs to be done to make a key-value store (especially without any pre-made layers in between) and get it stable for large I/O. The result will most likely not reach what is maximally achievable, unless a considerable investment in time was made, which was not enough for the time of the thesis. The result is that we have done a lot, but it is hard to make a solid claim. Something which is easier to do, when only a few parts can be investigated (which was not possible with the design approach taken).

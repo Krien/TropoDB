@@ -1,6 +1,5 @@
 # Specific
 build/
-out/
 doc_doxygen/
 build_version.cc
 

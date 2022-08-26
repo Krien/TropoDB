@@ -1,0 +1,17 @@
+\begin{abstracts}
+    The amount of data that is processed each year keeps increasing, expected to reach approximately 180 zettabytes of data in the year 2025. Larger data volumes require applications and hardware solutions to scale along. A big part of the digital
+    ecosystem makes use of key-value stores to store and load data. Key-value stores, therefore, become a prime target for
+    optimisation efforts.
+    Recently a new interface for storage devices, known as Zoned Namespaces (ZNS), has been proposed. This interface
+    is able to achieve better results than the conventional block-based approach when used on flash-based SSDs, both in performance and
+    durability. Therefore, there is an interest by both industry and academia to shift to the usage of ZNS SSDs.
+    Key-value stores are also a target for this shift because key-value stores are I/O heavy, require high performance and are used
+    extensively. Further on, key-value stores commonly make use of data structures known as Log-structured Merge-trees
+    (LSM-trees), whose design already follows ZNS closely, making them a natural
+    fit for ZNS optimisations. 
+    Especially, co-optimising the garbage collection process of both storage and a key-value store is promising. Therefore, we have designed and implemented an LSM-tree-based key-value store directly on top of ZNS, known as TropoDB. TropoDB directly interfaces with the storage and is designed using an userspace I/O stack within the RocksDB ecosystem.
+    
+    We come with a number of novel designs for LSM-tree components on top of ZNS. The results of the implementation are both promising and competitive. TropoDB is able to come close to RocksDB with state-of-the-art file systems. However, GC-centric optimisations show limited gains in regards to tail latency, write amplification and numbers of erasures. To improve the performance gains, we present and discuss various optimisation avenues for TropoDB. Source code for TropoDB is available at \url{https://github.com/Krien/TropoDB}.
+    \end{abstracts}
+
+    

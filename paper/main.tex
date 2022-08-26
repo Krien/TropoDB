@@ -26,14 +26,18 @@
 \usepackage[]{svg}
 
 
+\usepackage{subfig}
+\usepackage{float}
+
 %\usepackage{graphics}
 % or use the graphicx package for more complicated commands
-%\usepackage{graphicx}
-
+% \usepackage{graphicx}
+% \usepackage{caption}
+% \usepackage{subcaption}
 %: ----------------------------------------------------------------------
 %:                  TITLE PAGE: name, degree,..
 % ----------------------------------------------------------------------
-\usepackage{graphicx}
+%\usepackage{graphicx}
 
       \textwidth 15cm
       \textheight 22cm
@@ -69,7 +73,9 @@ Vrije Universiteit Amsterdam \hspace*{2cm} Universiteit van Amsterdam
 \vspace*{1.5cm}
 
 \rule{.9\linewidth}{.6pt}\\[0.4cm]
-{\huge \bfseries TropoDB:\\ Design and Implementation of a NVMe Zoned Namespace (ZNS) Optimised LSM KV Store\par}\vspace{0.4cm}
+{\huge \bfseries TropoDB:\\ Design, Implementation and Evaluation of an Optimised KV-Store for
+NVMe Zoned Namespace Devices
+\par}\vspace{0.4cm}
 \rule{.9\linewidth}{.6pt}\\[1.5cm]
 
 \vspace*{2mm}
@@ -174,7 +180,7 @@ Vrije Universiteit Amsterdam \hspace*{2cm} Universiteit van Amsterdam
 %: ----------------------- contents ------------------------
 
 \setcounter{secnumdepth}{3} % organisational level that receives a numbers
-\setcounter{tocdepth}{3}    % print table of contents for level 3
+\setcounter{tocdepth}{2}    % print table of contents for level 3
 \tableofcontents            % print the table of contents
 % levels are: 0 - chapter, 1 - section, 2 - subsection, 3 - subsection
 
@@ -192,14 +198,14 @@ Vrije Universiteit Amsterdam \hspace*{2cm} Universiteit van Amsterdam
 % 
 \include{sections/glossary} 
 
-%\begin{multicols}{1} % \begin{multicols}{#columns}[header text][space]
+\begin{multicols}{1} % \begin{multicols}{#columns}[header text][space]
 \begin{footnotesize} % scriptsize(7) < footnotesize(8) < small (9) < normal (10)
 
 \printnomenclature[1.5cm] % [] = distance between entry and description
 \label{nom} % target name for links to glossary
 
 \end{footnotesize}
-%\end{multicols}
+\end{multicols}
 
 
 
@@ -224,9 +230,9 @@ Vrije Universiteit Amsterdam \hspace*{2cm} Universiteit van Amsterdam
 \input{sections/methodology}
 \input{sections/design}
 \input{sections/implementation}
-\input{sections/experimentpreparation}
+% \input{sections/experimentpreparation}
 \input{sections/evaluation}
-\input{sections/relatedwork}
+% \input{sections/relatedwork}
 \input{sections/conclusion}
 % \input{sections/discussion}
 % \input{sections/futurework}

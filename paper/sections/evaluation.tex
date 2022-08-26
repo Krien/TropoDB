@@ -1,0 +1,667 @@
+\chapter{Experimental Evaluation}
+\label{sec:experiments}
+In this section, we answer RQ4: \textit{``What is the impact of the optimisation process of TropoDB on the key-value store and ZNS device?"}. To answer this question, we will evaluate TropoDB as a whole against the state-of-the-practice and state-of the-art and we will evaluate various components of TropoDB itself as well. Additionaly, we will evaluate ZNS itself to get an idea of the achievable performance. However, before we discuss any evaluations, we will start with our evaluation plan, which specifies what we intent to evaluate, why and how. We will then continue with the evaluations themselves, one by one. 
+
+\section{Evaluation plan}
+We intend to test various parts of TropoDB. We first need to get a good understanding of ZNS performance itself. We need to understand the performance characteristics of all I/O operations. Once we understand ZNS performance, we know what is maximally achievable. Then we should continue, by evaluating how the default implementation of TropoDB fares against the state-of-the-practice and the state-of-the-art. In particular, we want to measure the garbage collection effects as described in \autoref{sec:methodbenchgc}. We will then finish by looking at individual components of TropoDB. We will again test following what is specified in \autoref{sec:methodbenchgc}, but we will test TropoDB configurations against TropoDB configurations. To limit interaction effects, we will for each of these tests only alter \textit{one} parameter at a time and run the exact same workload configuration (same random seed).
+
+For each chosen evaluation, we will specify its purpose, how it is conducted and its configuration parameters. The following \textbf{evaluation plan}  was generated from these \textbf{evaluation points (EV)}:
+\begin{itemize}
+    \item \textbf{EV1}: \textit{ZNS SPDK performance evaluation}:\\
+    The purpose of this evaluation is to test raw performance of ZNS when SPDK is used. The intent of this research is to evaluate what the impact of the optimisation process of TropoDB is on both the key-value store and the ZNS device. To answer this, we need to understand what ZNS can deliver in the best case scenario, to allow for a proper evaluation. Therefore, all raw I/O operations will be evaluated within SPDK. This will be evaluated by measuring performance of (concurrent) write operations, (concurrent) append operations, (concurrent) random read operations, (concurrent) sequential read operations and reset operations. This evaluation will be conducted in  \autoref{sec:znsperf}
+    \item \textbf{EV2}: \textit{TropoDB WAL evaluation}:\\
+    The WAL of TropoDB is designed to allow for high concurrency by using a novel approach with asynchronous append operations, \textit{unordered appends}(\autoref{sec:wals}). We need to understand the advantages that ZNS can give for this research, therefore, each novelty that makes use of ZNS, needs to be evaluation. To support the claim that unordered appends for WALs have an effect, we need to evaluate WALs. We are interested in the performance of unordered appends in a closed environment. This benchmark is independent of TropoDB as a whole. Therefore, the experiment will be run with background operations disabled (no interference) and is conducted in \autoref{sec:waleval}. Additionally, we discuss that unordered appends cause a recovery overhead in \autoref{sec:wals}. This is evaluated as well in \autoref{sec:waleval}, as it determines whether or not the approach justifies the overhead.
+    \item \textbf{EV3}: \textit{TropoDB Garbage Collection Evaluation}:\\
+    In order to evaluate the optimisation process in its entirety, we need evaluate TropoDB in its entirety against valid alternatives. While, many optimisations are limited to ZNS and not possible to measure against alternatives, we can measure garbage collection. To achieve this, we have defined how to measure garbage collection in \autoref{sec:methodbenchgc}. We will trigger a garbage collection-heavy scenario and measure write amplification, resets and tail latency. Alternatives are defined as in \autoref{sec:approach}. TropoDB will be evaluated against the state-of-the-art, RocksDB + ZenFS, and the state-of-the-art, RocksDB + F2FS. This will allows us to determine if TropoDB has succeeded in reducing garbage collection effects (at least according to the alternatives). This will be conducted in \autoref{sec:glob}
+    \item \textbf{EV4}: \textit{TropoDB L0 circular log evaluation}:\\
+    All data structures within TropoDB have not been evaluated yet before this research, as they are novel. Therefore, we do not know the effects the components have on the key-value store and ZNS storage in practice. We could have picked any structure, but we have decided to evaluate the log size of L0, as L0 are the hottest next to WALs (which are already evaluated in EV2), and the size if L0 is its main configuration parameter. The evaluation is conducted by using the same setting as used for the garbage collection in EV3. Only the difference is that the circular log size is altered. It is conducted in \autoref{sec:evalL02}
+    \item \textbf{EV5}: \textit{TropoDB effect of using multiple L0 circular logs and WALs concurrently}:\\
+    In \autoref{sec:desconc} we have described a novel alteration to TropoDB to increase concurrency. We need to understand if this is able to achieve gains in performance, as it has indications on the scalability of the design. If it does not, it indicates that TropoDB will not be able to use a ZNS SSD with high parallelism capabilities efficiently, and TropoDB will not reach the performance that some ZNS SSD can give. To conduct this evaluation, the same configuration as EV3 will be used, but the level of concurrency will be increased. Each level of concurrency that is added, will add an extra memtable, WAL, L0 log and flush thread. The evaluation will be conducted in \autoref{sec:evalconc}.
+\end{itemize}
+
+\section{Experiment Preparation}
+\label{sec:experimentpreparation}
+In this section, we will describe what hardware-, operating system- and software configurations are used for the experiments. We will also come with some small evaluations that validate the approach taken. For full details, including the specific software versions used we refer to the appendix in \autoref{sec:appendix}.
+
+\subsection{Hardware Configuration}
+All benchmarks for TropoDB that are reported in this report, made use of the same physical machine. 
+This machine comes with:
+\begin{itemize}
+    \item a 20-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with two sockets connected in NUMA mode. Each socket comes with a total of 10 physical cores and 2 threads for each core.
+    \item 256GB of DDR4 DRAM
+    \item 7TB ZNS SSD, Western Digital Ultrastar DC ZN540
+    \item 280 GB Optane SSD, model INTEL SSDPE21D280GA
+    \item 447 GB SATA SSD, model INTEL SSDSC2kB48
+\end{itemize}
+Nevertheless, all benchmarks are run on a virtual machine using only a part of the available device. The reason for not using the device as a whole is to limit usage to only one NUMA node and use a configuration that is more optimal/explainable for the benchmarks. The hardware configuration used by the VM is:
+\begin{itemize}
+    \item a 10-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with one socket of 10 physical cores and 2 threads for each core. Using just one NUMA node.
+    \item 128GB of DRAM, the amount accessible by one NUMA node.
+    \item 7TB ZNS SSD, model WZS4C8T4TDSP303
+    \item Various 8GB emulated generic ZNS SSDs (for testing)
+    \item Various 1GB emulated generic ZNS SSDs (for testing)
+    \item 160.8 GB Optane SSD, model INTEL SSDPE21D280GA (a partition of the device)
+    \item 447 GB SATA SSD, model INTEL SSDSC2kB48
+\end{itemize}
+
+Some tests are done with a different machine that is very similar to this machine. This additional machine is used for investigations to get an idea of the general performance characteristics. It is for example used to determine the effect of NUMA on the database benchmarks. However, this node has never been used for the benchmarks reported later on in the report as those tests should all preferably be run on the same machine to discard hardware differences as an interaction effect. This additional machine has a few notable differences:
+\begin{itemize}
+    \item a 20-core 2.40GHz Intel(R) Xeon(R) Silver 4210R CPU with two sockets connected in NUMA mode (at distance of 21). Each socket comes with a total of 10 physical cores and 1 threads for each core. So the number of threads per core is less in this node.
+    \item there was no Optane disk with a 160.8 GB partition present on this node. This node could, therefore, not be used for F2FS benchmarks.
+\end{itemize}
+
+\subsection{Virtual machine/Operating System Configuration}
+The server running on the physical machine was running an older Operating System configuration than was required for the experiments. This was Ubuntu 20.04.2 LTS with kernel version 5.12. The server could not be updated, so a VM was used instead. The VM used QEMU 6.1.0 with KVM enabled, running Ubuntu 20.04.4 LTS with kernel version 5.17.1. The VM was running its image from the SATA SSD. The 280GB Optane SSD was made accessible with paravirtualisation and the ZNS SSD was made accessible with PCIe passthrough within QEMU. The VM uses just 160.8GB of the Optane storage. The reason for this is that the VM is only allowed to use one partition that was configured on the host Linux machine, this also lead to the decision to use paravirtualisation and not passthrough. The VM was forced to just use one NUMA node with the help of numactl.
+
+\subsection{Verifying Configuration Sanity}
+Various configurations on the machine could have been used instead of the one we have specified. It is important that we run in a setting that is valid for our experiment, which means that the hardware configuration must be valid as well. A valid configuration is in our case one where all of the benchmarks must be run on hardware representative of real key-value store workloads and where we are sure I/O can be used to its fullest. Hardware must not be used in an inefficient setting, for example, by using different cores for interrupts and the key-value store. We need to be able to use I/O to its fullest as we are testing I/O for our experiments and must, therefore, not be bottlenecked by other parts of the configuration. 
+
+In order to verify such issues, we have run a set of small evaluations that led to this configuration. In particular, we have focused our efforts on a few different NUMA configurations. NUMA is a concern because it can be a problem if the devices, the interrupts of the devices and the key-value store are running on different NUMA nodes~\cite{akram2012numa}.
+
+This experiment is conducted by running the VM with a few different NUMA configurations. This test uses a different machine than used for TropoDB benchmarks, but it is similar enough that the differences should be similar. This was the node with 1 thread per CPU core. The configurations tested are:
+\begin{itemize}
+    \item Only one NUMA node is used and pinned by the VM. This includes the cores used by the NUMA node and its memory. This NUMA node is different from the NUMA node used by the storage devices. 
+    \item Only one NUMA node is pinned used by the VM. This includes the cores and its memory. This NUMA node is the same as the one used by the storage devices.
+    \item All NUMA nodes are pinned and given to the VM. The VM itself does not do any pinning.
+    \item No NUMA nodes are pinned implicitly by the host machine. Instead the VM pins NUMA nodes itself.
+    \item No NUMA nodes are pinned by the host machine or the VM.
+\end{itemize}
+The experiment is run multiple times for each individual configuration. The benchmark tested the key-value store RocksDB with the help of its benchmarking tool \textit{db\_bench}. At the moment \textit{ZenFS} is the state of the art for ZNS devices, so ZenFS is used as the representative file system. To ensure the test was configured properly, the benchmark configuration from the ZenFS repository itself is taken and altered to match the zone sizes of the device used. This configuration is (see \autoref{sec:appendix} for more info):
+\begin{itemize}
+    \item Use the filesystem ZenFS on the ZNS SSD
+    \item A write buffersize of 2GB
+    \item A target filesize equal to about 2 zones
+    \item Use Direct I/O for flushes and compaction
+    \item Use Direct I/O for reads
+\end{itemize}
+Various workloads are tested with this configuration. In all cases, 100 GBs of key-value pairs are written. This writes enough I/O to get a rough idea of the performance of the key-value store, but for testing key-value stores themselves more data will need to be written. It is thus picked to get an idea of the effect NUMA has on key-value stores.  Half of the tests write sequential I/O with the db\_bench workload \textit{fillseq} and the others are done in random order with db\_bench workload \textit{fillrandom}. Testing different orders is important, as random order triggers more background operations and can therefore create more expensive I/O operations. If it is a problem that the NUMA node used by the VM and the SSD are different, we should expect it here as more I/O is required. For both the sequential and random benchmarks different value sizes are tested as well. The value sizes tested are 100 bytes, 200 bytes, 400 bytes, 1.000 bytes, 2.000 bytes and 8.000 bytes. This helps to differentiate between many small I/O operations and a few large I/O operations. The value sizes picked are similar to value sizes we will test later on (see for example the WAL evaluations in \autoref{sec:walexperimentappend} and \autoref{sec:walrec}).  At the end of each run, the time till completion of the benchmark was recorded. Similarly, it was tested if QEMU only used the memory of the requested nodes with numastat. In the case of pinning one NUMA node, it could be observed that QEMU resorted to only making use of the pinned memory and CPU cores. 
+
+The results for all tests running sequential I/O showed minimal differences. During the fillrandom test, some differences are noted, but it can not be concluded that there is a significant difference. Many of the tests themselves already have some difference in completion time, regardless of the configuration used. For example, writing 100GB of 100-byte key-value pairs can take anywhere from 7 to 8 minutes. This is the same for all configurations. The few runs done to test if there is a difference, therefore, were not enough to find out if NUMA in fact has an effect. During the fillrandom benchmark, generally, a few configurations were slower than the rest. Not enough runs were run to test if this is always the case, but it is assumed that there is under ordinary circumstances a small difference. This can be seen in \autoref{fig:numa}. It shows the completion time of 1 run for each configuration with fillrandom. Note that both graphs have a different y-scale.  For all configurations the completion time decreases, when the value size increases. Further on, for all value sizes, explicitly pinning all NUMA nodes has a negative effect on completion time. Similarly, not pinning a NUMA node or pinning a node within the VM is a bit worse than explicitly pinning a node. In the case of pinning one node, it did not matter what node was picked.  
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/line_numa.svg}
+        \end{minipage}}
+    \subfloat[]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/line_numa_small.svg}
+        \end{minipage}}
+    \caption{  NUMA configuration: Completion time (s) of fillrandom for RocksDB + ZenFS  }
+    \label{fig:numa}
+\end{figure}
+
+From these results, we can infer that the performance differences, in this case, are minimal, but that there is a small non-negligible difference. Since using just one NUMA node does not harm the performance and is easier to reason about for the other experiments, it was decided to use just one NUMA node for all of the experiments conducted, which lead to our final configuration. We did not run benchmarks for the rest of the components, as we consider them less of a problem. During no experiment did the memory reach above 128GB and no key-value store configuration that we used, used more than 20 threads implicitly.  
+
+\section{ZNS SPDK Performance Evaluation}
+\label{sec:znsperf}
+The basic operations of the ZNS device used in this research are benchmarked as the characteristics of these operations were not publicly available before this research was conducted. Knowing the performance characteristics of each I/O operation allows for making better decisions on what operations are and are not expensive. It also allows making more sound decisions on what operations to use or avoid for the design of each individual database component. In this section, the results of those tests are given. All of these tests test I/O operations when SPDK is used and make use of synthetic workloads without background interference. The performance that can be achieved when SPDK and ZNS are used with applications or with multiple different operations in parallel will differ. These experiments are, therefore, only to be used to get an understanding of the ZNS device and to make a cost estimate. In all cases, the same hardware and software configuration as stated in \autoref{sec:experimentpreparation} is used.
+
+\subsection{Performance of Appends and Writes}
+\label{sec:appends}
+Key-value stores like TropoDB issue many writes. It is known that writes are more expensive than reads on flash-based SSDs(see \autoref{sec:background}), but to design the database around these properties, it is important to know how expensive writes exactly are. This makes it possible to understand how close TropoDB is to the maximum achievable capabilities of the device. In particular, the throughput and latency should be measured. However, measuring raw I/O calls will not be valid, as such calls will not be used. Instead, I/O will always be conducted through SPDK, so SPDK calls should be measured instead. SPDK comes with a plugin for fio, which allows measuring I/O performance for both latency and throughput. This plugin also supports ZNS. However, ZNS complicates the issue. That is because ZNS also comes with an append command, which is an alternative to writes. Unlike writes, appends support a higher queue depth than 1 and can, therefore, do concurrent writes to the same zone. The WAL implementation of TropoDB relies on using a higher queue depth to increase performance. So, we must also test the difference between writes and appends at various different queue depths. An alternative method to improve write performance would be to stripe writes/appends across multiple zones, therefore, the performance of concurrent writes to different zones is tested as well. Lastly, as the size of writes has a big impact on performance, various block sizes are to be tested as well.
+
+The resulting fio test consists of various smaller tests, each with a different write configuration and block size. At the beginning of each test, the entire ZNS device is always reset to a clean state to reduce the interference effects of resets during the tests. Following the reset, each test writes a sequential workload for 65 seconds up to a maximum of 32 zones, for which the results for the first 5 seconds are discarded (startup time). Since the zone capacity is about 1 GB, each test can write up to 32 GB at most. This is enough I/O to get a reasonable idea of the performance of ZNS with SPDK. Each test is tested in order with block sizes of: 512 bytes (minimum page size), 1KB, 2KB, 4KB, 8KB, 16KB and 32KB. The following tests are issued:
+\begin{itemize}
+    \item Using appends with various queue depths. This is done with a queue depth of 1, 2, 3 and 4.
+    \item using writes instead of appends. This test is multi-threaded with each thread writing to a separate subset of zones. This is done with 1,2,3 and 4 threads. 
+\end{itemize}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Append operation]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_append_2.svg}
+        \end{minipage}}
+    \subfloat[Write operation, each writer writes to different zones]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_writes_2.svg}
+        \end{minipage}}
+    \caption{ SPDK with fio: Write/append operation throughput (KIOPS) }
+    \label{fig:spdkappendwritethrough}
+\end{figure}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Append operation]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_append_lat_2.svg}
+        \end{minipage}}
+    \subfloat[Write operation, each writer writes to different zone]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_writes_lat_2.svg}
+        \end{minipage}}
+    \caption{ SPDK with fio: Write/append operation latency ($\mu$s)  }
+    \label{fig:spdkappendwritelat}
+\end{figure}
+
+The results for throughput and latency are visible in \autoref{fig:spdkappendwritethrough} and \autoref{fig:spdkappendwritelat} respectively. In both graphs, the x-axis represents the block sizes used for appends/writes in fio. For \autoref{fig:spdkappendwritethrough} the y-axis represents the number of I/O operations conducted each second on average. For \autoref{fig:spdkappendwritelat} the y-axis represents the average latency of each individual operation in microseconds. The block sizes shown are 512 bytes, 8KB and 32KB, but earlier we mentioned that we also tested for different block sizes. These results are excluded because they largely correspond with the other results (1KB, 2KB and 4KB correspond more with 512 and 16KB more with 8KB) and can be viewed as raw data in the source code (see \autoref{sec:appendix}). In all cases, using writes instead of appends achieved better results. The throughput of writes is higher and latency is lower. Spreading writes across multiple zones also scales better, because unlike appends increasing the number of writes with a block size of 32KB and beyond still has a positive effect on throughput. For appends, the latency only becomes higher at this point and using a higher queue depth is no longer beneficial for throughput. For the specific ZNS device used in the experiments, it would thus have been better to use writes instead of appends. It might, therefore, have been more beneficial to increase WAL parallelism with writes to multiple zones instead for this device. However, this would increase the number of active zones, which would leave less of the device to use for the rest of the database. We know that for some ZNS devices the performance of appends is shown to better than the performance of writes~\cite{bjorling2020zone}. Therefore, what optimisation works best, is dependent on the specific ZNS device used. How to decide when to use appends/writes or a ratio of appends and write is a topic left for future research. Nevertheless, the approach taken for TropoDB works, but will not reach significant performance benefits. Using appends instead of writes to reach better performance can not be justified for this device and no such claim about appends is, therefore, made for TropoDB as well. However, it is noticeable that increasing queue depth has an effect on latency and throughput for appends in some cases. Depending on the size, increasing queue depth can increase throughput, but it generally does not reduce throughput by much in other cases. Especially around 8KB an interesting pattern occurs. This pattern is also visible for writes. The exact reason for this peak is unknown. Nevertheless, using a larger queue depth with small I/O such as 512 bytes and large I/O such as 32KB has little effect.  For large I/O the throughput of appends even approximates the throughput of writes. Therefore, we expect the WAL implementation to also scale as well when queue depth is increased, but only around a few block sizes such as at 8KB. 
+
+\subsection{Read Performance}
+\label{sec:read}
+Read performance for flash-based SSDs is known to be better in both latency and throughput than writes and resets of flash-based SSDs, but still worse than reading from memory. Many operations in key-value stores make use of reads. For example, \textit{get} operations, but also compactions. Compactions can take a long time, which makes it important to get an idea of how long it takes to read data. Therefore, read performance is tested as well. Similar to the append and write tests conducted, fio is used. Before reads can be used, the device has to be filled at least partially. Therefore, before the tests are run, a large sequential test for fio is run to fill up the entire device. Then we identify two tests to run on the filled device: sequential reads with a larger queue depth and concurrent random reads happening to different zones. This allows showcasing the effect of both improving the performance of one read by using multiple asynchronous reads and showcasing the effect of multiple reads happening concurrently. Especially concurrent reads are interesting as these happen frequently in a key-value store. For example, get operations reading from SSTables and compactions reading from SSTables, both stored in different zones. It is important to measure if there is a lot of interference. By using random reads, we are also able to see the difference between sequential and random reads, which is an additional benefit.
+
+All read experiments are run similar to the append tests, but with a bigger maximum size as reads are faster. A maximum of 128 zones is read by each job. A startup time of 5 seconds is used, followed by 60 seconds of reading. Each test is tested in order with block sizes of: 512 bytes (minimum block size), 1KB, 2KB, 4KB, 8KB, 16KB and 32KB. Further on, sequential reads with queue depths are tested with queue depths of 1,2,3 and 4 and random reads that happen concurrently to different zones are tested with 1,2,3 and 4 readers.
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Sequential I/O: One reader with different queue depths]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_reads_2.svg}
+        \end{minipage}}
+    \subfloat[Random I/O: Multiple readers each with a queue depth of one]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_reads_random_2.svg}
+        \end{minipage}}
+    \caption{ SPDK with fio: Read operation throughput (KIOPS) for sequential and random I/O   }
+    \label{fig:spdkreadsseqrandthrough}
+\end{figure}
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Sequential I/O: One reader with different queue depths]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_reads_lat_2.svg}
+        \end{minipage}}
+    \subfloat[Random I/O: Multiple readers each with a queue depth of one]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_spdk_reads_random_lat_2.svg}
+        \end{minipage}}
+    \caption{ SPDK with fio: Read operation latency ($\mu$s) for sequential and random I/O }
+    \label{fig:spdkreadsseqrandlat}
+\end{figure}
+
+Similar to appends, we only showcase results for 512 bytes, 8KB and 32KB. The other results are again very similar.
+The throughput in KIOPS of sequential and random I/O can be seen in \autoref{fig:spdkreadsseqrandthrough} and the latency of sequential and random I/O can be seen in \autoref{fig:spdkreadsseqrandlat}. In both graphs, the x-axis represents the block size of individual read operations. For \autoref{fig:spdkreadsseqrandthrough} the y-axis represents the number of reads conducted per second on average for \autoref{fig:spdkreadsseqrandlat} the y-axis represents the average latency of each read operation. As can be expected of flash storage, reads perform significantly better than writes, both for throughput and latency. Another notable result is that random reads have significantly lower throughput and higher latency than sequential reads. This means that it is preferable to use sequential reads over random reads. Therefore, it is advantageous to store and load related data together, which is already done for TropoDB. It can also be seen that increasing queue depth, increases throughput significantly at the cost of latency. With a higher queue depth and larger block size, latency can become significantly bigger. It is thus a trade-off to pick between throughput and latency for reads. TropoDB only uses a queue depth of 1 for reads, but this graph showcases that more read performance could have been gained. Future work can look at the effect that increasing queue depth for reads can give for an LSM-tree design. What is also noticeable, is that the effect of increasing queue depth is most pronounced for small I/O and that small I/O, in general, is able to reach higher IOPS.     
+
+\subsection{Zone Reset Performance}
+Garbage collection is generally in control of all erasures/zone resets. It is stated that these operations can take a long time. Properly designing a GC requires knowing exactly how expensive such an operation is. Therefore, the performance effects of resets need to be analysed. SPDK does not come with tests to measure zone reset performance by default and neither does fio. Since no public benchmarking tool for measuring resets with SPDK exists yet (as of August 2022), this requires an alternative approach. A custom test was made to test the effect of resets. This is a very simple test that test resets without the interference of other operations. The cost resets have on other concurrent I/O operations or that other concurrent I/O operations have on zone resets is not measured. The effect in a real workload might, therefore, be a bit different. This test is mainly used to show what the performance of resets is an ideal situation to allow making an estimate of the approximate cost of resets compared to other operations.
+
+In the reset test, the entire ZNS device is first filled with fio with the workload ``write". This is similar to how the read test requires a filled device. The data stored to storage with fio should be relatively random, which prevents issues that can occur when only zeros are written (optimisations in storage can happen in some devices). Future work can also look in the cost of resetting zones with zeros, partially-filled zones and empty zones. However, for now we limit ourselves to randomly-filled zones. After the device is filled, the device is reset zone by zone. This is done with our custom library, SZD, on top of SPDK, which also specifies a zone reset command. The time this reset call takes is measured in this experiment. This call contains some out-of-bounds checks, submission of the reset command and polling till the reset is finished. It is assumed that this accurately resembles a real reset. 
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.45\textwidth}
+  \centering
+  \includesvg[width=1\linewidth]{graphs/zone_reset_simple_plot.svg}
+\end{minipage}%
+\caption{ SPDK with custom test: Latency ($\mu$s) of zone resets when resetting zone by zone}
+\label{fig:spdkresets}
+\end{figure}
+
+The resulting time a reset took is 10037.95 microseconds on average or about 99.62 resets per second. The standard deviation of the zone reset time is 249 microseconds. Therefore, without additional interference of other I/O operations, reset operations are stable in their latency for this device. To understand if the cost of resets is also uniform across all zones, the reset time is plotted for each individual zone. This is visible in \autoref{fig:spdkresets} and showcases that reset time is also relatively stable across each zone. The x-axis represents each zone number of the device (in order) and the y-axis represents the latency of each reset operation conducted on this zone. As the result is just for one run, some spikes are to be expected. However, what is interesting is that towards the end, the cost stabilises more. It is not known if this is because of the zone number or because of another reason. This should be investigated further in future research. 
+
+\subsection{Summary}
+In short, we have investigated the raw performance of SPDK operations for ZNS storage. We have investigated the latency and throughput of reads, writes, appends and resets. Further on, reads have also been investigated both for sequential and random I/O. When we compare the latencies of write-, append-, read-, and append operations, resets take significantly longer. All I/O operations tested take a few hundred microseconds at most, but resets take multiple milliseconds in all cases. However, it has to be mentioned that because resets operate on entire zones and zones for this device are about 1GB in their capacity, the cost of resets is not trivial to properly compare to the cost of the other I/O operations which operate on smaller units, such a few KB or MB. In general, we see that the relative cost of I/O operations is in order of ascending cost in both latency and throughput: sequential reads, random reads, writes, appends and resets. Latency and throughput are also determined largely by the block size used by the application. The exact effect the block size has depends on the operation used. 
+
+\section{TropoDB WAL Evaluation}
+\label{sec:waleval}
+In this section, all experiments related to the WAL are described and the results of those tests are given. The experiments focus on the performance impact that unordered appends have compared to ordered appends. This will be both for their throughput, latency and time to recover. In addition, various other attributes of the WAL would have been valuable to evaluate. For example, the impact of the WAL regulation scheme. Remember that the WAL manager should rotate the zones used for WALs. The exact effect of this circulation scheme has not been measured, the results for fluctuating the number of regions assigned for WALs can still be measured in future work. In \autoref{sec:heatdist} we do see the total distribution of zone resets for the entire key-value store and it is noticeable that the WAL resets are relatively spread out. It is assumed that when the total WAL region size decreases, more resets will be issued in a smaller region, but the load will still be spread evenly. Further on, investigating the effect of buffering on WALs would have been valuable. This can showcase if the effect of buffering negates the effect that appends can have and how much performance is gained by the use of buffering.  
+
+\subsection{Performance Impact of Asynchronous Appends for the WAL}
+\label{sec:walexperimentappend}
+WALs are the hottest storage structure used by the LSM-tree. Every put request needs to be written to the WAL and the client has to wait for this request to proceed, even when this is done asynchronously. Therefore, it is beneficial to make sure that this can be done at high throughput and low latency. As discussed in \autoref{sec:wals}, TropoDB allows asynchronous appends and makes use of the ability to send multiple appends to the same zone. This can theoretically increase the number of outstanding put requests, increasing throughput. Nevertheless, to test if this approach also has a real performance benefit, it needs to be evaluated. In \autoref{sec:appends} we have already seen that in many cases the performance effects that multiple outstanding append requests have is negligible. In fact, it is equally or more beneficial to stripe writes to multiple zones in parallel. 
+
+To test if it has the same effect on WALs, different levels of asynchronicity must be tested for the WAL as well. Therefore, WALs are tested with asynchronous appends with a queue depth of 1 (serialising) and WALs are tested with asynchronous appends with queue depths of 2,4,16 and 64. Asynchronous appends with a queue depth of more than 1 need extra metadata and recovery logic, this is not needed with a queue depth of 1. It would be unfair to still use this extra logic in this case. So, when a queue depth of 1 is used, this logic is disabled. Further on, in \autoref{sec:appends} it was evident that using different block sizes has a great effect on the performance of I/O. The same effect must be tested with WAL appends as well, especially around 8KB. To achieve this, the value size of puts is altered between tests. Key sizes are fixed to 16 and value sizes are tested with 200, 400, 2000, 8000, 16000 and 32000 bytes. The value sizes are not arbitrarily chosen, they are deliberately always set to be less than their target, with the target matching the block sizes from the append tests. That is because the exact sizes sent to storage differ a bit from $keysize + valuesize$, as some additional metadata is needed and the data needs to be aligned to the page level. For example, as the page size of the used ZNS SSD is 512 bytes, both 200 and 400 bytes will lead to similar outcomes (just with a different amount of padding). Testing both 200 and 400 will give more insight into the effect of padding. Further on, it is possible for multiple WAL writes to be merged together as one change (group logging). The value sizes are picked to approximate the values picked for the raw SPDK append tests in \autoref{fig:spdkappendwritethrough} and \autoref{fig:spdkappendwritelat}. To give an idea of what they approximate, 200 and 400 bytes approximate 512 bytes, 2.000 approximates 2KB, 8000 approximates 8KB, 16.000 approximates 16KB and 32.000 approximates 32KB.  This should aid in determining whether the WAL can reach the level of performance that appends in SPDK can give. In later tests for TropoDB/RocksDB, we will also use similar value sizes. We want to test the database itself with value sizes that we know have been tested for WALs as well. These are tests for garbage collection of TropoDB in \autoref{sec:glob} and tests for individual components in \autoref{sec:evalL0} and \autoref{sec:evalconc}.
+
+The zone capacity of the ZNS SSD that is used, is 1129316352 ($\sim$1.1GB) bytes. The WAL size in the test is configured to be 3 zones ($\sim$3.3GB) and the WAL region to 40 WALs ($\sim$132GB). To test the latency and throughput of WALs, it was decided to test a standard workload of about 50GB with this configuration. This load is generated with db\_bench and the pattern \textit{fillrandom}. The WAL has no knowledge of the pattern itself and its performance does not fluctuate depending on the load, therefore, any workload could have been chosen instead of fillrandom as well. This db\_bench configuration should fill up a few WALs and erase a few WALs for each run. After each run, the database is reset in its entirety and the ZNS device is cleaned (full reset). This allows getting a clean slate for each test. Further on, background operations such as flushes and compactions can lead to significant latency fluctuations and are unpredictable. Additionally, the background operations can stall the client, allowing no more WAL operations to be issued. Such stalls can lead to asynchronous I/O having less of an effect. The purpose of this experiment is to test the WAL performance only. Therefore, such background operations are disabled entirely. In fact, only WAL resets can still be used in the background in this test. Puts are thus limited to memtable and WAL writes only. The benchmark issued is thus \textbf{not} representative of how TropoDB itself functions under normal conditions. Tests on how the database as a whole (WAL included) performs will be conducted later in \autoref{sec:glob}. This test is merely to test what performance can be gained for WALs in the best case without the additional interaction effects.  
+
+To measure the WAL performance, we want to measure both the throughput latency of WAL appends. The average latency and its standard deviation are measured as the \textit{completion time} of appends issued to the WAL. The completion time is defined as the interval between when appends are serialised and issued to the once log till the append itself has been processed by the WAL. An append is processed either when it is completed synchronously or when it is added to the asynchronous queue (when queue depth is more than 1). This metric is measured in this manner, to ensure that the measured latency only conveys the latency of WAL appends. The number of put operations per second is measured differently. This metric should give an overview of the number of client-issued puts that can be completed each second. This is measured by dividing the total amount of time all put requests took collectively (both WAL and memtable) by the number of put requests. So this metric does not exclude operations outside of the WAL.
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Put operation throughput (KIOPS)]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_wal_iops_2.svg}
+        \end{minipage}}
+    \subfloat[WAL append operation completion time ($\mu$s))]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_wal_latency_2.svg}
+        \end{minipage}}
+    \caption{ WAL append performance: put operation throughput and completion time of WAL appends }
+    \label{fig:walperf}
+\end{figure}
+
+Similar to the evaluation for appends, writes and reads we limit the results presented in the paper to 512 bytes, 8KB and 32KB for the figures. The results for the number of put operations completed per second can be seen in \autoref{fig:walperf} and the results for the completion times of append operations to the WAL can be seen in \autoref{fig:walperf} as well. For both graphs, the x-axis presents the value sizes of the key-value pairs (so the metadata and key size are excluded). For the throughput of WAL appends the y-axis represents the number of puts processed per second in KIOPS. For the latency graph, the y-axis represents the average completion time of puts. The results are very similar to the results for raw appends shown in \autoref{fig:spdkappendwritethrough} and \autoref{fig:spdkappendwritelat}. Increasing the queue depth to larger values has relatively little effect on the WAL as well. For small value sizes, the KIOPS decreases a little and once value sizes of 32 KB are reached, the KIOPS of all the different queue depths is similar. Increasing the queue depth does have a big effect for a value size of 8KB, similar to appends. In this case, setting the queue depth higher than two can achieve almost twice the amount of KIOPS. It shows that increasing queue depth can have an effect, but is highly situational. It also shows that WALs are able to match the performance of appends in SPDK closely for throughput. 
+Latency results are also very similar, which makes sense as latency and throughput have an inverse relation. Completions take a little longer on average for small and large values when a higher queue depth is used. Similar to how KIOPS were higher for 8KB, so is latency significantly lower for 8KB. However, increasing the queue depth creates a larger standard deviation in all cases. This is especially noticeable for 32KB writes and a queue depth of 64. This implies that some clients have to wait significantly longer for their put operation to complete, probably because a large queue of I/O needs to be processed by the SSD. Thus, increasing queue depth, can also lead to more latency instability. Even in cases where increasing the queue depth has little effect on the throughput.
+
+
+In short, using unordered appends for the WAL has an effect on throughput and latency, but it is highly dependent on the value size used. In most cases, the effect on KIOPS with unordered appends is negligible and in fact worse when a higher queue depth is used. Only for a few value sizes will the amount of KIOPS increase. However, increasing the queue depth does have a big effect on the latency stability. Decreasing the queue depth for WALs achieves better latency stability.  Therefore, it is recommendable to investigate the characteristics of SSDs~\cite{klimovic2017reflex} and the workload used for the key-value store before deciding to increase the queue depth. For example, TropoDB has made WAL queue depth \textit{configurable} and set it to 1 by default.
+
+
+\subsection{WAL Recovery Time}
+\label{sec:walrec}
+As discussed in \autoref{sec:wals}, TropoDB supports both ordered appends and unordered appends to the WAL. Unordered appends can gain some performance speeds for puts, but they can also take longer to replay. It is important to measure the exact overhead that occurs when restoring the database, as this can greatly impact the startup time of the key-value store. Therefore, the time difference it took to replay WALs is measured. To properly measure the difference, the replay time should match the replay time of a real workload, but should still properly reflect the replays that take longer as well. TropoDB by default only has one WAL active at the same time, which requires one full replay at most. To ensure that no WAL is removed in the background, WAL erasure is temporarily disabled for the WAL recovery test. Therefore, it is best to fill up exactly one WAL with ordinary data. Apart from the size of the key-value pairs, it does not matter what the individual key-value pairs are for the WAL. That is because WALs have no knowledge about this data. Nevertheless, it might create some fluctuations when applied to the memtable. Therefore, a few different workloads should be used and both ordered- and unordered appends will use the same workloads.
+
+To test the effect, db\_bench is used. Db\_bench allows generating a proper workload that matches more realistic access patterns. This is done by first generating a workload with random key-value pairs, using \textit{fillrandom}, which is a bit larger than one WAL. This is then issued to the key-value store. Once, this is completed the database is reopened and the recovery time of WALs is measured. This is done by only measuring the time gap that is present between when a WAL is opened and when it is recovered. The effect should be measured between ordered and unordered appends. Therefore, each test is run with the exact same seed and configuration for both. Further on, they are both tested with 5 different seeds. This allows measuring the possible fluctuations in recovery. The number of entries in a WAL can have a big effect. A larger number of entries can result in more entries that need to be sorted. Therefore, a few different value sizes for key-value pairs are tried, to fluctuate the number of entries present in the WAL.
+In the end, the following fixed configuration was used:
+\begin{itemize}
+    \item WAL size of 3 zones, with each zone thus having a capacity of 1129316352 bytes ($\sim$1.1GB), for a total size of 3387949056 ($\sim$3.3GB) for each WAL.
+    \item WAL region of 40 WALs (never requiring resets of old WALs)
+    \item DB\_bench workload \textit{fillrandom} with a fixed workload size, matching the WAL size, of 3387949056 ($\sim$3.3GB).
+    \item Each tested is repeated 5 times, each time with a different fixed seed
+    \item A key size of 16 bytes 
+    \item WAL erasure is disabled
+\end{itemize}
+In addition, each configuration is repeated with different value sizes. In particular, value sizes of 200, 400, 2000, 4000, 8000, 16000, 32000 and 124000 are tested. These are similar values as tested for appends, with a few additional larger values. Then the two different WAL designs: TropoDB with ordered appends and TropoDB with unordered appends, are tested with the exact same tests. TropoDB with unordered appends uses a queue depth of 4 as this queue depth has had reasonable results in \autoref{sec:walexperimentappend}.
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_wal_recover_lower.svg}
+        \end{minipage}}
+    \subfloat[]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_wal_recover_higher.svg}
+        \end{minipage}}
+    \caption{ WAL replay time: Replay time ($\mu$s) for both ordered and unordered WALs }
+    \label{fig:walreplay}
+\end{figure}
+
+The final results can be seen in \autoref{fig:walreplay}. The x-axis represents the value sizes used in the stored key-value pairs and the y-axis represents the average completion time of a replay of a WAL. Notice the difference in the y-scale between \autoref{fig:walreplay}(a) and \autoref{fig:walreplay}(b). The completion time decrements as the value size increases, except for the gap between a value size of 200 and 400. As can be seen in the figures, replaying unordered WALs always takes longer than ordered WALs. The exact difference between ordered appends and unordered appends is different for each value size, but fluctuates between $\sim$5\% and $\sim$15\%.  Further on, the difference never reaches more than a 20\% overhead and replaying unordered writes does not take more than 2 seconds longer than ordered appends in any test conducted. This difference in recovery latency is expected as ordered appends do not require sorting operations on replay. However, unordered appends do require sorting. Considering that the replay is only done on startup of the database and that the database itself can properly run undisturbed for many hours, in the general case such an increase in startup time is negligible. In the case databases do have a short lifetime and are restarted frequently, it might be better to leave this option turned off. The difference between replay times of ordered and unordered appends, is also bigger for larger entry sizes, at least in the results shown here. Larger value sizes can thus become more expensive for replays. This should be taken into account when deciding whether to use unordered appends or not. The results also showcase the effect that the size of entries has on replay latency. When the size of an entry is smaller, the WAL can contain more of such entries. This will result in more operations needed on a replay regardless of whether ordered or unordered appends are used. More operations are needed because more entries need to be deserialised, verified and added to the memtable. In the case of unordered appends, there also is a need to sort more key-value pairs, which adds an extra overhead. Interestingly, a value size of 400 is more expensive than 200. This is because an equal amount of key-value pairs with a value size of 400 and 200 fit in a WAL, as the minimum page size is 512 bytes. Yet, more data will need to be read from each page. Replays will thus be most expensive for value sizes just a bit below the minimum page size. Therefore, it can not be concluded that a smaller value size will always result in more expensive replays for a WAL, but in the general case, it does. 
+
+To conclude, using unordered appends does come with a trade-off. When unordered appends are used, the key-value store will take longer to restart. Whether, the performance benefits of unordered appends are worth it, depends on the use case. In \autoref{sec:walexperimentappend}, we have already seen that unordered appends for the SSD used, provide little performance benefit. Therefore, TropoDB has made this option \textit{configurable} and turned off by default.
+
+\section{TropoDB Garbage Collection Evaluation}
+\label{sec:glob}
+In the previous sections we have looked at individual components of TropoDB, but not at TropoDB as a whole. In this section, we will take a look at TropoDB as a whole. We will investigate how TropoDB performs compared to the alternatives. The alternatives are in this case: the state of the practice, RocksDB + F2FS, and the state of the art, RockDB + ZenFS. In particular, we will look at the effects of garbage collection. That is to say the tail latency, the average bytes written for each key-value pair and average number of zones reset for each key-value pair. For all three effects, the exact same benchmark will be run, seed included. First, we will describe how the experiment is set up and why it is set up in this manner. The setup is a bit more complicated as each target is defined differently. Then we will look at the individual results of these benchmarks. 
+
+\subsection{Benchmark Setup}
+The intent of this test is to measure the effects of garbage collection. Therefore, garbage collection must be forced on all candidates and the workload must be garbage collection heavy. This requires triggering garbage collection as frequently as possible, to see and measure its effects. Some systems might do garbage collection lazily and postpone it until they no longer can. Garbage collection will also not happen with small workloads in general, as the number of flushes and compactions will be limited. Further on, when no data overlaps, garbage collection will also be limited as the number of merges needed for compactions is minimal. In order to force garbage collection, filling the device is beneficial. The SSD then reaches a state that is comparable to a \textit{steady state}(for more on the steady state see a study of steady state by Didona et al.~\cite{didona2020toward}). When more data is written than fits on the device, at least a few resets must be forced. When there is little data, this is not needed. The steady state is in this case a state that requires garbage collection. Further on, it is a good idea to use a workload that overwrites data. Relying on overwrites ensures that data will overlap and compactions will be both big and necessitate deleting old SSTables. Garbage collection will be most pronounced in these cases. It is also important to measure the effects garbage collection has on client operations, such as gets and puts.
+
+ZenFS comes with a few benchmark configurations of its own. One of those fits the exact workload we want to test. This benchmark configuration makes use of db\_bench and uses three workloads in order. First, it fills the SSD with random data, then it overwrites the data and then it issues many writes and reads concurrently. These are the db\_bench workloads \textit{fillrandom}, \textit{overwrite} and \textit{readwhilewriting}. The first test brings the device to the steady state, the second can be used to measure garbage collection effects and the last test showcases the effect of puts and garbage collection on the performance of gets. This exact test is, therefore, also used in the experiment to measure garbage collection effects.
+
+The ZNS SSD used has a little more than 3TB of storage that is accessible to the user of the SSD. Therefore the following test configurations will be sufficient (note that 1TB of key-value pairs will write a lot more than 1TB of data, otherwise WA would have been 1 and there would not have been an issue):
+\begin{itemize}
+    \item fillrandom, 1TB of data by writing 1.000.000.000 entries with key size 16 bytes and value size 1000 bytes.
+    \item overwrite, 1TB of data by writing 1.000.000.000 entries with key size 16 bytes and value size 1000 bytes.
+    \item readwhilewriting, 1 hour of additional writes during reads. Again the key size is 16 bytes and value size is 1000 bytes. Additionally 32 client threads are used (this is more than the number of physical cores available). As it stops after 1 hour, the amount of data written differs between and this test is not suitable to measure either bytes written or zones reset, even when the metrics are normalised over the number of key-value pairs written. 
+\end{itemize}
+
+Additionally for all tests, a few additional configurations are used. These are again based on ZenFS, but considered sensible for the characteristics of the device and the file systems:
+\begin{itemize}
+    \item compression\_type set to none. We do not want to measure compression effects.
+    \item use\_direct\_io\_for\_flush\_and\_compaction. We want to measure storage effects, not buffering effects. The alternative is also not supported in TropoDB. We only have direct I/O for flushes and compactions.
+    \item use\_direct\_reads. Again raw reads should be used to measure storage effects.
+    \item max\_bytes\_for\_level\_multiplier is set to 4. Each level is 4 times as big as the previous level. 
+    \item target\_file\_size\_base is set to the capacity of about 2 zones. This is the target size of SSTables among others. This is similar to the size of SSTables as used for LN in TropoDB.
+    \item num\_levels is set to 7 for F2FS and ZenFS and 6 for TropoDB. TropoDB uses 6 as it needs to reserve space beforehand, which causes issues if a level is too big and the 7th level was never reached in the first place.
+    \item max\_background\_jobs is set to 8 for F2FS and ZenFS. This allows at least a thread for a compaction in each level and a flush. TropoDB uses its custom design with a flush thread and 2 compaction threads.
+    \item write\_buffer\_size is set to 2GB. This corresponds with the max memtable size and fits properly for the size of WALs in TropoDB as well.
+    \item sync is disabled. We will explain why soon.
+\end{itemize}
+
+Note that sync is disabled. Disabling sync, allows the tests to complete faster and is the default option for RocksDB. It will also lead to a lower average latency (not necessarily tail latency). This comes at the cost of some reliability. Ideally, this should be tested as well, this allows testing latency as well in the case the key-value store itself should provide all reliability. If during later research, sync is disabled, buffering of WAL writes should be disabled as well. The buffer size of the key-value store on top of the file system can in this case be set to 0. In both ZenFS and F2FS as well (Posix file system as defined in RocksDB).
+
+
+Additionally, we have some configurations for each of the three targets. For F2FS tests, the device needs to start with a clean slate. Therefore, before the fillrandom test, the ZNS drive and Optane drive (see why Optane is used as well in \autoref{sec:experimentpreparation}) are reset/formatted, the file system is made and the file system is mounted. This allows F2FS to be compared against the alternatives more fairly.
+
+The same is done for ZenFS. Before the fillrandom test is started, the ZNS drive is reset and the file system is made on top of this drive. The auxiliary path, which ZenFS uses for logging, is set to the tmp directory in Linux of the VM. This directory will also be emptied before the fillrandom test starts. It is said to contain a minimal amount of information, such as LOCK files and debugging information. The exact amount of data written to this directory has not been measured and is left to future research.
+
+TropoDB has some additional configurations. Most options are based on earlier TropoDB investigations:
+\begin{itemize}
+    \item Number of Manifest zones is set to 4 zones.
+    \item WAL size is set to 4 zones.
+    \item WAL count is set to 40 WALs.
+    \item WAL queue depth is set to 4.
+    \item Maximum size of L0 SSTable: set to exactly 512MB.  
+    \item Number of SSTables on L0 before client puts are slowed down: 80.
+    \item Number of reserved zones for L0 is set to 100.
+    \item Amount of deferred writes during compaction is set to 6 and amount of prefetched reads as well.
+    \item Concurrency level of L0 and WALs (concurrent L0) is set to 1.
+    \item LN zone allocator is set to the merging allocator.
+    \item Compaction triggers (before a compaction is considered): 8 L0 SSTables (4GB), 16GB, 64GB, 256GB, 1TB, 4TB (last level can not compact anyway).
+\end{itemize}
+
+\subsection{TropoDB Tail Latency}
+Tail latency can be measured with the help of db\_bench. Db\_bench measures the tail latency up to a certain degree and allows logging it at the end of a run. This can be done for F2FS, ZenFS and TropoDB all the same. By default, db\_bench does not log 25\%, 99.999\%, 99.9999\% and 100\% for tail latency, so this functionality is added. This gives a more accurate view as it does not hide away the cheapest/most expensive operations. After each run, the tail latencies are logged.
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[][]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_fillrandom1.svg}
+        \end{minipage}}
+    \subfloat[][]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_fillrandom2.svg}
+        \end{minipage}}
+    \caption{ Put operation tail latency: Workload fillrandom }
+    \label{fig:randtaillat}
+\end{figure}
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[][]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_filloverwrite1.svg}
+        \end{minipage}}
+    \subfloat[][]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_filloverwrite2.svg}
+        \end{minipage}}
+    \caption{ Put operation tail latency: Workload filloverwrite }
+    \label{fig:overwritetaillat}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\begin{minipage}{0.55\textwidth}
+  \centering
+  \includesvg[width=1\linewidth]{graphs/latency_readwhilewriting1.svg}
+\end{minipage}%
+\caption{Put operation tail latency: Workload readwhilewriting.}
+\label{fig:readwhilewritetaillat}
+\end{figure}
+
+
+
+The results of the tests can be seen in \autoref{fig:randtaillat} for fillrandom and \autoref{fig:overwritetaillat} for filloverwrite. The tail latency graphs are cumulative: the x-axis represents the percentile of operations that are completed with a completion time less than the latency specified in the y-axis. Note that the y-axis represents the latency of put operations on a logarithmic scale. For each workload, we showcase both tail latency up to 99.9999\% and up to 100\% as the max is also essential to discuss, but makes the tail latency graph harder to read. Additionally, for RocksDB + F2FS and RocksDB + ZenFS there are also results for readwhilewriting, which can be seen in \autoref{fig:readwhilewritetaillat}. Unfortunately, TropoDB crashes on this test and the issue has not been found (as of August 2022). It likely is a concurrency bug in the read path of get requests, which is more likely to occur as 32 reader threads are used. There are quite a few interesting details that can be inferred from the latency graphs. 
+
+For fillrandom RocksDB + ZenFS is able to remain relatively stable for all percentiles. For some percentiles such as 99.99\%, it is a bit slower than the alternatives, but it does not suffer from latency spikes at any point, even at 100\% there is no peak. In general, ZenFS is able to guarantee better SLAs for the workload provided. F2FS seems more stable when only looking at 25\% up to 99.99\%, but it suffers from issues shortly after. A few clients have to wait significantly longer for their put requests to finish. TropoDB is the worst in this regard. It has the lowest latency for 25\%, 50\% and 75\%, but starts to spike at 99\%. Then it smoothens out a bit, but has an unacceptable spike at 100\%. Even if it is the only client-issued put that resulted in this latency peak and may, therefore, be an outlier, it can not be ignored. 
+
+Some client-issued puts in TropoDB will take minutes. Looking at the debug log of TropoDB, it is noticeable that these situations happen once in a while. They occur when L0 is filled up, but not only because of the number of live tables, but also of dead tables. Remember that the circular log of L0 can only remove entries from its tail, but it can already have gaps later on. During fillrandom it is common that at a certain point in time more than half of the log will contain dead SSTable and is considered full. At this point, L0 has to be compacted as there is no space left and no flushes can continue. As no flushes can continue, clients have to be stalled. There is no guarantee that a compaction compacts enough tables for a tail zone to be erased, which means that it can take multiple compactions for the client to continue. 
+
+Additionally, there are situations in which an L0 compaction has to wait for an L1 compaction to finish. This happens when they operate on the same SSTables, this is a lock contention issue. As stated in \autoref{sec:stalling}, put operations can be delayed when L0 reaches a certain size. This happens very frequently because of similar issues and can explain the spike at 99\%. Later on, we will see that this is not always the case for TropoDB. Lastly, TropoDB's background operations were initially based on LevelDB, which is known to scale less than RocksDB because of its background thread model. The background process used might, therefore, also be part of the blame. It would be a good research opportunity to try out the same approach with RocksDBs background processes.
+
+In the end, this design as it is now, regardless of the reason, does not scale as well as should be possible with the hardware. The result is that TropoDB can not state that it is able to get more stable latencies because of garbage collection effects than RocksDB as TropoDB regularly is involved in long forced background operations that force stalls. Background operations in TropoDB can take from a few seconds to more than 10 minutes in the worst case.
+
+The latencies of the filloverwrite test, differ less from the latencies of fillrandom than was initially suspected. The biggest difference is notable for RocksDB + ZenFS. ZenFS is unlike in fillrandom involved in at least one very expensive put operation, which was not the case for fillrandom. However, it is still smooth up until 99.9999\%, which makes it questionable whether it was an edge case or not. The results for TropoDB do not differ significantly. TropoDB is still not able to guarantee stable performance and still has the issue from 99.9999\% up to 100\% and so does F2FS. 
+
+The results from the readwhilewriting test are insightful for the performance of ZenFS and F2FS. F2FS has severe problems with tail latency during this test. F2FS is not able to guarantee the same latency stability that it was able to maintain during the previous two tests. F2FS has to stall many read operations because of other reads, writes and background operations, which lead to latency instability for reads. ZenFS at the same time is able to remain stable. This makes it likely that indeed the file system is to blame for the stalling of operations. This requires a more in-depth investigation, to find the exact cause. For now, we know that the file system F2FS can at this point no longer guarantee latency stability, but the file system ZenFS can guarantee latency stability even beyond 99.99\% tail latency.
+
+In the end, ZenFS is able to maintain relatively stable throughout all tests and is able to guarantee the best SLAs under the workloads used here in combination with the hardware/software configuration used here. This shows that optimising file systems for ZNS has merit and that optimising file systems or storage for key-value stores also has merit. It can aid in gaining a more stable key-value store. On the other hand, TropoDB has not been able to confirm this. Future research can look into other approaches than taken by TropoDB (Garbage collection threads, L0 and LN designs) and find a better storage solution that is able to lead to similar/better results as RocksDB + ZenFS.
+
+
+\subsection{TropoDB Write Amplification}
+For both ZenFS and F2FS it is not possible to directly measure the number of bytes written by RocksDB. In general, file systems do not log the amount of data written by one application, they only maintain how much logical data a file currently contains. RocksDB itself can also not measure how much data it has written explicitly, as it has no control over the data movement of the underlying file systems. For this experiment, we only require to know how much data is written in total during the benchmark. If no other process is busy writing data to the file system, it is valid to measure the total amount of data written by the file system to the SSD. This is possible as the SSD used has S.M.A.R.T. log support~\cite{NVMeSpec}. S.M.A.R.T. log support allows requesting data from the SSD, such as how many bytes are written to this SSD in total over its lifetime. This is what we use for benchmarks for ZenFS and F2FS.  Before a benchmark is run and after a benchmark is run, the S.M.A.R.T. log data is requested. The amount of data written by the benchmark is then estimated to be the difference in values between the two measured values. However, the S.M.A.R.T. log as defined in the NVMe specification does not use conventional units to measure bytes written. It is defined in units of 1000 blocks with a block size of 512 each and is rounded up. Therefore, there is a small measurement error for this design, equalling $512*999$ bytes at most, but considering that more than 1 TB is written for both the fillrandom and the filloverwrite test, a few hundred kilobytes as an error margin is negligible. 
+
+TropoDB uses another approach as TropoDB uses SPDK and, therefore, the device is not bound to the kernel during the benchmarks. It should still be possible to access the S.M.A.R.T. log from SPDK itself, by adding some additional measurement tools in SPDK, but this has not been attempted. Instead, TropoDB comes with its own measuring tool. Each write to storage is measured, along with its exact size in bytes. This does not have the measurement errors of the other two approaches. The total number of bytes written is reported after each benchmark is run. This is done for both the entire database and for each individual component, allowing an accurate depiction of what structures are I/O heavy.
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_fillrandom.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_overwrite.svg}
+        \end{minipage}}
+    \caption{ Write amplification: Measured as number of bytes written divided by the size of all stored key-value pairs }
+    \label{fig:wafillandoverwrite}
+\end{figure}
+
+In order to estimate the cost in bytes written of put operations for the key-value stores, the cost is normalised over all put operations. It is normalised by dividing the total number of bytes written during the benchmark by the size of all inserted key-value pairs ( $(1000+16) * 1.000.000.000$). The resulting number should be equal to the average write amplification of each key-value pair insertion. It divides the total I/O workload by the amount of data that is logically inserted. The results of the tests can be seen in \autoref{fig:wafillandoverwrite} for fillrandom and filloverwrite. The x-axis represents the different database configuration and the y-axis represents the write amplification as it has just been described. For fillrandom all three candidates: RocksDB + F2FS, RocksDB + ZenFS and TropoDB do not differ that much. They are all close to a total amplification of 14 and 15. What is noticeable and a bit unexpected considering F2FS had less stable latency than ZenFS during the previous test, is that F2FS has the lowest amplification. It is not sure if this is because of buffering in F2FS or because some of its data is written to Optane. This requires further investigations.  For the test run, both ZenFS and TropoDB have not been able to reduce the I/O traffic. TropoDB can not claim that it has reduced the garbage collection effects in the form of write amplification. 
+
+In the overwrite benchmark, for all three candidates the write amplification increases. The difference between ZenFS and F2FS remains about the same, but the write amplification of TropoDB increases significantly. TropoDB only rewrites data when it is issued by the key-value store, which means that there is a device level write amplification of about 1. Nevertheless, the database design of TropoDB is issuing frequent appends because of flushes and compactions, causing high write amplification from the application. TropoDB uses a different compaction strategy and implementation than RocksDB, based on LevelDB, which is likely the cause of the issue. In order, to verify that this is the case, it is worthwhile to investigate either the same approach in RocksDB itself or by measuring the total number of compactions, flushes and their individual sizes. The second approach allows making an estimate of the application-level write amplification. Nevertheless, regardless of the reason why TropoDB has a higher write amplification than RocksDB, it has not been able to reach its goal to reduce write amplification of the garbage collector. Proper communication between storage and the key-value store is not the only contributor to write amplification and this result is able to highlight this issue. 
+
+
+
+\subsection{TropoDB Zone Reset Count}
+Measuring zone resets is more complicated than the other metrics. By default, there is no default tool to measure how many zones are reset. This metric is also not included in the S.M.A.R.T. log used to measure the number of written bytes. However, as both ZenFS and F2FS are used within kernel space (up to some regard), it is possible to trace the system calls for resets issued by the file systems. This is done with a custom BPFTrace command that tracks each reset and its location (the location of the zone). This script is started just before each benchmark and finished just after each benchmark. This allows tracing all reset calls that occurred during the tests. 
+This approach is not possible with SPDK as SPDK lives in user space. SPDK has added limited support for BPF, but this has not been used to measure resets for TropoDB. Instead, a similar approach is taken as we did to measure the number of bytes written for TropoDB. All resets are logged manually by the database. The results are returned to the callee of the benchmark after each test has been completed.
+
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_fillrandom.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_filloverwrite.svg}
+        \end{minipage}}
+    \caption{ Number of physical resets: Normalised over the number of stored key-value pairs }
+    \label{fig:resetsfillandoverwrite}
+\end{figure}
+
+The results of the tests can be seen in \autoref{fig:resetsfillandoverwrite} for fillrandom and filloverwrite. The x-axis represents the databases (configurations) and the y-axis the raw number of resets issued to the ZNS device during the entire workload. The results are similar to the write amplification results we saw earlier. Both RocksDB + ZenFS and TropoDB need more resets than F2FS for both workloads. TropoDB needs slightly fewer resets than RocksDB + ZenFS for the fillrandom workload, but significantly more than RocksDB + ZenFS for the filloverwrite workload. In short, F2FS needs the lowest number of resets to deal with the workloads presented in all cases.  To find the exact reason why F2FS needs the fewest resets, we need more in-depth investigations. In general, the reason why more resets are needed for TropoDB can be because of a number of reasons. For example, F2FS uses an active GC in the background, while both TropoDB and ZenFS do not postpone garbage collection, which can lead to more aggressive resets. It might, therefore, be that F2FS contains more zones that can be reset (and are thus invalid), but are not reset yet. Similarly, TropoDB has a different flush and compaction strategy. This can result in more or fewer compactions, bigger merges and in general very different behaviour. If more data becomes invalidated in this manner, it also inherently needs more resets. TropoDB never moves or invalidates data by an operation that is not part of the LSM-tree. Zones can only be invalidated by discarding WALs and compactions. So it is not likely that it is because of hot and cold separation or a storage design constraint. Lastly, in the conducted tests, F2FS stores its metadata in second device. This device is not accounted for in the tracing script. Therefore, not all deletes or overwrites issued by F2FS are also measured. The real number of resets needed by F2FS is likely to be higher than what is shown in the graph. 
+
+
+\subsection{TropoDB Heat Distribution}
+\label{sec:heatdist}
+As stated before, TropoDB logs both reset and append operation issued to zones. However, TropoDB also logs this data individually for each zone. This makes it possible to see the temperature of each individual zone and makes it possible to see if the heat of writes/resets is spread evenly. Similarly, the BPFTrace script used to log the resets for ZenFS and F2FS also logs the zones that are reset. This makes it possible to see where all resets happen for all database(s) (configurations). If resets only happen in a small number of zones, this can lead to a few zones burning faster than others and lead to a shorter SSD lifespan. It can also help to explain how each of the individual solutions does their garbage collection and in the case of TropoDB we can even see how each individual component spreads its heat.
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_fillrandom_tropodb.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_filloverwrite_tropodb.svg}
+        \end{minipage}}
+    \caption{ Distribution of zone resets for TropoDB }
+    \label{fig:resetdistrtropodb}
+\end{figure}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_fillrandom_f2fs.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_filloverwrite_f2fs.svg}
+        \end{minipage}}
+    \caption{ Distribution of zone resets for RocksDB + F2FS }
+    \label{fig:resetdistrrocksf2fs}
+\end{figure}
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_fillrandom_zenfs.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/resets_per_zone_filloverwrite_zenfs.svg}
+        \end{minipage}}
+    \caption{ Distribution of zone resets for RocksDB + ZenFS }
+    \label{fig:resetdistrrockszenfs}
+\end{figure}
+
+
+Therefore, we have also made plots of the heat distribution of resets during the fillrandom and filloverwrite benchmarks. The results for TropoDB are visible for fillrandom and filloverwrite in \autoref{fig:resetdistrtropodb}.  The results for F2FS and ZenFS can be seen in \autoref{fig:resetdistrrocksf2fs} and \autoref{fig:resetdistrrockszenfs} respectively. The x-axis represents all zones of the SSD as a flat sequential array and the y-axis represents the number of physical resets issued to each zone during the benchmarks. The results are insightful as they showcase that all three solutions use a different strategy for what zones to pick for new data and what zones to reset. 
+
+F2FS is able to spread its resets evenly across all zones and properly spreads the temperature of resets in this manner. This is true for both workloads. ZenFS does not evenly spread its workload and has issues that can be associated with zone burning. All zone resets happen in the first zones. This happends more in fillrandom than in filloverwrite. ZenFS is unable to properly spread the heat of its resets. This can be explained by the strategy used by ZenFS to reset zones and reserve zones for new files. It does not make use of active garbage collection. Active garbage collection is a separate process in the background that determines whether data should be moved to different zones or zones need to be reset. The opposite of active garbage collection, is only doing issuing garbage collection during other foreground/background operations.  ZenFS does not make use of such a process, instead it invalidates zones immediately that are invalidated and then reuses these zones when necessary. An LSM-tree will lead to frequent invalidations because of compactions. Old SSTable files will be invalidated and a new one will be generated. If the zone allocator used does not explicitly rotate the zones, results such as in \autoref{fig:resetdistrrockszenfs} can occur.
+
+TropoDB is able to spread its heat better than ZenFS, but less than F2FS. In the graph, we have explicitly marked where each component begins. For example, WALs begin at zone 4 and L0 begins at zone 164. Each component clearly has a different amount of resets needed for each zone. WALs need significantly more resets for each zone, even with the strategy of rotating the zones. It is presumed that if no such circulation was used, the peaks would have been higher. L0 also needs more resets than LN. However, both WALs and L0 spread their resets properly, which makes sense as they rotate the zones used (WAL manager's circulation scheme and circular buffer in L0). The load for WALs and L0 is similar for both fillrandom and filloverwrite. LN has more problems with spreading its assigned load. While LN does use all zones it can, some zones are reset more frequently than others. This moves from the first couple of LN zones in fillrandom to the last couple of LN zones in filloverwrite. It is suspected that LNs improper heat distribution is because of the zone allocation scheme used, the merging allocation scheme. The merging allocation scheme does not properly rotate and is likely to reuse a small set of zones more frequently. Another detail that is valuable to investigate is the lack of resets between approximately zone 150 till zone 750 for filloverwrite. Zones are only ever reset if they are invalidated, this makes it likely that the zones present in this range were not invalidated and thus not involved in garbage collection. This is only possible if these \textit{cold} SSTables are not stored together with \textit{warmer} SSTables, necessitating data movement. Such patterns are not observed in ZenFS and F2FS. This might mean that TropoDB has succeeded in separating cold LN tables from warmer tables, but this will need a more in-depth investigation to be sure. Without a more thorough analysis, we can not even exclude a large persistent leak, as unlikely as it may seem.        
+
+\subsection{Additional Experiments}
+We have done a few benchmarks to measure the effects on garbage collection, but there are still a lot of experiments that can be done. We will shortly name a few experiments that we consider to be important to get a bigger picture of the effect of garbage collection. 
+
+Firstly, it would have been a valuable experiment to see the results with a few different options. For all three tests conducted buffering for WALs is enabled and sync is disabled. These options do not guarantee high reliability in the key-value store itself. The inverse of these options should be tested to see the effects of garbage collection for use cases that require high reliability from the key-value store itself. Further on, we have tested with a fixed key and value size. We have seen multiple times that I/O size matters for performance (\autoref{sec:znsperf} and \autoref{sec:appends} for example), this should be tested for a full workload as well.
+
+Secondly, it is a good idea to measure and compare the number of flushes, compactions and the involved SSTables that occurred during the workloads. TropoDB and RocksDB use different strategies to determine when to flush and compact and what to flush or compact. This makes it non-trivial to determine if latency, write amplification or reset counts per key-value pair are because of these strategies or because of garbage collection. If we have a good overview of these strategies and how they behave for the workloads, it should be possible to see a relation between the two strategies and the measured effects.
+
+Thirdly, the designs should also be tested on different ZNS SSDs. The ZNS SSD used has a relatively large zone capacity of more than 1 GB. Some devices have only zone capacities of an MB. The resulting storage will behave very differently in such cases and the exact effect should be investigated. 
+
+\section{TropoDB L0 Circular Log Evaluation}
+\label{sec:evalL02}
+The circular log used in L0 comes with a few different options. As the circular log design for L0 is new, it is not yet known what the relation between these configurations and the garbage collection process is. In this section, this will be investigated. The tests run will be similar to the garbage collection tests in the previous section, but the tests will compare TropoDB configurations instead of TropoDB and RocksDB configurations. In particular, the effect of the reserved size for L0 will be observed. Other tests that could have been conducted and are insightful are the effect of the size SSTables in L0, the slowdown threshold of L0 (once more tables are stored than this, puts are stalled) and using fragmented logs in L0 instead of circular logs. 
+
+\subsection{Effect of Increasing the Size of the L0 Region}
+\label{sec:evalL0}
+The circular log of L0 reserves a fixed number of zones. This can be configured in TropoDB. The size determines the maximum amount of data that can be stored in the circular log of L0. The policy to compact from L0 to L1 is always set to be lower than this threshold to prevent having to wait for L0 compactions after L0 is filled. It is always set lower because setting the policy larger than the size of L0 will repeatedly get L0 back to the full state repeatedly after each flush, each time forcing a wait. However, this policy does not prevent L0 from filling up. In this case, L0 buffers extra SSTables for later. This can have various effects. Firstly, as the size of L0 increases, more SSTables are available to pick for merges. When more SSTables are considered for a merge (and picked for a merge), the amount of memory used for a compaction increases. When more SSTables are used for a compaction, this particular compaction will also take longer to complete. TropoDB does not allow for preemption, which results in other compactions waiting for this compaction to finish. Whether or not this is common and leads to issues, requires investigations. Secondly, once the log is full, more needs to be done to clean it. The exact effect such a situation has is not known yet.
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_fillrandom_tropodb_l01.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_filloverwrite_tropodb_l01.svg}
+        \end{minipage}}
+    \caption{ TropoDB with varying L0 size: Put operation tail latency }
+    \label{fig:l0reslat}
+\end{figure}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_fillrandom_tropoDB_L0.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_filloverwrite_tropoDB_L0.svg}
+        \end{minipage}}
+    \caption{ TropoDB with varying L0 size: Write amplification, measured as number of bytes written divided by the size of all stored key-value pairs  }
+    \label{fig:l0reswa}
+\end{figure}
+
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_fillrandom_tropoDB_L0.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_filloverwrite_tropoDB_L0.svg}
+        \end{minipage}}
+    \caption{ TropoDB with varying L0 size: Number of resets issued }
+    \label{fig:l0resres}
+\end{figure}
+
+The exact effects need to be investigated. Therefore, TropoDB is tested with a few different L0 sizes. In total three L0 sizes sizes are picked: 50 L0 zones, 100 L0 zones and 200 L0 zones. Apart from this, the exact same data base configuration is used for each candidate. They will also use the exact same workload. This is the same workload as used for the tests to retrieve tail latency: fillrandom followed by filloverwrite and then finished with readwhilewriting. Readwhilewriting is not shown, as it crashed (the same crash as described in \autoref{sec:glob}). The results for filloverwrite and fillrandom are visible in \autoref{fig:l0reslat} for tail latency, \autoref{fig:l0reswa} for write amplification and \autoref{fig:l0resres} for the number of resets normalised over the number of key-value pairs. What is noticeable in these results is that lowering the number of zones to 50 from the default 100, has a significant impact on the tail latency at 99\% (the same was witnessed for fillrandom and the test has been run multiple times to confirm). It is suspected that when the number of zones for L0 is increased, more SSTables can be stalled in L0 before they are compacted to L1, but this causes a larger compaction in the end. This is amplified by the issue of deletes in L0 that we mentioned earlier. The design has (un)intentionally created a delayed compaction, which is generally not a good idea to do in LSM-trees~\cite{balmau2019silk} as it does indeed cause latency spikes. The difference in tail latency between the fillrandom and filloverwrite workload is small.  The effects on write amplification and resets are less clear and we need more data to be sure what they exactly convey. Using 50 zones leads to higher write amplification and more resets for filloverwrite than using 100 zones in this case, but less than 200 zones. At the same time, using 50 zones leads to lower write amplification and requires fewer resets than using 100 zones for the fillrandom workload. A possible explanation for the difference is that when the size of L0 decreases, more compactions are required to occur from L0 to L1 (less space for stalling). When more compactions are reqquired, more data is merged repeatedly as well. It is only possible to stall a number overlapping SSTables on L0, which depends on the size of L0. However, as stated before to make a conclusion, more data will need to be retrieved. The relation to tail latency is clear on the other hand.
+
+\section{TropoDB Effect of Using Multiple L0 Circular Logs and WALs Concurrently}
+\label{sec:evalconc}
+In this section, we will evaluate the effects of the design proposed in \autoref{sec:desconc}. During implementing the design and testing its validity, a decrease in performance was measured for small testing benchmarks. This can be because of numerous reasons, but it is still valuable to get an idea of how this design exactly behaves for representative workloads and for larger I/O.  This makes it possible to see if there is a bigger underlying issue and what to avoid, or if the decrease performance is due to incorrect testing tools. Therefore, some tests were conducted with different levels of concurrency. Again the same tests were conducted as in \autoref{sec:glob}. The only difference is that the level of concurrency is altered for each test run in the configuration file. The following levels of concurrency were tested: 1,2 and 3. Each additional level of concurrency adds one WAL, one circular L0 log and one flush thread.
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_fillrandom_tropodb_concurrency2.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/latency_filloverwrite_tropodb_concurrency2.svg}
+        \end{minipage}}
+    \caption{ TropoDB with higher concurrency: Put operation tail latency }
+    \label{fig:concreslat}
+\end{figure}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_fillrandom_tropoDB_concurrency.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_writes_per_put_filloverwrite_tropoDB_concurrency.svg}
+        \end{minipage}}
+    \caption{ TropoDB with higher concurrency: Write amplification, measured as number of bytes written divided by the size of all stored key-value pairs  }
+    \label{fig:concreswa}
+\end{figure}
+
+\begin{figure}[!ht]
+    \hspace*{-0.075\textwidth} % < This is a hack?
+    \raggedleft
+    \subfloat[Workload fillrandom]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_fillrandom_tropoDB_concurrency.svg}
+        \end{minipage}}
+    \subfloat[Workload filloverwrite]{
+        \begin{minipage}[c]{0.55\textwidth}
+          \raggedleft
+          \includesvg[width=1\linewidth]{graphs/barplot_resets_per_put_filloverwrite_tropoDB_concurrency.svg}
+        \end{minipage}}
+    \caption{ TropoDB with higher concurrency: Number of resets issued }
+    \label{fig:concresres}
+\end{figure}
+
+
+We only have results for the levels of concurrency of 1 and 2, as the test case with a concurrency level of 3 has failed. This is likely because of an error in the implementation of the thread model of concurrent flushes. The results are visible in \autoref{fig:concreslat} for tail latency, \autoref{fig:concreswa} for write amplification and \autoref{fig:concresres} for total number of resets issued. The x-axis of the write amplification- and reset graphs shows the concurrency level. Each concurrency level adds a WAL manager, L0 log and flush thread. What is noticeable in the resulting graphs, is that the implementation of higher concurrency has decreased performance in all aspects. Parallelism does not decrease latency or stabilise latency. Similarly, write amplification and the number of resets are higher when concurrency is increased. This is true for both workloads, except for a lower write amplification with a concurrency level of 2 during the fillrandom workload.
+
+To get more insights into the behaviour of the concurrent implementation, we decided to inspect the results of one of the workloads in more detail. A closer inspection of the number of bytes written for each component during the filloverwrite workload showed that the number of bytes written to the WALs is identical, which is as expected. The number of writes written to L0 is a little bit bigger, but the number of bytes written to LN is close to 4\% more. It also shows a large increase in compactions from L1 to LN onwards. There are more SSTables in level 2 and level 3. This can happen if fewer compactions have interfered with compactions from L0 to L1 and as a result, more compactions could have been completed. The increased number of compactions is also assumed to be the reason for the small increase in latency. The exact reason for the increase in compactions is unknown, but it is likely to be related to the new characteristics of L0. There are now two smaller L0 logs and we already know that the size of L0 has a big effect on write amplification and resets, which we saw in the L0 size experiment (see \autoref{sec:evalL0}). However, as no gains are achieved in any way, it is likely that the proposed concurrency design is not ideal and needs significant alterations to be so. Yet, as the number of tests conducted to measure performance differences for higher concurrency levels is limited, we need more tests to be absolutely certain. 
+
+\section{Summary}
+We have evaluated TropoDB in this chapter. In particular we have evaluated performance of ZNS with SPDK, evaluated garbage collection effects of TropoDB as a whole and looked at garbage collection effects of individual TropoDB components.
+
+The evaluations for the performance of ZNS with SPDK, showcase various details about ZNS performance. For the device investigated, the latency and throughput of I/O operations depend on the operation issued and the two metrics are related. I/O operations with higher throughput are also able to achieve lower latencies. The I/O operations achieve in order of latency and throughput: resets, appends, writes, random reads, sequential reads. Notably, we have also shown that striping writes across zones achieves higher througput and lower latency than issuing multiple appends asynchronously to the same zone.
+
+The garbage collection effect evaluations show that RocksDB + ZenFS is able to achieve the lowest tail latencies for all workloads tested and is able to achieve stable latency. This is true for write-heavy workloads, overwrite-heavy workloads and workloads performing writes and reads concurrently. RocksDB + F2FS and TropoDB are not able to achieve low tail latencies stable latencies like ZenFS, but the two solutions are shown to achieve comparable results. Write amplification and the number of resets issued during workloads are also shown to be correlated. When one of the two increases, so does the other metric. RocksDB + F2FS is able to achieve the lowest write amplification and require the lowest number of resets. This is followed by RocksDB + ZenFS and RocksDB + ZenFS is followed by TropoDB. Lastly, we took a look at the distribution of resets across zones. RocksDB + F2FS is able to distribute its heat evenly across all zones. TropoDB has some peaks and is not able to achieve the same stability. RocksDB + ZenFS is able to achieve worst in this regard and only issues resets to a couple of zones, leading to zone burning.
+
+The evaluations for the WAL component are also fundamental. The performance of WALs is shown to match the performance of ZNS with SPDK, both for ordered and unordered WALs. Unordered WALs with higher queue depths for appends also match the performance of appends with higher queue depths. The recovery cost in latency of unordered WALs is shown to be more than the recovery cost of ordered appends and lies between 5 and 15\%.  
+
+Lastly, we evaluated the impact of the size of the circular log in L0 and the impact of increasing concurrency in TropoDB. Altering the size of the circular log in L0 has mixed results. Using a large size for the circular log can result in higher tail latencies. However, both increasing and decreasing the circular log can lead to higher write amplification and more resets. Increasing the concurrency in TropoDB also leads to mixed results. Increasing concurrency leads to higher tail latencies and average latencies. Similarly, it can both lead to higher write amplification and more resets, but the contrary is also possible. No clear relation between higher concurrency and write amplifications/resets has been discovered. 
