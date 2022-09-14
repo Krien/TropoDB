@@ -166,7 +166,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
   }
-  return FromStatus(log_.Reset(ptrs));
+  return FromStatus(log_.Reset(ptrs, 1));
 }
 
 Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
