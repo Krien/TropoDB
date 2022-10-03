@@ -40,7 +40,6 @@ The project exists out of two subprojects, both are available in `implementation
 
 ```bash
 git submodule update --init --recursive # Retrieve SZD, SPDK and DPDK
-cp -r ./dependencies/SimpleZNSDevice ./implementation/rocksdb/third-party
 cd  implementation/rocksdb
 pushd .
 cd third-party/SimpleZNSDevice/dependencies/spdk
