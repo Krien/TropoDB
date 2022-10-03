@@ -1,3 +1,0 @@
-[submodule "dependencies/SimpleZNSDevice"]
-	path = dependencies/SimpleZNSDevice
-	url = https://github.com/Krien/SimpleZNSDevice
