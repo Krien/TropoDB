@@ -1,0 +1,3 @@
+[submodule "implementation/rocksdb/third-party/SimpleZNSDevice"]
+	path = implementation/rocksdb/third-party/SimpleZNSDevice
+	url = https://github.com/Krien/SimpleZNSDevice
