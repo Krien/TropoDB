@@ -76,7 +76,7 @@ if(WITH_WINDOWS_UTF8_FILENAMES)
   add_definitions(-DROCKSDB_WINDOWS_UTF8_FILENAMES)
 endif()
 
-option(ZNS_PLUGIN "allow the ZNS pluging" ON)
+option(ZNS_PLUGIN "allow the ZNS plugin" ON)
 
 if(ZNS_PLUGIN)
   add_definitions(-DZNS_PLUGIN_ENABLED)
