@@ -95,133 +95,6 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
   env_->SetBackgroundThreads(5, ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
-static void PrintIOColumn(const ZNSDiagnostics& diag) {
-  std::cout << std::left << std::setw(10) << diag.name_ << std::right
-            << std::setw(15) << diag.append_operations_counter_ << std::setw(25)
-            << diag.bytes_written_ << std::setw(15)
-            << diag.read_operations_counter_ << std::setw(25)
-            << diag.bytes_read_ << std::setw(16) << diag.zones_erased_counter_
-            << "\n";
-}
-
-static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
-                                   std::ostringstream& erased,
-                                   std::ostringstream& append) {
-  for (uint64_t r : diag.zones_erased_) {
-    erased << r << ",";
-  }
-  for (uint64_t a : diag.append_operations_) {
-    append << a << ",";
-  }
-}
-
-static void PrintCounter(std::string name, const TimingCounter& counter) {
-  std::cout << std::left << std::setw(20) << name << std::right 
-     << std::setw(15)  << "total (ops)" << std::setw(15) << counter.GetNum() 
-     << std::setw(15)  << " avg (micros)" << std::setw(15) << counter.GetAvg() 
-     << std::setw(15)  << " StdDev (micros)" << std::setw(15) << counter.GetStandardDeviation()
-     << "\n";
-}
-
-void DBImplZNS::IODiagnostics() {
-  std::cout << "==== Summary ====\n";
-  std::cout << "Background operations: \n";
-  std::cout << "\tFlush count:\n\t\t" << flush_total_counter_.GetNum() << "\n";
-  std::cout << "\tCompaction count:\n";
-  for (uint8_t level = 0; level < ZnsConfig::level_count - 1; level++) {
-    std::cout << "\t\tCompaction to " << (level + 1) << ":" << compactions_[level] << "\n";
-  }
-
-  std::cout << "\tFlushes latency breakdown:\n";
-  PrintCounter("\t -Total", flush_total_counter_);
-  PrintCounter("\t -Writing L0", flush_flush_memtable_counter_);
-  PrintCounter("\t -Updating Version", flush_update_version_counter_);
-  PrintCounter("\t -Resetting WALs", flush_reset_wal_counter_);
-
-  std::cout << "\tL0 compaction latency breakdown:\n";
-  PrintCounter("\t -Total", compaction_compaction_L0_total_);
-  PrintCounter("\t -Picking SSTables", compaction_pick_compaction_);
-  PrintCounter("\t -Writing LN", compaction_compaction_);
-  PrintCounter("\t -Copying L0", compaction_compaction_trivial_);
-  PrintCounter("\t -Updating version", compaction_version_edit_);
-  PrintCounter("\t -Resetting L0", compaction_reset_L0_counter_);
-
-  std::cout << "\tLN compaction latency breakdown:\n";
-  PrintCounter("\t -Total", compaction_compaction_LN_total_);
-  PrintCounter("\t -Picking SSTables", compaction_pick_compaction_LN_);
-  PrintCounter("\t -Writing LN", compaction_compaction_LN_);
-  PrintCounter("\t -Copying LN", compaction_compaction_trivial_LN_);
-  PrintCounter("\t -Updating version", compaction_version_edit_LN_);
-  PrintCounter("\t -Resetting LN", compaction_reset_LN_counter_);
-  
-  std::cout << "SSTable layout: \n";
-  std::cout << versions_->DebugString();
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-    wal_man_[i]->PrintAdditionalWALStatistics();
-  }
-  std::cout << "==== raw IO metrics ==== \n";
-  std::cout << std::left << std::setw(10) << "Metric " << std::right
-            << std::setw(15) << "Append (ops)" << std::setw(25)
-            << "Written (Bytes)" << std::setw(15) << "Read (ops)"
-            << std::setw(25) << "Read (Bytes)" << std::setw(16)
-            << "Reset (zones)"
-            << "\n";
-  std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
-  struct ZNSDiagnostics totaldiag = {.name_ = "Total",
-                                     .bytes_written_ = 0,
-                                     .append_operations_counter_ = 0,
-                                     .bytes_read_ = 0,
-                                     .read_operations_counter_ = 0,
-                                     .zones_erased_counter_ = 0};
-  std::ostringstream hotzones_reset;
-  std::ostringstream hotzones_append;
-  hotzones_reset << "[";
-  hotzones_append << "[";
-  {
-    ZNSDiagnostics diag = manifest_->IODiagnostics();
-    PrintIOColumn(diag);
-    totaldiag.bytes_written_ += diag.bytes_written_;
-    totaldiag.append_operations_counter_ += diag.append_operations_counter_;
-    totaldiag.bytes_read_ += diag.bytes_read_;
-    totaldiag.read_operations_counter_ += diag.read_operations_counter_;
-    totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
-    AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
-  }
-  {
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-      std::vector<ZNSDiagnostics> diags = wal_man_[i]->IODiagnostics();
-      for (auto& diag : diags) {
-        diag.name_ += i;
-        PrintIOColumn(diag);
-        totaldiag.bytes_written_ += diag.bytes_written_;
-        totaldiag.append_operations_counter_ += diag.append_operations_counter_;
-        totaldiag.bytes_read_ += diag.bytes_read_;
-        totaldiag.read_operations_counter_ += diag.read_operations_counter_;
-        totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
-        AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
-      }
-    }
-  }
-  {
-    std::vector<ZNSDiagnostics> diags = ss_manager_->IODiagnostics();
-    for (auto& diag : diags) {
-      PrintIOColumn(diag);
-      totaldiag.bytes_written_ += diag.bytes_written_;
-      totaldiag.append_operations_counter_ += diag.append_operations_counter_;
-      totaldiag.bytes_read_ += diag.bytes_read_;
-      totaldiag.read_operations_counter_ += diag.read_operations_counter_;
-      totaldiag.zones_erased_counter_ += diag.zones_erased_counter_;
-      AddToJSONHotZoneStream(diag, hotzones_reset, hotzones_append);
-    }
-  }
-  PrintIOColumn(totaldiag);
-  std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
-  std::cout << "Hot zones as a raw list"
-            << "\n";
-  std::cout << hotzones_reset.str() << "]\n";
-  std::cout << hotzones_append.str() << "]\n";
-}
-
 DBImplZNS::~DBImplZNS() {
   printf("Shutdown \n");
   mutex_.Lock();
@@ -246,7 +119,7 @@ DBImplZNS::~DBImplZNS() {
   }
   mutex_.Unlock();
 
-  IODiagnostics();
+  PrintStats();
 
   if (versions_ != nullptr) delete versions_;
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {

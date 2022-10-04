@@ -1136,6 +1136,7 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/index/zns_compaction.cc
   db/zns_impl/db_impl_zns.cc
   db/zns_impl/db_impl_zns_background.cc
+  db/zns_impl/db_impl_zns_diagnostics.cc
   db/zns_impl/db_impl_zns_not_supported.cc
 )
 

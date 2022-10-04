@@ -38,12 +38,12 @@ struct TimingCounter {
     return num_;
   }
 
-  uint64_t GetMin() const {
-    return min_;
+  double GetMin() const {
+    return min_ == std::numeric_limits<uint64_t>::max() ? -1. : static_cast<double>(min_);
   }
 
-  uint64_t GetMax() const {
-    return max_;
+  double GetMax() const {
+    return max_ == 0 ? -1. : static_cast<double>(max_);
   }
 
   double GetAvg() const {

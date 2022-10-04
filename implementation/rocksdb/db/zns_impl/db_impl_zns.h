@@ -76,7 +76,7 @@ class DBImplZNS : public DB {
   DBImplZNS(const DBImplZNS&) = delete;
   DBImplZNS& operator=(const DBImplZNS&) = delete;
 
-  void IODiagnostics();
+  void PrintStats();
   ~DBImplZNS() override;
 
   static Status ValidateOptions(const DBOptions& db_options);
@@ -336,6 +336,11 @@ class DBImplZNS : public DB {
 
   WriteBatch* BuildBatchGroup(Writer** last_writer, uint8_t parallel_number);
 
+  void PrintCompactionStats();
+  void PrintSSTableStats();
+  void PrintWALStats();
+  void PrintIODistrStats();
+
   // Should remain constant after construction
   const DBOptions options_;
   const std::string name_;
@@ -380,6 +385,11 @@ class DBImplZNS : public DB {
 
   // diagnostics
   SystemClock* const clock_;
+  bool print_compaction_stats_{true};
+  bool print_ss_stats_{false};
+  bool print_wal_stats_{false};
+  bool print_io_stats_{false};
+  bool print_io_heat_stats_{false};
   // diag flush
   TimingCounter flush_total_counter_;
   TimingCounter flush_flush_memtable_counter_;
@@ -399,7 +409,6 @@ class DBImplZNS : public DB {
   TimingCounter compaction_compaction_LN_;
   TimingCounter compaction_compaction_trivial_LN_;
   TimingCounter compaction_version_edit_LN_;
-
 };
 
 struct FlushData {
