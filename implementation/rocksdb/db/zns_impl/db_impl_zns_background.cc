@@ -78,7 +78,9 @@ void DBImplZNS::BackgroundFlushCall(uint8_t parallel_number) {
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
+    uint64_t before = clock_->NowMicros();
     BackgroundFlush(parallel_number);
+    flush_total_counter_.AddTiming(clock_->NowMicros() - before);
   }
   bg_flush_scheduled_[parallel_number] = false;
   forced_schedule_ = false;
@@ -106,7 +108,9 @@ void DBImplZNS::BackgroundFlush(uint8_t parallel_number) {
   }
   if (!wal_man_[parallel_number]->WALAvailable()) {
     // printf(" Trying to free WALS...\n");
+    uint64_t before = clock_->NowMicros();
     s = wal_man_[parallel_number]->ResetOldWALs(&mutex_);
+    flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
     return;
   }
 }
@@ -132,10 +136,13 @@ Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
     std::vector<SSZoneMetaData> metas;
     // ZnsVersion* current = versions_->current();
     // current->Ref();
+    uint64_t before = clock_->NowMicros();
     mutex_.Unlock();
     s = FlushL0SSTables(metas, parallel_number);
     mutex_.Lock();
+    flush_flush_memtable_counter_.AddTiming(clock_->NowMicros() - before);
     // current->Unref();
+    before = clock_->NowMicros();
     uint64_t l0_number = versions_->NewSSNumberL0();
     int level = 0;
     if (s.ok() && metas.size() > 0) {
@@ -152,8 +159,11 @@ Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
     }
     imm_[parallel_number]->Unref();
     imm_[parallel_number] = nullptr;
+    flush_update_version_counter_.AddTiming(clock_->NowMicros() - before);
     // wal
+    before = clock_->NowMicros();
     s = wal_man_[parallel_number]->ResetOldWALs(&mutex_);
+    flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) return s;
     printf("Flushed memtable!!\n");
   }
@@ -164,7 +174,6 @@ Status DBImplZNS::FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
                                   uint8_t parallel_number) {
   Status s;
   s = ss_manager_->FlushMemTable(imm_[parallel_number], metas, parallel_number);
-  flushes_++;
   return s;
 }
 
@@ -194,7 +203,9 @@ void DBImplZNS::BackgroundCompactionL0Call() {
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
+    uint64_t before = clock_->NowMicros();
     BackgroundCompactionL0();
+    compaction_compaction_L0_total_.AddTiming(clock_->NowMicros() - before);
   }
   bg_compaction_l0_scheduled_ = false;
   // cascading, but shutdown if ordered
@@ -221,12 +232,15 @@ void DBImplZNS::BackgroundCompactionL0() {
     return;
   }
   ZnsVersionEdit edit;
+  uint64_t before;
   // This happens when a lot of readers interfere
   if (versions_->OnlyNeedDeletes(0)) {
     current->Ref();
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
+    before = clock_->NowMicros();
     s = RemoveObsoleteZonesL0();
+    compaction_reset_L0_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
       printf("ERROR during reclaiming!!!\n");
     }
@@ -234,6 +248,7 @@ void DBImplZNS::BackgroundCompactionL0() {
     current->Unref();
     return;
   } else {
+    before = clock_->NowMicros();
     ZnsCompaction* c = versions_->PickCompaction(0, reserved_comp_[1]);
     // Can not do this compaction
     while (reserve_claimed_ == 1 ||
@@ -248,13 +263,16 @@ void DBImplZNS::BackgroundCompactionL0() {
     }
     reserve_claimed_ = reserve_claimed_ == 0 ? -1 : reserve_claimed_;
     c->GetCompactionTargets(&reserved_comp_[0]);
+    compaction_pick_compaction_.AddTiming(clock_->NowMicros() - before);
     current->Ref();
+    before = clock_->NowMicros();
+    bool trivial = c->IsTrivialMove();
     mutex_.Unlock();
     printf("  Compact L0...\n");
     // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
     // printf("marked reusable\n");
-    if (c->IsTrivialMove()) {
+    if (trivial) {
       printf("starting trivial move L0\n");
       s = c->DoTrivialMove(&edit);
       printf("\t\ttrivial move L0\n");
@@ -267,6 +285,11 @@ void DBImplZNS::BackgroundCompactionL0() {
     // for the rest of this session.
     delete c;
     mutex_.Lock();
+    if (trivial) {
+      compaction_compaction_trivial_.AddTiming(clock_->NowMicros() - before);
+    } else {
+      compaction_compaction_.AddTiming(clock_->NowMicros() - before);
+    }
     current->Unref();
   }
   if (!s.ok()) {
@@ -277,12 +300,16 @@ void DBImplZNS::BackgroundCompactionL0() {
   compactions_[0]++;
   // current->Unref();
   // printf("Removing cache \n");
+  before = clock_->NowMicros();
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
+  compaction_version_edit_.AddTiming(clock_->NowMicros() - before);
   reserved_comp_[0].clear();
   // printf("Applied change \n");
   mutex_.Unlock();
   mutex_.Lock();
+  before = clock_->NowMicros();
   s = s.ok() ? RemoveObsoleteZonesL0() : s;
+  compaction_reset_L0_counter_.AddTiming(clock_->NowMicros() - before);
   // printf("Removed obsolete zones \n");
   mutex_.Unlock();
   mutex_.Lock();
@@ -319,7 +346,9 @@ void DBImplZNS::BackgroundCompactionCall() {
   if (!bg_error_.ok()) {
   } else {
     // printf("starting background work\n");
+    uint64_t before = clock_->NowMicros();
     BackgroundCompaction();
+    compaction_compaction_LN_total_.AddTiming(clock_->NowMicros() - before);
   }
   bg_compaction_scheduled_ = false;
   forced_schedule_ = false;
@@ -346,11 +375,14 @@ void DBImplZNS::BackgroundCompaction() {
     return;
   }
   ZnsVersionEdit edit;
+  uint64_t before;
   // This happens when a lot of readers interfere
   if (versions_->OnlyNeedDeletes(current->CompactionLevel())) {
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
+    before = clock_->NowMicros();
     s = RemoveObsoleteZonesLN();
+    compaction_reset_LN_counter_.AddTiming(clock_->NowMicros() - before);
     versions_->RecalculateScore();
     if (!s.ok()) {
       printf("ERROR during reclaiming!!!\n");
@@ -358,6 +390,7 @@ void DBImplZNS::BackgroundCompaction() {
     // printf("Only reclaimed\n");
     return;
   } else {
+    before = clock_->NowMicros();
     ZnsCompaction* c = versions_->PickCompaction(current->CompactionLevel(),
                                                  reserved_comp_[0]);
     while (reserve_claimed_ == 0 ||
@@ -373,12 +406,15 @@ void DBImplZNS::BackgroundCompaction() {
     }
     reserve_claimed_ = reserve_claimed_ == 1 ? -1 : reserve_claimed_;
     c->GetCompactionTargets(&reserved_comp_[1]);
+    compaction_pick_compaction_LN_.AddTiming(clock_->NowMicros() - before);
     current->Ref();
+    bool istrivial = c->IsTrivialMove();
+    before = clock_->NowMicros();
     mutex_.Unlock();
     printf("  Compact LN...\n");
     // printf("Picked compact\n");
     c->MarkStaleTargetsReusable(&edit);
-    if (c->IsTrivialMove()) {
+    if (istrivial) {
       // printf("starting trivial move\n");
       s = c->DoTrivialMove(&edit);
       // printf("\t\ttrivial move\n");
@@ -391,6 +427,11 @@ void DBImplZNS::BackgroundCompaction() {
     // for the rest of this session.
     delete c;
     mutex_.Lock();
+    if (istrivial) {
+      compaction_compaction_trivial_LN_.AddTiming(clock_->NowMicros() - before);
+    } else {
+      compaction_compaction_LN_.AddTiming(clock_->NowMicros() - before);
+    }
     current->Unref();
   }
   if (!s.ok()) {
@@ -401,12 +442,16 @@ void DBImplZNS::BackgroundCompaction() {
   compactions_[current->CompactionLevel()]++;
   // current->Unref();
   // printf("Removing cache \n");
+  before = clock_->NowMicros();
   s = s.ok() ? versions_->LogAndApply(&edit) : s;
+  compaction_version_edit_LN_.AddTiming(clock_->NowMicros() - before);
   reserved_comp_[1].clear();
   // printf("Applied change \n");
   mutex_.Unlock();
   mutex_.Lock();
+  before = clock_->NowMicros();
   s = s.ok() ? RemoveObsoleteZonesLN() : s;
+  compaction_reset_LN_counter_.AddTiming(clock_->NowMicros() - before);
   // printf("Removed obsolete zones \n");
   mutex_.Unlock();
   mutex_.Lock();

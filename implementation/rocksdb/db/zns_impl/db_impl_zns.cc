@@ -77,7 +77,8 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       bg_error_(Status::OK()),
       forced_schedule_(false),
       // diag
-      flushes_(0) {
+      clock_(SystemClock::Default().get())
+      {
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     wal_man_[i] = nullptr;
     wal_[i] = nullptr;
@@ -114,14 +115,45 @@ static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
   }
 }
 
+static void PrintCounter(std::string name, const TimingCounter& counter) {
+  std::cout << std::left << std::setw(20) << name << std::right 
+     << std::setw(15)  << "total (ops)" << std::setw(15) << counter.GetNum() 
+     << std::setw(15)  << " avg (micros)" << std::setw(15) << counter.GetAvg() 
+     << std::setw(15)  << " StdDev (micros)" << std::setw(15) << counter.GetStandardDeviation()
+     << "\n";
+}
+
 void DBImplZNS::IODiagnostics() {
   std::cout << "==== Summary ====\n";
   std::cout << "Background operations: \n";
-  std::cout << "\tFlushes:" << flushes_ << "\n";
+  std::cout << "\tFlush count:\n\t\t" << flush_total_counter_.GetNum() << "\n";
+  std::cout << "\tCompaction count:\n";
   for (uint8_t level = 0; level < ZnsConfig::level_count - 1; level++) {
-    std::cout << "\tCompaction to " << (level + 1) << ":" << compactions_[level]
-              << "\n";
+    std::cout << "\t\tCompaction to " << (level + 1) << ":" << compactions_[level] << "\n";
   }
+
+  std::cout << "\tFlushes latency breakdown:\n";
+  PrintCounter("\t -Total", flush_total_counter_);
+  PrintCounter("\t -Writing L0", flush_flush_memtable_counter_);
+  PrintCounter("\t -Updating Version", flush_update_version_counter_);
+  PrintCounter("\t -Resetting WALs", flush_reset_wal_counter_);
+
+  std::cout << "\tL0 compaction latency breakdown:\n";
+  PrintCounter("\t -Total", compaction_compaction_L0_total_);
+  PrintCounter("\t -Picking SSTables", compaction_pick_compaction_);
+  PrintCounter("\t -Writing LN", compaction_compaction_);
+  PrintCounter("\t -Copying L0", compaction_compaction_trivial_);
+  PrintCounter("\t -Updating version", compaction_version_edit_);
+  PrintCounter("\t -Resetting L0", compaction_reset_L0_counter_);
+
+  std::cout << "\tLN compaction latency breakdown:\n";
+  PrintCounter("\t -Total", compaction_compaction_LN_total_);
+  PrintCounter("\t -Picking SSTables", compaction_pick_compaction_LN_);
+  PrintCounter("\t -Writing LN", compaction_compaction_LN_);
+  PrintCounter("\t -Copying LN", compaction_compaction_trivial_LN_);
+  PrintCounter("\t -Updating version", compaction_version_edit_LN_);
+  PrintCounter("\t -Resetting LN", compaction_reset_LN_counter_);
+  
   std::cout << "SSTable layout: \n";
   std::cout << versions_->DebugString();
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {

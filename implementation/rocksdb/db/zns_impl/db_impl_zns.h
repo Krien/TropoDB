@@ -379,8 +379,27 @@ class DBImplZNS : public DB {
   std::array<size_t, ZnsConfig::lower_concurrency> wal_reserved_;
 
   // diagnostics
-  uint64_t flushes_;
+  SystemClock* const clock_;
+  // diag flush
+  TimingCounter flush_total_counter_;
+  TimingCounter flush_flush_memtable_counter_;
+  TimingCounter flush_update_version_counter_;
+  TimingCounter flush_reset_wal_counter_;
+  // diag compaction
   std::array<uint64_t, ZnsConfig::level_count - 1> compactions_;
+  TimingCounter compaction_compaction_L0_total_;
+  TimingCounter compaction_reset_L0_counter_;
+  TimingCounter compaction_pick_compaction_;
+  TimingCounter compaction_compaction_;
+  TimingCounter compaction_compaction_trivial_;
+  TimingCounter compaction_version_edit_;
+  TimingCounter compaction_compaction_LN_total_;
+  TimingCounter compaction_reset_LN_counter_;
+  TimingCounter compaction_pick_compaction_LN_;
+  TimingCounter compaction_compaction_LN_;
+  TimingCounter compaction_compaction_trivial_LN_;
+  TimingCounter compaction_version_edit_LN_;
+
 };
 
 struct FlushData {
