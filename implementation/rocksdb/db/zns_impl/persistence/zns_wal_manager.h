@@ -33,7 +33,7 @@ class ZnsWALManager : public RefCounter {
   Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
 
   std::vector<ZNSDiagnostics> IODiagnostics();
-  void PrintAdditionalWALStatistics();
+  std::vector<std::pair<std::string, const TimingCounter>> GetAdditionalWALStatistics();
 
  private:
   std::array<ZNSWAL*, N> wals_;

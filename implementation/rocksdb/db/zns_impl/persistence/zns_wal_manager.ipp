@@ -275,79 +275,29 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
 }
 
 template <std::size_t N>
-void ZnsWALManager<N>::PrintAdditionalWALStatistics() {
-  uint64_t time_waiting_storage = 0;
-  uint64_t time_waiting_storage_squared = 0;
-  uint64_t time_waiting_storage_total = 0;
-  uint64_t time_waiting_storage_squared_total = 0;
-  uint64_t time_waiting_storage_number = 0;
-  uint64_t time_waiting_storage_number_total = 0;
-  uint64_t time_spent_replaying = 0;
-  uint64_t time_spend_recovering = 0;
-  uint64_t time_waiting_resets = 0;
-  uint64_t time_waiting_resets_numbers = 0;
-  uint64_t time_waiting_resets_squares = 0;
+std::vector<std::pair<std::string, const TimingCounter>> ZnsWALManager<N>::GetAdditionalWALStatistics() {
+  TimingCounter storage_append_perf_counter;
+  TimingCounter total_append_perf_counter;
+  TimingCounter replay_perf_counter;
+  TimingCounter recovery_perf_counter;
+  TimingCounter reset_perf_counter;
 
+  // Merge the perf counters (this is safe)
   for (size_t i = 0; i < N; i++) {
-    time_waiting_storage += wals_[i]->TimeSpendWaitingOnStorage();
-    time_waiting_storage_squared +=
-        wals_[i]->TimeSpendWaitingOnStorageSquared();
-    time_waiting_storage_total += wals_[i]->TimeSpendWaitingOnStorageTotal();
-    time_waiting_storage_squared_total +=
-        wals_[i]->TimeSpendWaitingOnStorageSquaredTotal();
-    time_waiting_storage_number += wals_[i]->TimeSpendWaitingOnStorageNumber();
-    time_waiting_storage_number_total +=
-        wals_[i]->TimeSpendWaitingOnStorageNumberTotal();
-    time_spent_replaying += wals_[i]->TimeSpendReplaying();
-    time_spend_recovering += wals_[i]->TimeSpendRecovering();
-    time_waiting_resets += wals_[i]->TimeSpendWaitingOnResets();
-    time_waiting_resets_numbers += wals_[i]->TimeSpendWaitingOnResetsNumber();
-    time_waiting_resets_squares += wals_[i]->TimeSpendWaitingOnResetsSquared();
+    storage_append_perf_counter += wals_[i]->GetStorageAppendPerfCounter();
+    total_append_perf_counter += wals_[i]->GetTotalAppendPerfCounter();
+    replay_perf_counter += wals_[i]->GetReplayPerfCounter();
+    recovery_perf_counter += wals_[i]->GetRecoveryPerfCounter();
+    reset_perf_counter += wals_[i]->GetResetPerfCounter();
   }
-  double avg = static_cast<double>(time_waiting_storage) /
-               static_cast<double>(time_waiting_storage_number);
-  double variance =
-      std::sqrt(static_cast<double>(
-                    time_waiting_storage_squared * time_waiting_storage_number -
-                    time_waiting_storage * time_waiting_storage) /
-                static_cast<double>(time_waiting_storage_number *
-                                    time_waiting_storage_number));
-  printf("WAL statistics: \n");
-  printf(
-      "\tWAL operations on storage: %lu, AVG time (μs): %.4f, StdDev (μs): "
-      "%.2f \n",
-      time_waiting_storage_number, avg, variance);
 
-  avg = static_cast<double>(time_waiting_storage_total) /
-        static_cast<double>(time_waiting_storage_number_total);
-  variance =
-      std::sqrt(static_cast<double>(time_waiting_storage_squared_total *
-                                        time_waiting_storage_number_total -
-                                    time_waiting_storage_total *
-                                        time_waiting_storage_total) /
-                static_cast<double>(time_waiting_storage_number_total *
-                                    time_waiting_storage_number_total));
-  printf(
-      "\tWAL operations total: %lu, AVG time (μs) %.4f, StdDev (μs): %.2f \n",
-      time_waiting_storage_number_total, avg, variance);
-
-  avg = static_cast<double>(time_waiting_resets) /
-        static_cast<double>(time_waiting_resets_numbers);
-  variance =
-      std::sqrt(static_cast<double>(time_waiting_resets_squares *
-                                        time_waiting_resets_numbers -
-                                    time_waiting_resets * time_waiting_resets) /
-                static_cast<double>(time_waiting_resets_numbers *
-                                    time_waiting_resets_numbers));
-  printf(
-      "\tWAL reset operations total: %lu, AVG time (μs) %.4f, StdDev (μs): "
-      "%.2f \n",
-      time_waiting_resets_numbers, avg, variance);
-
-  printf(
-      "\tWAL time spent on replaying (μs): %lu, recovering zone heads (μs): "
-      "%lu \n",
-      time_spent_replaying, time_spend_recovering);
+  return {
+    {"WAL Appends", total_append_perf_counter}
+    ,{"SZD Appends", storage_append_perf_counter}
+    ,{"Replays", replay_perf_counter}
+    ,{"Resets", reset_perf_counter}
+    ,{"Recovery", recovery_perf_counter}
+  };
 }
 
 }  // namespace ROCKSDB_NAMESPACE

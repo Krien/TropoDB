@@ -108,11 +108,7 @@ Status ZNSWAL::DirectAppend(const Slice& data) {
   uint64_t before = clock_->NowMicros();
   Status s =
       FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
-  uint64_t value = clock_->NowMicros() - before;
-  num_ += 1;
-  sum_ += value;
-  sum_squares_ += value * value;
-  // printf("VAL %lu \n", value);
+  storage_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
@@ -149,10 +145,7 @@ Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
   }
 #endif
   delete[] out;
-  uint64_t value = clock_->NowMicros() - before;
-  num_total_ += 1;
-  sum_total_ += value;
-  sum_squares_total_ += value * value;
+  total_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
@@ -287,15 +280,37 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
 }
 #endif
 
+Status ZNSWAL::Reset() {
+  uint64_t before = clock_->NowMicros();
+  Status s = FromStatus(log_.ResetAll());
+#ifdef WAL_UNORDERED
+  sequence_nr_ = 0;
+#endif
+  reset_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  return s;
+}
+
+Status ZNSWAL::Recover() {
+  uint64_t before = clock_->NowMicros();
+  Status s = FromStatus(log_.RecoverPointers());
+  recovery_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  return s;
+}
+
 Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   Status s = Status::OK();
+  // This check is also done in both replays, but ensures we do NOT measure it
+  // for perf!!
+  if (log_.Empty()) {
+    return s;
+  }
   uint64_t before = clock_->NowMicros();
 #ifdef WAL_UNORDERED
   s = ReplayUnordered(mem, seq);
 #else
   s = ReplayOrdered(mem, seq);
 #endif
-  replay_time_ = clock_->NowMicros() - before;
+  replay_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
@@ -304,132 +319,4 @@ Status ZNSWAL::Close() {
   s = MarkInactive();
   return s;
 }
-
-// Status ZNSWAL::ObsoleteDirectAppend(const Slice& data) {
-//   char buf[data.size() + 2 * sizeof(uint32_t)];
-//   std::memcpy(buf + sizeof(uint32_t), data.data(), data.size());
-//   EncodeFixed32(buf, data.size() + sizeof(uint32_t));
-//   EncodeFixed32(buf + data.size() + sizeof(uint32_t), 0);
-//   Status s =
-//       committer_.SafeCommit(Slice(buf, data.size() + 2 * sizeof(uint32_t)));
-//   // printf("Tail %lu Head %lu \n", log_.GetWriteTail(),
-//   log_.GetWriteHead()); return s;
-// }
-
-// See LevelDB env_posix. This is similar, but slightly different as we store
-// offsets and do not directly use the committed CRC format.
-// Status ZNSWAL::ObsoleteAppend(const Slice& data) {
-//   size_t write_size = data.size();
-//   const char* write_data = data.data();
-
-//   // [4 bytes for next| N bytes for entry | sentinel ...]
-//   size_t required_write_size = write_size + 2 * sizeof(uint32_t);
-//   if (pos_ + required_write_size < buffsize_) {
-//     EncodeFixed32(buf_ + pos_, pos_ + write_size + sizeof(uint32_t));
-//     std::memcpy(buf_ + pos_ + sizeof(uint32_t), write_data, write_size);
-//     pos_ += write_size + sizeof(uint32_t);
-//     EncodeFixed32(buf_ + pos_, 0);
-//     return Status::OK();
-//   }
-
-//   // Can't fit in buffer, so need to do at least one write.
-//   Status s = Sync();
-//   if (!s.ok()) {
-//     return s;
-//   }
-
-//   // Small writes go to buffer, large writes are written directly.
-//   if (pos_ + required_write_size < buffsize_) {
-//     EncodeFixed32(buf_ + pos_, pos_ + write_size + sizeof(uint32_t));
-//     std::memcpy(buf_ + pos_ + sizeof(uint32_t), write_data, write_size);
-//     pos_ += write_size + sizeof(uint32_t);
-//     EncodeFixed32(buf_ + pos_, 0);
-//     return Status::OK();
-//   }
-//   return DirectAppend(data);
-// }
-
-// Status ZNSWAL::ObsoleteSync() {
-//   Status s = Status::OK();
-//   if (pos_ > 0) {
-//     s = committer_.SafeCommit(Slice(buf_, pos_ + sizeof(uint32_t)));
-//     pos_ = 0;
-//     memset(buf_, 0, buffsize_);
-//   }
-//   return s;
-// }
-
-// Status ZNSWAL::ObsoleteReplay(ZNSMemTable* mem, SequenceNumber* seq) {
-//   Status s = Status::OK();
-//   if (log_.Empty()) {
-//     return s;
-//   }
-//   // Used for each batch
-//   WriteOptions wo;
-//   Slice record;
-//   // Iterate over all batches and apply them to the memtable
-//   ZnsCommitReader reader;
-//   // printf("Tail %lu Head %lu \n", log_.GetWriteTail(),
-//   log_.GetWriteHead()); committer_.GetCommitReader(0, log_.GetWriteTail(),
-//   log_.GetWriteHead(),
-//                              &reader);
-//   while (committer_.SeekCommitReader(reader, &record)) {
-//     uint32_t pos = sizeof(uint32_t);
-//     uint32_t upto = DecodeFixed32(record.data());
-//     if (upto > record.size()) {
-//       s = Status::Corruption();
-//       break;
-//     }
-//     uint32_t next = DecodeFixed32(record.data() + upto);
-//     do {
-//       WriteBatch batch;
-//       s = WriteBatchInternal::SetContents(
-//           &batch, Slice(record.data() + pos, upto - pos));
-//       if (!s.ok()) {
-//         break;
-//       }
-//       s = mem->Write(wo, &batch);
-//       if (!s.ok()) {
-//         break;
-//       }
-//       // Ensure the sequence number is up to date.
-//       const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
-//                                       WriteBatchInternal::Count(&batch) - 1;
-//       if (last_seq > *seq) {
-//         *seq = last_seq;
-//       }
-//       pos = upto + sizeof(uint32_t);
-//       upto = next;
-//       if (upto == record.size()) {
-//         break;
-//       }
-//       if (upto > record.size()) {
-//         s = Status::Corruption();
-//         break;
-//       }
-//       if (next != 0) {
-//         next = DecodeFixed32(record.data() + next);
-//       }
-//     } while (next > upto || (next == 0 && upto != 0));
-//   }
-//   committer_.CloseCommit(reader);
-//   return s;
-// }
-
-// committer_.GetCommitReader(0, log_.GetWriteTail(), log_.GetWriteHead(),
-//                            &reader);
-// while (committer_.SeekCommitReader(reader, &record)) {
-//   uint64_t data_size = DecodeFixed64(record.data());
-//   uint64_t seq_nr = DecodeFixed64(record.data() + sizeof(uint64_t));
-//   if (data_size > record.size() - 2 * sizeof(uint64_t)) {
-//     s = Status::Corruption();
-//     break;
-//   }
-//   char* dat = new char[data_size];
-//   memcpy(dat, record.data() + 2 * sizeof(uint64_t), data_size);
-//   entries.push_back(std::make_pair(seq_nr, std::make_pair(dat,
-//   data_size)));
-// }
-// committer_.CloseCommit(reader);
-
 }  // namespace ROCKSDB_NAMESPACE

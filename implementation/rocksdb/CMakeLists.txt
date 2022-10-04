@@ -1136,6 +1136,7 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/index/zns_compaction.cc
   db/zns_impl/db_impl_zns.cc
   db/zns_impl/db_impl_zns_background.cc
+  db/zns_impl/db_impl_zns_diagnostics.cc
   db/zns_impl/db_impl_zns_not_supported.cc
 )
 
@@ -1679,11 +1680,16 @@ else(DEFINED ENV{CLANG_FORMAT_PATH})
   message("Clang-format path: ${CLANG_FORMAT_PATH}")
 endif()
 
+set(FORMAT_PATHS "")
+foreach(PATH ${ZNS_LSM_SOURCES})
+  list(APPEND FORMAT_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${PATH}")
+endforeach()
+
 add_custom_target(
-  format_rocksdb
+  format_rocksdb_zns
   COMMAND ${CLANG_FORMAT_PATH}
   -i
-  ${ZNS_LSM_SOURCES}
-  "./db/db_impl_switcher/*"
   "-style=file"
+  ${FORMAT_PATHS}
+  COMMENT "Formatting files"
 )
