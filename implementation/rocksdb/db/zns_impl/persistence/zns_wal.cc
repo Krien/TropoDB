@@ -290,7 +290,6 @@ Status ZNSWAL::Reset() {
   return s;
 }
 
-
 Status ZNSWAL::Recover() {
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.RecoverPointers());
@@ -300,7 +299,8 @@ Status ZNSWAL::Recover() {
 
 Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   Status s = Status::OK();
-  // This check is also done in both replays, but ensures we do NOT measure it for perf!!
+  // This check is also done in both replays, but ensures we do NOT measure it
+  // for perf!!
   if (log_.Empty()) {
     return s;
   }

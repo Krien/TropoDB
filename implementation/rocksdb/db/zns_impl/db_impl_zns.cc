@@ -77,8 +77,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       bg_error_(Status::OK()),
       forced_schedule_(false),
       // diag
-      clock_(SystemClock::Default().get())
-      {
+      clock_(SystemClock::Default().get()) {
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     wal_man_[i] = nullptr;
     wal_[i] = nullptr;
