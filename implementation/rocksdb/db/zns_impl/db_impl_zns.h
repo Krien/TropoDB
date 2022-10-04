@@ -387,7 +387,7 @@ class DBImplZNS : public DB {
   SystemClock* const clock_;
   bool print_compaction_stats_{true};
   bool print_ss_stats_{false};
-  bool print_wal_stats_{false};
+  bool print_wal_stats_{true};
   bool print_io_stats_{false};
   bool print_io_heat_stats_{false};
   // diag flush

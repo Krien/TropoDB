@@ -20,11 +20,12 @@
 namespace ROCKSDB_NAMESPACE {
 
 static void PrintPerfCounterHeader() {
-    std::string table_line(98, '-');
+    std::string table_line(113, '-');
     std::cout << table_line << "\n";
     std::cout 
         << std::left << std::setw(20) << "| name" 
         << std::setw(15) << "| total (ops)" 
+        << std::setw(15) << "| sum (micros)" 
         << std::setw(15) << "| min (micros)" 
         << std::setw(15) << "| max (micros)" 
         << std::setw(15) << "| avg (micros)" 
@@ -37,16 +38,19 @@ static void PrintPerfCounterRow(std::string name, const TimingCounter& counter) 
   name = "| " + name;
   std::cout 
      << std::left << std::setw(20) << name 
+     << std::fixed << std::setprecision(0)
      << std::left << "|" << std::right << std::setw(14) << counter.GetNum() 
+     << std::left << "|" << std::right << std::setw(14) << counter.GetSum()      
      << std::left << "|" << std::right << std::setw(14) << counter.GetMin() 
      << std::left << "|" << std::right << std::setw(14) << counter.GetMax() 
+     << std::fixed << std::setprecision(2)
      << std::left << "|" << std::right << std::setw(14) << counter.GetAvg() 
      << std::left << "|" << std::right << std::setw(14) << counter.GetStandardDeviation()
      << "  |\n";
 }
 
 static void PrintPerfCounterTail() {
-    std::string table_line(98, '-');
+    std::string table_line(113, '-');
     std::cout << table_line << "\n";
 }
 
@@ -103,7 +107,13 @@ void DBImplZNS::PrintSSTableStats() {
 void DBImplZNS::PrintWALStats() {
   std::cout << "====  WAL stats ====\n";
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-    wal_man_[i]->PrintAdditionalWALStatistics();
+    std::cout << "====  WAL manager " << i << " ====\n";
+    std::vector<std::pair<std::string, const TimingCounter>> wal_stats = wal_man_[i]->GetAdditionalWALStatistics();
+    std::vector<std::pair<std::string, const TimingCounter&>> wal_stats_ref;
+    for (auto& p : wal_stats) {
+        wal_stats_ref.push_back({p.first, p.second});
+    }
+    PrintCounterTable(wal_stats_ref);
   }
 }
 
