@@ -16,10 +16,8 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
       write_buffer_size_(buffer_size),
       wb_(buffer_size),
       arena_() {
-  // printf("Write bufsize %lu \n", write_buffer_size_);
   options_.write_buffer_size = write_buffer_size_;
   MutableCFOptions cfopts = MutableCFOptions(options_);
-  // printf("SIZE OF MEM %lu \n", cfopts.write_buffer_size);
   mem_ = new ColumnFamilyMemTablesDefault(
       new MemTable(ikc, ioptions_, cfopts, &wb_, kMaxSequenceNumber,
                    0 /* column_family_id */));
@@ -27,16 +25,13 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
 }
 
 ZNSMemTable::~ZNSMemTable() {
-  // printf("Deleting memtable.\n");
   mem_->GetMemTable()->Unref();
   delete mem_->GetMemTable();
   delete mem_;
 }
 
 Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
-  Status s =
-      WriteBatchInternal::InsertInto(updates, this->mem_, nullptr, nullptr);
-  return s;
+  return WriteBatchInternal::InsertInto(updates, this->mem_, nullptr, nullptr);
 }
 
 bool ZNSMemTable::Get(const ReadOptions& options, const LookupKey& lkey,
