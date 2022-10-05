@@ -59,6 +59,8 @@ class ZNSSSTableManager : public RefCounter {
   uint64_t SpaceRemainingInBytesL0(uint8_t parallel_number) const;
   
   // LN specific
+  Iterator* GetLNIterator(const Slice& file_value,
+                                       const Comparator* cmp);
   Status DeleteLNTable(const uint8_t level, const SSZoneMetaData& meta) const;
   uint64_t SpaceRemainingLN() const;
   uint64_t SpaceRemainingInBytesLN() const;

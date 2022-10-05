@@ -22,10 +22,10 @@ namespace ROCKSDB_NAMESPACE {
 
 struct DeferredLNCompaction {
   port::Mutex mutex_;
-  port::CondVar new_task_;  // In cas deferred is waiting for main
-  bool last_{false};        // Signal that we do not want anything to do anymore
-  bool done_{false};
-  std::vector<SSTableBuilder*> deferred_builds_;
+  port::CondVar new_task_;  // In case deferred is waiting for main
+  bool last_{false};        // Signal that we are done and deferred should be gone
+  bool done_{false};        // Signal that deferred is done
+  std::vector<SSTableBuilder*> deferred_builds_; // All deferred builders to use for compaction
   uint8_t index_{0};
   uint8_t level_{0};
   ZnsVersionEdit* edit_{nullptr};
@@ -37,25 +37,34 @@ class ZnsCompaction {
   ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env);
   ~ZnsCompaction();
 
-  void MarkStaleTargetsReusable(ZnsVersionEdit* edit);
-  bool IsTrivialMove() const;
-  bool IsBusy() const { return busy_; }
+  // BG Thread coordination
   bool HasOverlapWithOtherCompaction(std::vector<SSZoneMetaData*> metas);
-  void GetCompactionTargets(std::vector<SSZoneMetaData*>* metas);
 
+  // Compaction information
+  void GetCompactionTargets(std::vector<SSZoneMetaData*>* metas);
+  inline bool IsBusy() const { return busy_; }
+
+  // Trivial ops
+  bool IsTrivialMove() const;
   Status DoTrivialMove(ZnsVersionEdit* edit);
-  Iterator* MakeCompactionIterator();
+
+  // Compactions
+  void MarkCompactedTablesAsDead(ZnsVersionEdit* edit);
   Status DoCompaction(ZnsVersionEdit* edit);
 
  private:
   friend class ZnsVersionSet;
+
+  // Compaction
   static Iterator* GetLNIterator(void* arg, const Slice& file_value,
                                  const Comparator* cmp);
+  Iterator* MakeCompactionIterator();
   Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
                       SSZoneMetaData* meta);
-  bool IsBaseLevelForKey(const Slice& user_key);
-
   static void DeferCompactionWrite(void* c);
+
+  // helpers
+  bool IsBaseLevelForKey(const Slice& user_key);
 
   // Meta
   uint8_t first_level_;

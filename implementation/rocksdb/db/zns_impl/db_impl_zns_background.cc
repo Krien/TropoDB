@@ -44,34 +44,39 @@ namespace ROCKSDB_NAMESPACE {
 
 Status DBImplZNS::FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
                                   uint8_t parallel_number) {
-  return ss_manager_->FlushMemTable(imm_[parallel_number], metas, parallel_number);
+  return ss_manager_->FlushMemTable(imm_[parallel_number], metas,
+                                    parallel_number);
 }
 
 Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
   mutex_.AssertHeld();
-  // Wait till there is space to flush (* 1.2 leaves buffer space for serialisation)
+  // Wait till there is space to flush (* 1.2 leaves buffer space for
+  // serialisation)
   while (imm_[parallel_number]->GetInternalSize() * 1.2 >
          ss_manager_->SpaceRemainingInBytesL0(parallel_number)) {
     // Maybe there is no peer yet?, try to create one.
     MaybeScheduleCompactionL0();
     TROPODB_DEBUG(
-        "Flush: waiting for peer thread, can not flush: memtable %f Mb approaches available %f Mb \n",
+        "Flush: waiting for peer thread, can not flush: memtable %f Mb "
+        "approaches available %f Mb \n",
         (float)imm_[parallel_number]->GetInternalSize() / 1024. / 1024.,
         (float)ss_manager_->SpaceRemainingL0(parallel_number) / 1024. / 1024.);
     bg_work_l0_finished_signal_.Wait();
   }
   assert(imm_[parallel_number] != nullptr);
   assert(bg_flush_scheduled_[parallel_number]);
-  
+
   uint64_t before;
   Status s = Status::OK();
 
   // Flush and set new version
   {
-    // Unlike LN/L0 compactions we need no refs to current index (we simply do not care)
+    // Unlike LN/L0 compactions we need no refs to current index (we simply do
+    // not care)
     before = clock_->NowMicros();
     mutex_.Unlock();
-    // Flush memtable and generate "N" new SSTables (metadata still needs to be transformed)
+    // Flush memtable and generate "N" new SSTables (metadata still needs to be
+    // transformed)
     std::vector<SSZoneMetaData> metas;
     s = FlushL0SSTables(metas, parallel_number);
     mutex_.Lock();
@@ -99,11 +104,11 @@ Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
         bg_error_ = s;
         TROPODB_ERROR("ERROR: Flush: Can not alter version structure\n");
       }
-    } 
+    }
     imm_[parallel_number]->Unref();
     imm_[parallel_number] = nullptr;
   }
-  
+
   // Reset WALs
   {
     before = clock_->NowMicros();
@@ -111,7 +116,7 @@ Status DBImplZNS::CompactMemtable(uint8_t parallel_number) {
     flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
       bg_error_ = s;
-      TROPODB_ERROR("ERROR: Flush: WALs could not be reset\n"); 
+      TROPODB_ERROR("ERROR: Flush: WALs could not be reset\n");
     }
   }
   return s;
@@ -121,7 +126,8 @@ void DBImplZNS::BackgroundFlush(uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
 
-  // It is possible that a flush is scheduled because there are no WALs left, but there is no immutable table. Only reset WAL in this case.
+  // It is possible that a flush is scheduled because there are no WALs left,
+  // but there is no immutable table. Only reset WAL in this case.
   if (imm_[parallel_number] != nullptr) {
     s = CompactMemtable(parallel_number);
     if (!s.ok()) {
@@ -134,7 +140,8 @@ void DBImplZNS::BackgroundFlush(uint8_t parallel_number) {
     flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
     TROPODB_INFO("BG operation: Reset WALs to make space\n");
   } else {
-    TROPODB_ERROR("ERROR: Flush: No immutable table to flush or WAL to reset\n"); 
+    TROPODB_ERROR(
+        "ERROR: Flush: No immutable table to flush or WAL to reset\n");
   }
 }
 
@@ -192,7 +199,8 @@ void DBImplZNS::MaybeScheduleFlush(uint8_t parallel_number) {
 
 Status DBImplZNS::RemoveObsoleteZonesL0() {
   mutex_.AssertHeld();
-  Status s = versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_l0_finished_signal_);
+  Status s =
+      versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_l0_finished_signal_);
   if (!s.ok()) {
     TROPODB_ERROR("ERROR: Reclaiming L0 zones \n");
   }
@@ -232,11 +240,11 @@ void DBImplZNS::BackgroundCompactionL0() {
 
   Status s;
   uint64_t before;
-  
+
   // It is possible that we only need deletes (and not compaction)
-  // This happens when a lot of readers or threads kept references to the MVCC of TropoDB (hence we could not delete)
-  if (versions_->OnlyNeedDeletes(0 /*level*/ ))
-  {
+  // This happens when a lot of readers or threads kept references to the MVCC
+  // of TropoDB (hence we could not delete)
+  if (versions_->OnlyNeedDeletes(0 /*level*/)) {
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
     before = clock_->NowMicros();
@@ -250,18 +258,21 @@ void DBImplZNS::BackgroundCompactionL0() {
     return;
   }
 
- // Compact L0 to storage and prepare version
- ZnsVersion* current = versions_->current();
- ZnsVersionEdit edit;
- {
-   // Pick compaction
+  // Compact L0 to storage and prepare version
+  ZnsVersion* current = versions_->current();
+  ZnsVersionEdit edit;
+  {
+    // Pick compaction
     before = clock_->NowMicros();
-    ZnsCompaction* c = versions_->PickCompaction(0 /*level*/, reserved_comp_[1] /*LN thread*/);
+    ZnsCompaction* c =
+        versions_->PickCompaction(0 /*level*/, reserved_comp_[1] /*LN thread*/);
     // Can not do this compaction while the other BG uses the same tables
     while (reserve_claimed_ == 1 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
-      TROPODB_DEBUG("BG Operation: L0 compaction: Overlap with LN write %u %u\n", reserve_claimed_ == 1,
-             c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
+      TROPODB_DEBUG(
+          "BG Operation: L0 compaction: Overlap with LN write %u %u\n",
+          reserve_claimed_ == 1,
+          c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 0 : reserve_claimed_;
       bg_work_finished_signal_.Wait();
@@ -277,7 +288,7 @@ void DBImplZNS::BackgroundCompactionL0() {
     current->Ref();
     bool trivial = c->IsTrivialMove();
     mutex_.Unlock();
-    c->MarkStaleTargetsReusable(&edit);
+    c->MarkCompactedTablesAsDead(&edit);
     if (trivial) {
       TROPODB_INFO("BG Operation: Starting L0 Trivial move\n");
       s = c->DoTrivialMove(&edit);
@@ -287,8 +298,8 @@ void DBImplZNS::BackgroundCompactionL0() {
       s = c->DoCompaction(&edit);
       TROPODB_INFO("BG Operation: Finished L0 Non-trivial compaction\n");
     }
-    // Note if this delete is somehow not reached, a stale version will remain in memory
-    // for the rest of this session (memory leak).
+    // Note if this delete is somehow not reached, a stale version will remain
+    // in memory for the rest of this session (memory leak).
     delete c;
     mutex_.Lock();
     if (trivial) {
@@ -334,7 +345,8 @@ void DBImplZNS::BackgroundCompactionL0() {
   }
 
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Compaction L0: error in flow control of %s:%s \n", __FILE__, __func__);
+    TROPODB_ERROR("ERROR: Compaction L0: error in flow control of %s:%s \n",
+                  __FILE__, __func__);
     bg_error_ = s;
   }
 }
@@ -359,7 +371,8 @@ void DBImplZNS::BGCompactionL0Work(void* db) {
 
 Status DBImplZNS::RemoveObsoleteZonesLN() {
   mutex_.AssertHeld();
-  Status s = versions_->ReclaimStaleSSTablesLN(&mutex_, &bg_work_finished_signal_);
+  Status s =
+      versions_->ReclaimStaleSSTablesLN(&mutex_, &bg_work_finished_signal_);
   if (!s.ok()) {
     TROPODB_ERROR("ERROR: Reclaiming LN zones\n");
   }
@@ -368,11 +381,11 @@ Status DBImplZNS::RemoveObsoleteZonesLN() {
 
 void DBImplZNS::BackgroundCompaction() {
   mutex_.AssertHeld();
-  
+
   Status s;
   ZnsVersion* current = versions_->current();
   uint64_t before;
-  
+
   // Not a valid compaction
   if (current->CompactionLevel() >= ZnsConfig::level_count) {
     TROPODB_ERROR("ERROR: LN Compaction: not a valid compaction level \n");
@@ -380,7 +393,8 @@ void DBImplZNS::BackgroundCompaction() {
   }
 
   // It is possible that we only need deletes (and not compaction)
-  // This happens when a lot of readers or threads kept references to the MVCC of TropoDB (hence we could not delete)
+  // This happens when a lot of readers or threads kept references to the MVCC
+  // of TropoDB (hence we could not delete)
   if (versions_->OnlyNeedDeletes(current->CompactionLevel())) {
     // TODO: we should probably wait a while instead of spamming reset requests.
     // Then probably all clients are done with their reads on old versions.
@@ -405,8 +419,10 @@ void DBImplZNS::BackgroundCompaction() {
                                                  reserved_comp_[0]);
     while (reserve_claimed_ == 0 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[0]) || c->IsBusy()) {
-      TROPODB_DEBUG("BG Operation: LN compaction: Overlap with L0 write %u %u %u\n", reserve_claimed_ == 0,
-             c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
+      TROPODB_DEBUG(
+          "BG Operation: LN compaction: Overlap with L0 write %u %u %u\n",
+          reserve_claimed_ == 0,
+          c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 1 : reserve_claimed_;
       bg_work_l0_finished_signal_.Wait();
@@ -423,7 +439,7 @@ void DBImplZNS::BackgroundCompaction() {
     current->Ref();
     bool istrivial = c->IsTrivialMove();
     mutex_.Unlock();
-    c->MarkStaleTargetsReusable(&edit);
+    c->MarkCompactedTablesAsDead(&edit);
     if (istrivial) {
       TROPODB_INFO("BG Operation: Starting LN Trivial move\n");
       s = c->DoTrivialMove(&edit);
@@ -450,7 +466,7 @@ void DBImplZNS::BackgroundCompaction() {
       return;
     }
   }
-  
+
   // Apply version
   {
     before = clock_->NowMicros();
@@ -480,7 +496,8 @@ void DBImplZNS::BackgroundCompaction() {
   }
 
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Compaction LN: error in flow control of %s:%s \n", __FILE__, __func__);
+    TROPODB_ERROR("ERROR: Compaction LN: error in flow control of %s:%s \n",
+                  __FILE__, __func__);
     bg_error_ = s;
   }
 }

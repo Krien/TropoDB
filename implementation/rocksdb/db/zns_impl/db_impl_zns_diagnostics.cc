@@ -22,11 +22,10 @@ static void PrintPerfCounterHeader() {
   std::string table_line(113, '-');
   out << table_line << "\n";
   out << std::left << std::setw(20) << "| name" << std::setw(15)
-            << "| total (ops)" << std::setw(15) << "| sum (micros)"
-            << std::setw(15) << "| min (micros)" << std::setw(15)
-            << "| max (micros)" << std::setw(15) << "| avg (micros)"
-            << std::setw(15) << "| StdDev (micros)"
-            << "|\n";
+      << "| total (ops)" << std::setw(15) << "| sum (micros)" << std::setw(15)
+      << "| min (micros)" << std::setw(15) << "| max (micros)" << std::setw(15)
+      << "| avg (micros)" << std::setw(15) << "| StdDev (micros)"
+      << "|\n";
   out << table_line << "\n";
   TROPODB_PERF("%s", out.str().data());
 }
@@ -36,15 +35,14 @@ static void PrintPerfCounterRow(std::string name,
   std::ostringstream out;
   name = "| " + name;
   out << std::left << std::setw(20) << name << std::fixed
-            << std::setprecision(0) << std::left << "|" << std::right
-            << std::setw(14) << counter.GetNum() << std::left << "|"
-            << std::right << std::setw(14) << counter.GetSum() << std::left
-            << "|" << std::right << std::setw(14) << counter.GetMin()
-            << std::left << "|" << std::right << std::setw(14)
-            << counter.GetMax() << std::fixed << std::setprecision(2)
-            << std::left << "|" << std::right << std::setw(14)
-            << counter.GetAvg() << std::left << "|" << std::right
-            << std::setw(14) << counter.GetStandardDeviation() << "  |\n";
+      << std::setprecision(0) << std::left << "|" << std::right << std::setw(14)
+      << counter.GetNum() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetSum() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetMin() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetMax() << std::fixed << std::setprecision(2) << std::left
+      << "|" << std::right << std::setw(14) << counter.GetAvg() << std::left
+      << "|" << std::right << std::setw(14) << counter.GetStandardDeviation()
+      << "  |\n";
   TROPODB_PERF("%s", out.str().data());
 }
 
@@ -71,7 +69,7 @@ void DBImplZNS::PrintCompactionStats() {
   out << "Compaction count:\n";
   for (uint8_t level = 0; level < ZnsConfig::level_count - 1; level++) {
     out << "\tCompaction to " << (level + 1) << ":" << compactions_[level]
-              << "\n";
+        << "\n";
   }
   TROPODB_PERF("%s", out.str().data());
 
@@ -121,12 +119,11 @@ void DBImplZNS::PrintWALStats() {
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
   std::ostringstream out;
-  out << std::left << std::setw(10) << diag.name_ << std::right
-            << std::setw(15) << diag.append_operations_counter_ << std::setw(25)
-            << diag.bytes_written_ << std::setw(15)
-            << diag.read_operations_counter_ << std::setw(25)
-            << diag.bytes_read_ << std::setw(16) << diag.zones_erased_counter_
-            << "\n";
+  out << std::left << std::setw(10) << diag.name_ << std::right << std::setw(15)
+      << diag.append_operations_counter_ << std::setw(25) << diag.bytes_written_
+      << std::setw(15) << diag.read_operations_counter_ << std::setw(25)
+      << diag.bytes_read_ << std::setw(16) << diag.zones_erased_counter_
+      << "\n";
   TROPODB_PERF("%s", out.str().data());
 }
 
@@ -144,12 +141,11 @@ static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
 void DBImplZNS::PrintIODistrStats() {
   TROPODB_PERF("==== raw IO metrics ==== \n");
   std::ostringstream out;
-  out << std::left << std::setw(10) << "Metric " << std::right
-            << std::setw(15) << "Append (ops)" << std::setw(25)
-            << "Written (Bytes)" << std::setw(15) << "Read (ops)"
-            << std::setw(25) << "Read (Bytes)" << std::setw(16)
-            << "Reset (zones)"
-            << "\n";
+  out << std::left << std::setw(10) << "Metric " << std::right << std::setw(15)
+      << "Append (ops)" << std::setw(25) << "Written (Bytes)" << std::setw(15)
+      << "Read (ops)" << std::setw(25) << "Read (Bytes)" << std::setw(16)
+      << "Reset (zones)"
+      << "\n";
   out << std::setfill('-') << std::setw(107) << "\n" << std::setfill(' ');
   struct ZNSDiagnostics totaldiag = {.name_ = "Total",
                                      .bytes_written_ = 0,

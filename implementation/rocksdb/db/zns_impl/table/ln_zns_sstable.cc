@@ -54,7 +54,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     TROPODB_ERROR("out of space LN %lu %lu \n", content.size() / lba_size_,
-           log_.SpaceAvailable() / lba_size_);
+                  log_.SpaceAvailable() / lba_size_);
     return Status::IOError("Not enough space available for LN");
   }
 

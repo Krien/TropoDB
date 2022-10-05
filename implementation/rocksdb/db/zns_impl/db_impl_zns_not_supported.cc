@@ -167,24 +167,22 @@ Status DBImplZNS::CompactFiles(
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::PauseBackgroundWork() { 
+Status DBImplZNS::PauseBackgroundWork() {
   TROPODB_ERROR("Not implemented\n");
-  return Status::NotSupported(); 
+  return Status::NotSupported();
 }
-Status DBImplZNS::ContinueBackgroundWork() { 
+Status DBImplZNS::ContinueBackgroundWork() {
   TROPODB_ERROR("Not implemented\n");
-  return Status::NotSupported(); 
+  return Status::NotSupported();
 }
 Status DBImplZNS::EnableAutoCompaction(
     const std::vector<ColumnFamilyHandle*>& column_family_handles) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-void DBImplZNS::EnableManualCompaction() {
-    TROPODB_ERROR("Not implemented\n");
-}
+void DBImplZNS::EnableManualCompaction() { TROPODB_ERROR("Not implemented\n"); }
 void DBImplZNS::DisableManualCompaction() {
-    TROPODB_ERROR("Not implemented\n");
+  TROPODB_ERROR("Not implemented\n");
 }
 
 Status DBImplZNS::Flush(const FlushOptions& options,
@@ -199,14 +197,14 @@ Status DBImplZNS::Flush(
   return Status::NotSupported();
 }
 
-Status DBImplZNS::SyncWAL() { 
+Status DBImplZNS::SyncWAL() {
   TROPODB_ERROR("Not implemented\n");
-  return Status::NotSupported(); 
+  return Status::NotSupported();
 }
 
-Status DBImplZNS::DisableFileDeletions() { 
+Status DBImplZNS::DisableFileDeletions() {
   TROPODB_ERROR("Not implemented\n");
-  return Status::NotSupported(); 
+  return Status::NotSupported();
 }
 
 Status DBImplZNS::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
@@ -307,13 +305,13 @@ Status DBImplZNS::GetDbSessionId(std::string& session_id) const {
   return Status::NotSupported();
 }
 
-ColumnFamilyHandle* DBImplZNS::DefaultColumnFamily() const { 
+ColumnFamilyHandle* DBImplZNS::DefaultColumnFamily() const {
   TROPODB_ERROR("Not implemented\n");
-  return NULL; 
+  return NULL;
 }
 
 Status DBImplZNS::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
-                                           TablePropertiesCollection* props) {       
+                                           TablePropertiesCollection* props) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }

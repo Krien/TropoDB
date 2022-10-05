@@ -112,6 +112,9 @@ constexpr static bool compaction_allow_deferring_writes =
 constexpr static uint8_t compaction_maximum_deferred_writes =
     6; /**< How many SSTables can be deferred at most. Be careful, setting
 this too high can cause OOM.*/
+constexpr static uint64_t compaction_max_grandparents_overlapping_tables = 
+    10; /**< Maximum number of tables that are allowed to overlap with grandparent */
+
 
 // Containerisation
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/

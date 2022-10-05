@@ -1,8 +1,8 @@
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
 
 #include "db/zns_impl/table/zns_sstable_reader.h"
-#include "rocksdb/slice.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
+#include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -157,7 +157,8 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
 }
 
 void SSTableIteratorCompressed::CorruptionError() {
-  TROPODB_ERROR("Corrupt entry in SSTable block %lu/%lu \n", current_, data_size_);
+  TROPODB_ERROR("Corrupt entry in SSTable block %lu/%lu \n", current_,
+                data_size_);
   current_ = data_size_;
   restart_index_ = num_restarts_;
   status_ = Status::Corruption("bad entry in block");

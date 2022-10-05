@@ -6,6 +6,7 @@
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
+#include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/l0_zns_sstable.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable.h"
@@ -79,6 +80,13 @@ Status ZNSSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
   }
 }
 
+Iterator* ZNSSSTableManager::GetLNIterator(const Slice& file_value,
+                                           const Comparator* cmp) {
+  std::pair<SSZoneMetaData, uint8_t> decoded_iterator =
+      LNZoneIterator::DecodeLNIterator(file_value);
+  return NewIterator(decoded_iterator.second, decoded_iterator.first, cmp);
+}
+
 Iterator* ZNSSSTableManager::NewIterator(const uint8_t level,
                                          const SSZoneMetaData& meta,
                                          const Comparator* cmp) const {
@@ -107,7 +115,8 @@ Status ZNSSSTableManager::RecoverLN(const std::string& recovery_data) {
   if (recovery_data == "") {
     return Status::OK();
   }
-  Status s = static_cast<LNZnsSSTable*>(sstable_level_[ZnsConfig::lower_concurrency])
+  Status s =
+      static_cast<LNZnsSSTable*>(sstable_level_[ZnsConfig::lower_concurrency])
           ->Recover(recovery_data);
   if (!s.ok()) {
     TROPODB_ERROR("ERROR: SSTable recovery: Can not recover LN\n");
@@ -128,18 +137,17 @@ std::string ZNSSSTableManager::GetRecoveryData() {
   return table->Encode();
 }
 
-SSTableBuilder* ZNSSSTableManager::NewSSTableBuilder(const uint8_t level,
-                                              SSZoneMetaData* meta) const {
+SSTableBuilder* ZNSSSTableManager::NewSSTableBuilder(
+    const uint8_t level, SSZoneMetaData* meta) const {
   assert(level < ZnsConfig::level_count);
   if (level == 0) {
     return sstable_level_[meta->L0.log_number]->NewBuilder(meta);
-  }
-  else if (level == 1) {
+  } else if (level == 1) {
     return sstable_level_[ZnsConfig::lower_concurrency]->NewBuilder(meta);
   } else {
     return static_cast<LNZnsSSTable*>(
-                     sstable_level_[ZnsConfig::lower_concurrency])
-                     ->NewLNBuilder(meta);
+               sstable_level_[ZnsConfig::lower_concurrency])
+        ->NewLNBuilder(meta);
   }
 }
 
@@ -219,7 +227,7 @@ Status ZNSSSTableManager::FlushMemTable(ZNSMemTable* mem,
                                         uint8_t parallel_number) const {
   assert(parallel_number < ZnsConfig::lower_concurrency);
   return GetL0SSTableLog(parallel_number)
-                 ->FlushMemTable(mem, metas, parallel_number);
+      ->FlushMemTable(mem, metas, parallel_number);
 }
 
 Status ZNSSSTableManager::DeleteL0Table(
@@ -328,12 +336,13 @@ std::vector<ZNSDiagnostics> ZNSSSTableManager::IODiagnostics() {
 std::string ZNSSSTableManager::LayoutDivisionString() {
   std::ostringstream div;
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-    div << std::left << ("L0-" + std::to_string(i)) << std::setw(13) << "" << std::right
-        << std::setw(25) << (ranges_[i].first / zone_cap_) << std::setw(25)
-        << (ranges_[i].second / zone_cap_) << "\n";
+    div << std::left << ("L0-" + std::to_string(i)) << std::setw(13) << ""
+        << std::right << std::setw(25) << (ranges_[i].first / zone_cap_)
+        << std::setw(25) << (ranges_[i].second / zone_cap_) << "\n";
   }
-  div << std::left << "LN" << std::setw(13) << "" << std::right
-      << std::setw(25) << (ranges_[ZnsConfig::lower_concurrency].first / zone_cap_) << std::setw(25)
+  div << std::left << "LN" << std::setw(13) << "" << std::right << std::setw(25)
+      << (ranges_[ZnsConfig::lower_concurrency].first / zone_cap_)
+      << std::setw(25)
       << (ranges_[ZnsConfig::lower_concurrency].second / zone_cap_) << "\n";
   return div.str();
 }
@@ -362,9 +371,13 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
   uint64_t num_zones = max_zone - min_zone;
   RangeArray ranges;
   // Validate
-  if (min_zone > max_zone || num_zones < ZnsConfig::level_count * ZnsConfig::min_ss_zone_count ||
+  if (min_zone > max_zone ||
+      num_zones < ZnsConfig::level_count * ZnsConfig::min_ss_zone_count ||
       channel_factory == nullptr) {
-    TROPODB_ERROR("ERROR: Creating SSTable division: not enough zones assigned %lu\\%lu\n", num_zones, ZnsConfig::level_count * ZnsConfig::min_ss_zone_count);
+    TROPODB_ERROR(
+        "ERROR: Creating SSTable division: not enough zones assigned "
+        "%lu\\%lu\n",
+        num_zones, ZnsConfig::level_count * ZnsConfig::min_ss_zone_count);
     return {};
   }
   // Distribute for L0
@@ -384,8 +397,10 @@ std::optional<ZNSSSTableManager*> ZNSSSTableManager::NewZNSSTableManager(
       std::make_pair(zone_head, zone_head + zone_step);
   // Verify that no rounding errors occurred
   zone_head += zone_step;
-  if(zone_head != max_zone) {
-    TROPODB_ERROR("ERROR: Creating SSTable division: Rounding error %lu != %lu \n", zone_head, max_zone);
+  if (zone_head != max_zone) {
+    TROPODB_ERROR(
+        "ERROR: Creating SSTable division: Rounding error %lu != %lu \n",
+        zone_head, max_zone);
     return {};
   }
   // Now create

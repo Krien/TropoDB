@@ -6,9 +6,9 @@
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "util/coding.h"
-#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsVersionEdit::ZnsVersionEdit() { Clear(); }
@@ -49,7 +49,8 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.lba_count = meta.lba_count;
   f.smallest = meta.smallest;
   f.largest = meta.largest;
-  TROPODB_DEBUG("Adding %lu %lu %lu \n", f.number, f.L0.lba, f.lba_count);
+  TROPODB_DEBUG("DEBUG: Adding SSTable %lu %lu %lu \n", f.number, f.L0.lba,
+                f.lba_count);
   new_ss_.push_back(std::make_pair(level, f));
 }
 
@@ -297,14 +298,11 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
             GetVarint64(&input, &number_second)) {
           deleted_range_ = std::make_pair(number, number_second);
           has_deleted_range_ = true;
-          // printf("Retrieved deleted range %lu %lu \n", deleted_range_.first,
-          //        deleted_range_.second);
         } else {
           msg = "deleted sstable range";
         }
         break;
       case ZnsVersionTag::kDeletedSSTable:
-        // printf("Getting deleted sstable\n");
         if (GetLevel(&input, &level) && DecodeLevel(&input, level, &m)) {
           deleted_ss_pers_.push_back(std::make_pair(level, m));
         } else {
@@ -346,6 +344,6 @@ Status ZnsVersionEdit::DecodeFrom(const Slice& src) {
     return Status::Corruption("VersionEdit", msg);
   }
   return Status::OK();
-}  // namespace ROCKSDB_NAMESPACE
+}
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -10,10 +10,10 @@
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
-#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
@@ -476,7 +476,7 @@ bool ZnsVersionSet::OnlyNeedDeletes(uint8_t level) {
                    (level > 0 && znssstable_->GetFractionFilled(level) > 0.85);
   if (only_need) {
     TROPODB_DEBUG("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
-           current_->ss_d_[level].size());
+                  current_->ss_d_[level].size());
   }
   return only_need;
 }

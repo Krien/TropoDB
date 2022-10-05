@@ -3,9 +3,9 @@
 #include "db/column_family.h"
 #include "db/memtable.h"
 #include "db/merge_context.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "options/cf_options.h"
 #include "table/internal_iterator.h"
-#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZNSMemTable::ZNSMemTable(const DBOptions& db_options,

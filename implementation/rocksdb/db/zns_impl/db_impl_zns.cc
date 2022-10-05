@@ -61,9 +61,14 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       manifest_(nullptr),
       table_cache_(nullptr),
       versions_(nullptr),
-      // Thread count (1 HIGH for each flush thread, 1~3 HIGH for each L0 thread and 1~3 LOW for each LN thread)
-      low_level_threads_((1 + ZnsConfig::compaction_allow_prefetching + ZnsConfig::compaction_allow_deferring_writes)),
-      high_level_threads_(ZnsConfig::lower_concurrency + ZnsConfig::lower_concurrency * (1 + ZnsConfig::compaction_allow_prefetching + ZnsConfig::compaction_allow_deferring_writes)),
+      // Thread count (1 HIGH for each flush thread, 1~3 HIGH for each L0 thread
+      // and 1~3 LOW for each LN thread)
+      low_level_threads_((1 + ZnsConfig::compaction_allow_prefetching +
+                          ZnsConfig::compaction_allow_deferring_writes)),
+      high_level_threads_(ZnsConfig::lower_concurrency +
+                          ZnsConfig::lower_concurrency *
+                              (1 + ZnsConfig::compaction_allow_prefetching +
+                               ZnsConfig::compaction_allow_deferring_writes)),
       // State
       bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
@@ -75,7 +80,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       forced_schedule_(false),
       // diag
       clock_(SystemClock::Default().get()) {
-	SetTropoDBLogLevel(ZnsConfig::default_log_level);
+  SetTropoDBLogLevel(ZnsConfig::default_log_level);
   // The following variables are set to safeguards
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     wal_man_[i] = nullptr;
@@ -87,10 +92,14 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
     wal_reserved_[i] = 0;
   }
   std::fill(compactions_.begin(), compactions_.end(), 0);
-  // Setup background threads (RocksDB env will not let us make threads otherwise)
-  TROPODB_INFO("INFO: TropoDB will use a maximum of %u background threads\n", low_level_threads_ + high_level_threads_);
-  env_->SetBackgroundThreads(high_level_threads_, ROCKSDB_NAMESPACE::Env::Priority::HIGH);
-  env_->SetBackgroundThreads(low_level_threads_, ROCKSDB_NAMESPACE::Env::Priority::LOW);
+  // Setup background threads (RocksDB env will not let us make threads
+  // otherwise)
+  TROPODB_INFO("INFO: TropoDB will use a maximum of %u background threads\n",
+               low_level_threads_ + high_level_threads_);
+  env_->SetBackgroundThreads(high_level_threads_,
+                             ROCKSDB_NAMESPACE::Env::Priority::HIGH);
+  env_->SetBackgroundThreads(low_level_threads_,
+                             ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
 DBImplZNS::~DBImplZNS() {
@@ -99,7 +108,7 @@ DBImplZNS::~DBImplZNS() {
   {
     mutex_.Lock();
     while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
-          AnyFlushScheduled()) {
+           AnyFlushScheduled()) {
       shutdown_ = true;
       printf("busy, wait before closing\n");
       if (bg_compaction_l0_scheduled_) {
@@ -122,8 +131,8 @@ DBImplZNS::~DBImplZNS() {
   TROPODB_INFO("INFO: All jobs done - ready to exit\n");
   PrintStats();
 
- // Reaping what we have sown with ref counters
- {
+  // Reaping what we have sown with ref counters
+  {
     if (versions_ != nullptr) delete versions_;
     for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
       if (mem_[i] != nullptr) mem_[i]->Unref();
@@ -137,8 +146,8 @@ DBImplZNS::~DBImplZNS() {
     if (table_cache_ != nullptr) delete table_cache_;
     if (channel_factory_ != nullptr) channel_factory_->Unref();
     if (zns_device_ != nullptr) delete zns_device_;
- }
- TROPODB_INFO("INFO: Exiting\n");
+  }
+  TROPODB_INFO("INFO: Exiting\n");
 }
 
 Status DBImplZNS::ValidateOptions(const DBOptions& db_options) {
@@ -195,20 +204,20 @@ Status DBImplZNS::InitDB(const DBOptions& options,
                          const size_t max_write_buffer_size) {
   assert(zns_device_ != nullptr);
   max_write_buffer_size_ = max_write_buffer_size;
-  
+
   // Setup info string
   std::ostringstream info_str;
   info_str << "==== Zone division ====\n";
   info_str << std::setfill('-') << std::setw(76) << "\n" << std::setfill(' ');
   info_str << std::left << std::setw(15) << "Structure" << std::right
-            << std::setw(25) << "Begin (zone nr)" << std::setw(25)
-            << "End (zone nr)"
-            << "\n";
+           << std::setw(25) << "Begin (zone nr)" << std::setw(25)
+           << "End (zone nr)"
+           << "\n";
   info_str << std::setfill('-') << std::setw(76) << "\n" << std::setfill(' ');
 
   // Get device info
   SZD::DeviceInfo device_info;
-  zns_device_->GetInfo(&device_info);  
+  zns_device_->GetInfo(&device_info);
   uint64_t zone_head = device_info.min_lba / device_info.zone_size;
   uint64_t zone_step = 0;
 
@@ -219,8 +228,8 @@ Status DBImplZNS::InitDB(const DBOptions& options,
                                 zone_head + zone_step);
     manifest_->Ref();
     info_str << std::left << std::setw(15) << "Manifest" << std::right
-              << std::setw(25) << zone_head 
-              << std::setw(25) << zone_head + zone_step << "\n";
+             << std::setw(25) << zone_head << std::setw(25)
+             << zone_head + zone_step << "\n";
     zone_head += zone_step;
   }
 
@@ -232,9 +241,9 @@ Status DBImplZNS::InitDB(const DBOptions& options,
       wal_man_[i] = new ZnsWALManager<ZnsConfig::wal_manager_zone_count>(
           channel_factory_, device_info, zone_head, zone_step + zone_head);
       wal_man_[i]->Ref();
-      info_str << std::left << std::setw(15) << ("WALMAN-" + std::to_string(i)) << std::right 
-               << std::setw(25) << zone_head 
-               << std::setw(25) << (zone_head + zone_step) << "\n";
+      info_str << std::left << std::setw(15) << ("WALMAN-" + std::to_string(i))
+               << std::right << std::setw(25) << zone_head << std::setw(25)
+               << (zone_head + zone_step) << "\n";
       zone_head += zone_step;
     }
   }
@@ -245,32 +254,32 @@ Status DBImplZNS::InitDB(const DBOptions& options,
     // If only we had access to C++23.
     ss_manager_ =
         ZNSSSTableManager::NewZNSSTableManager(channel_factory_, device_info,
-                                              zone_head, zone_head + zone_step)
+                                               zone_head, zone_head + zone_step)
             .value_or(nullptr);
     if (ss_manager_ == nullptr) {
       TROPODB_ERROR("ERROR: Could not initialise SSTable manager\n");
       return Status::Corruption();
     }
     ss_manager_->Ref();
-    info_str << ss_manager_->LayoutDivisionString();    
+    info_str << ss_manager_->LayoutDivisionString();
     zone_head = device_info.max_lba / device_info.zone_size;
   }
 
   // Init Memtables, table ache and version structure
   {
     for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-      mem_[i] =
-          new ZNSMemTable(options, internal_comparator_, max_write_buffer_size_);
+      mem_[i] = new ZNSMemTable(options, internal_comparator_,
+                                max_write_buffer_size_);
       mem_[i]->Ref();
     }
 
     Options opts(options, ColumnFamilyOptions());
-    table_cache_ = new ZnsTableCache(opts, internal_comparator_, 1024 * 1024 * 4,
-                                   ss_manager_);
+    table_cache_ = new ZnsTableCache(opts, internal_comparator_,
+                                     1024 * 1024 * 4, ss_manager_);
 
     versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
-                                device_info.lba_size, device_info.zone_cap,
-                                table_cache_, this->env_);
+                                  device_info.lba_size, device_info.zone_cap,
+                                  table_cache_, this->env_);
   }
 
   // Print info string (if enabled)
@@ -332,7 +341,7 @@ Status DBImplZNS::Recover() {
     for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
       s = wal_man_[i]->Recover(mem_[i], &old_seq);
     }
-    if (!s.ok()) { 
+    if (!s.ok()) {
       return s;
     }
     versions_->SetLastSequence(old_seq);
@@ -367,7 +376,7 @@ Status DBImplZNS::Open(
   // Open a SZD connection
   DBImplZNS* impl = new DBImplZNS(db_options, name);
   s = impl->OpenZNSDevice("ZNSLSM");
-  if (!s.ok()) { 
+  if (!s.ok()) {
     return s;
   }
 

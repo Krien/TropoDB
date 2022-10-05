@@ -296,7 +296,7 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
     if (imm[i] != nullptr) imm[i]->Unref();
   }
   current->Unref();
-  
+
   return s;
 }
 
@@ -308,4 +308,4 @@ Status DBImplZNS::Get(const ReadOptions& options,
   *value = PinnableSlice(val);
   return s;
 }
-}
+}  // namespace ROCKSDB_NAMESPACE

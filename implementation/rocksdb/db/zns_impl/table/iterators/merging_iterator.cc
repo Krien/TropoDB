@@ -5,8 +5,8 @@
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 
 #include "db/zns_impl/table/iterators/iterator_wrapper.h"
-#include "rocksdb/comparator.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
+#include "rocksdb/comparator.h"
 #include "rocksdb/iterator.h"
 
 namespace ROCKSDB_NAMESPACE {

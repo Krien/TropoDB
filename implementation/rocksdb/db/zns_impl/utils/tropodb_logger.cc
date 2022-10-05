@@ -32,35 +32,34 @@
  */
 // ^ This code is inspired by the SPDK logger
 
+#include "db/zns_impl/utils/tropodb_logger.h"
+
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
-#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 // Globals
 TropoDBLogLevel g_TropoDB_log_level = TropoDBLogLevel::TROPO_DISABLED;
 
 void SetTropoDBLogLevel(const TropoDBLogLevel log_level) {
-    g_TropoDB_log_level = log_level;
+  g_TropoDB_log_level = log_level;
 }
 
-TropoDBLogLevel GetTropoDBLogLevel() {
-    return g_TropoDB_log_level;
+TropoDBLogLevel GetTropoDBLogLevel() { return g_TropoDB_log_level; }
+
+static void TropoDBVlog(const TropoDBLogLevel level, const char *format,
+                        va_list ap) {
+  if (level < g_TropoDB_log_level) {
+    return;
+  }
+  vprintf(format, ap);
 }
 
-static void TropoDBVlog(const TropoDBLogLevel level, const char *format, va_list ap) {
-    if (level < g_TropoDB_log_level) {
-        return;
-    }
-    vprintf(format, ap);
+void TropoDBLog(const TropoDBLogLevel level, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  TropoDBVlog(level, format, ap);
+  va_end(ap);
 }
-
-void TropoDBLog(const TropoDBLogLevel level, const char *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	TropoDBVlog(level,format, ap);
-	va_end(ap);
-}
-}
+}  // namespace ROCKSDB_NAMESPACE

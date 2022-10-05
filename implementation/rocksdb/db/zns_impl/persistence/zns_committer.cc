@@ -3,13 +3,13 @@
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 #include "rocksdb/write_batch.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 static void InitTypeCrc(
@@ -292,8 +292,8 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
-               reader.commit_end);
+        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
+                      reader.commit_ptr, reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
     }
@@ -382,8 +382,8 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
-               reader.commit_end);
+        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
+                      reader.commit_ptr, reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
     }

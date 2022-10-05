@@ -16,6 +16,26 @@ LNZoneIterator::LNZoneIterator(const Comparator* cmp,
 
 LNZoneIterator::~LNZoneIterator() = default;
 
+std::pair<SSZoneMetaData, uint8_t> LNZoneIterator::DecodeLNIterator(
+    const Slice& file_value) {
+  SSZoneMetaData meta;
+  meta.LN.lba_regions = DecodeFixed8(file_value.data());
+  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
+    meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
+    meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
+  }
+  uint64_t lba_count =
+      DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
+  uint8_t level =
+      DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
+  uint64_t number =
+      DecodeFixed64(file_value.data() + 10 + 16 * meta.LN.lba_regions);
+  meta.lba_count = lba_count;
+  meta.number = number;
+
+  return {meta, level};
+}
+
 Slice LNZoneIterator::value() const {
   assert(Valid());
   // printf("Encoding %u %lu %lu %u ", (*slist_)[index_]->LN.lba_regions,

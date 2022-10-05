@@ -197,8 +197,8 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
   if (!s.ok()) {
-    TROPODB_ERROR("Error reading L0 table %lu at location %lu %lu\n", meta.number,
-           meta.L0.lba, meta.lba_count);
+    TROPODB_ERROR("Error reading L0 table %lu at location %lu %lu\n",
+                  meta.number, meta.L0.lba, meta.lba_count);
     exit(-1);
   }
   return Status::OK();
