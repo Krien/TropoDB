@@ -15,6 +15,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 #include "rocksdb/write_batch.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 
@@ -158,10 +159,10 @@ Status ZNSWAL::Sync() {
 
 #ifdef WAL_UNORDERED
 Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
-  // printf("Replaying WAL\n");
+  TROPODB_INFO("Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    // printf("Replayed WAL\n");
+    TROPODB_INFO("Replayed WAL\n");
     return s;
   }
   // Used for each batch
@@ -225,16 +226,16 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     }
   }
   // printf("Applied WAL to memtable\n");
-  // printf("Replayed WAL\n");
+  TROPODB_INFO("Replayed WAL\n");
   return s;
 }
 
 #else
 Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
-  // printf("Replaying WAL\n");
+  TROPODB_INFO("Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    // printf("Replayed WAL\n");
+    TROPODB_INFO("Replayed WAL\n");
     return s;
   }
   // Used for each batch

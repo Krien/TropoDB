@@ -13,6 +13,7 @@
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/persistence/zns_wal.h"
 #include "db/zns_impl/persistence/zns_wal_manager.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"

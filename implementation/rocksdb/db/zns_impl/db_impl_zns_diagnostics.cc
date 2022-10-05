@@ -14,7 +14,7 @@
 
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/db_impl_zns.h"
-#include "db/zns_impl/diagnostics.h"
+#include "db/zns_impl/utils/tropodb_diagnostics.h"
 
 namespace ROCKSDB_NAMESPACE {
 

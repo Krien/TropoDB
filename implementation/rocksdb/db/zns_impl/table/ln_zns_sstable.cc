@@ -7,6 +7,7 @@
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -52,7 +53,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
                                   uint8_t writer) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    printf("out of space LN %lu %lu \n", content.size() / lba_size_,
+    TROPODB_ERROR("out of space LN %lu %lu \n", content.size() / lba_size_,
            log_.SpaceAvailable() / lba_size_);
     return Status::IOError("Not enough space available for LN");
   }
@@ -61,7 +62,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
   if (!FromStatus(
            log_.Append(content.data(), content.size(), ptrs, false, writer))
            .ok()) {
-    printf("Error appending to fragmented log\n");
+    TROPODB_ERROR("Error appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
   }
   meta->lba_count = 0;
@@ -147,7 +148,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   // mutex_.Unlock();
   if (!s.ok()) {
-    printf("Error reading LN table\n");
+    TROPODB_ERROR("Error reading LN table\n");
     delete[] buffer;
     return s;
   }
@@ -161,7 +162,7 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     uint64_t from = meta.LN.lbas[i];
     uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
-      printf("LN delete out of range\n");
+      TROPODB_ERROR("LN delete out of range\n");
       return Status::Corruption("Invalid metadata");
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
@@ -182,7 +183,7 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0) {
-      printf("SIZE %lu COUNT %lu \n", size, count);
+      TROPODB_ERROR("SIZE %lu COUNT %lu \n", size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -203,7 +204,7 @@ Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      printf("corrupt key in cache\n");
+      TROPODB_ERROR("corrupt key in cache\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;

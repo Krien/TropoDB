@@ -10,6 +10,7 @@
 #include "db/zns_impl/table/zns_sstable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -39,7 +40,7 @@ ZnsVersion::~ZnsVersion() {
       }
     }
   }
-  // printf("Removed version %lu\n", debug_nr_);
+  TROPODB_DEBUG("Removed version\n");
 }
 
 void ZnsVersion::Clear() {}

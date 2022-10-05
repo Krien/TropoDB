@@ -7,6 +7,7 @@
 #include "db/zns_impl/table/zns_table_cache.h"
 
 #include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -70,7 +71,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (!s.ok()) {
-    printf("Error getting iterator\n");
+    TROPODB_ERROR("Error getting iterator\n");
     return NewErrorIterator(s);
   }
 
@@ -95,7 +96,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
       ParsedInternalKey parsed_key;
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
         *status = EntryStatus::notfound;
-        printf(
+        TROPODB_ERROR(
             "corrupt key in table cache, for level %u and table %lu, str %s\n",
             level, meta.number, it->key().ToString().data());
       } else if (parsed_key.type == kTypeDeletion) {

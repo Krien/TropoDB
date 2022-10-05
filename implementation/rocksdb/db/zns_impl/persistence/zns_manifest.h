@@ -3,7 +3,7 @@
 #ifndef ZNS_MANIFEST_H
 #define ZNS_MANIFEST_H
 
-#include "db/zns_impl/diagnostics.h"
+#include "db/zns_impl/utils/tropodb_diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/ref_counter.h"

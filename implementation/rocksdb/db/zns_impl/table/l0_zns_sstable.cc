@@ -7,6 +7,7 @@
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -51,7 +52,7 @@ uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    printf("Out of space L0\n");
+    TROPODB_ERROR("Out of space L0\n");
     return Status::IOError("Not enough space available for L0");
   }
 #ifdef USE_COMMITTER
@@ -196,7 +197,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
   if (!s.ok()) {
-    printf("Error reading L0 table %lu at location %lu %lu\n", meta.number,
+    TROPODB_ERROR("Error reading L0 table %lu at location %lu %lu\n", meta.number,
            meta.L0.lba, meta.lba_count);
     exit(-1);
   }
@@ -291,7 +292,7 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
   // printf("Reading L0, meta: %lu %lu \n", meta.L0.lba, meta.lba_count);
   s = ReadSSTable(&sstable, meta);
   if (!s.ok()) {
-    printf("Error reading L0\n");
+    TROPODB_ERROR("Error reading L0\n");
     return nullptr;
   }
   char* data = (char*)sstable.data();
@@ -299,7 +300,7 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      printf("Reading corrupt L0 header %lu %lu \n", size, count);
+      TROPODB_ERROR("Reading corrupt L0 header %lu %lu \n", size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -320,7 +321,7 @@ Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      printf("corrupt key in L0 SSTable\n");
+      TROPODB_ERROR("corrupt key in L0 SSTable\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;

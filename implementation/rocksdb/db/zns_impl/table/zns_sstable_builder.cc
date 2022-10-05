@@ -2,6 +2,7 @@
 
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 

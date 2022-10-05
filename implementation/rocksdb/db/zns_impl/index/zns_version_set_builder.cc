@@ -3,6 +3,7 @@
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/rocksdb_namespace.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsVersionSet::Builder::Builder(ZnsVersionSet* vset, ZnsVersion* base)
@@ -116,7 +117,7 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
         const InternalKey& prev_end = v->ss_[level][i - 1]->largest;
         const InternalKey& this_begin = v->ss_[level][i]->smallest;
         if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
-          std::fprintf(stderr, "overlapping ranges in same level %s vs. %s\n",
+          TROPODB_ERROR("overlapping ranges in same level %s vs. %s\n",
                        prev_end.DebugString(true).c_str(),
                        this_begin.DebugString(true).c_str());
           std::abort();

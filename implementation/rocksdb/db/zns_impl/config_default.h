@@ -19,12 +19,15 @@ namespace ROCKSDB_NAMESPACE {
 #define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
 #define WAL_MANAGER_MANAGES_CHANNELS  // Do not unset, this will break almost
                                       // WAL features.
+// #define TROPICAL_DEBUG // allows TropoDB debug messages
+
 //#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch
 
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
 namespace ZnsConfig {
+constexpr static TropoDBLogLevel default_log_level = TropoDBLogLevel::TROPO_ERROR_LEVEL;
 // WAL options
 constexpr static uint8_t level_count =
     6; /**< Amount of LSM-tree levels L0 up to LN */

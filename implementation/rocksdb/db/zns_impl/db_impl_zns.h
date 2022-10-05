@@ -412,8 +412,9 @@ class DBImplZNS : public DB {
 };
 
 struct FlushData {
-  DBImplZNS* db;
-  uint8_t parallel_number;
+  DBImplZNS* db_;
+  uint8_t parallel_number_;
+  FlushData(DBImplZNS* db, uint8_t parallel_number) : db_(db), parallel_number_(parallel_number){}
 };
 
 }  // namespace ROCKSDB_NAMESPACE

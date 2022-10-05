@@ -11,6 +11,7 @@
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "rocksdb/slice.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -422,7 +423,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
           deferred_.new_task_.Wait();
           deferred_.mutex_.Unlock();
         }
-        printf("Deferred quiting \n");
+        TROPODB_DEBUG("Deferred quiting \n");
       }
       delete merger;
     }

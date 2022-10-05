@@ -4,6 +4,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "util/coding.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -84,7 +85,7 @@ Status ZnsManifest::SetCurrent() {
   //        min_zone_head_));
   s = committer_.SafeCommit(Slice(current_name));
   if (!s.ok()) {
-    printf("error setting current\n");
+    TROPODB_ERROR("error setting current\n");
     return s;
   }
 
@@ -198,7 +199,7 @@ Status ZnsManifest::ValidateManifestPointers() const {
 }
 
 Status ZnsManifest::ReadManifest(std::string* manifest) {
-  printf("read manifest\n");
+  TROPODB_INFO("read manifest\n");
   Status s = ValidateManifestPointers();
   if (!s.ok()) {
     return s;

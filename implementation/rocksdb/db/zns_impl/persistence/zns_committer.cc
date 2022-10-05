@@ -9,6 +9,7 @@
 #include "rocksdb/write_batch.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 static void InitTypeCrc(
@@ -191,7 +192,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
       *lbas += lbas_iter;
     }
     if (!s.ok()) {
-      printf("Fatal append error\n");
+      TROPODB_ERROR("Fatal append error\n");
       return s;
     }
 #endif
@@ -216,7 +217,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
 
 Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   if (!SpaceEnough(data)) {
-    printf("No space left\n");
+    TROPODB_ERROR("No space left for commiter\n");
     return Status::IOError("No space left");
   }
   return Commit(data, lbas);
@@ -243,7 +244,7 @@ Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
 bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
   // buffering issue
   if (read_buffer_[reader.reader_nr]->GetBufferSize() == 0) {
-    printf("FATAL, be sure to first get a commit\n");
+    TROPODB_ERROR("FATAL, be sure to first get a commit\n");
     return false;
   }
   if (reader.commit_ptr >= reader.commit_end) {
@@ -291,7 +292,7 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
+        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
                reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
@@ -381,7 +382,7 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
+        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
                reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }

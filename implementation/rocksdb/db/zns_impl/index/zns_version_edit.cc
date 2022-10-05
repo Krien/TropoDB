@@ -8,6 +8,7 @@
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "util/coding.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 ZnsVersionEdit::ZnsVersionEdit() { Clear(); }
@@ -48,7 +49,7 @@ void ZnsVersionEdit::AddSSDefinition(const uint8_t level,
   f.lba_count = meta.lba_count;
   f.smallest = meta.smallest;
   f.largest = meta.largest;
-  // printf("Adding %lu %lu %lu \n", f.number, f.L0.lba, f.lba_count);
+  TROPODB_DEBUG("Adding %lu %lu %lu \n", f.number, f.L0.lba, f.lba_count);
   new_ss_.push_back(std::make_pair(level, f));
 }
 
@@ -90,7 +91,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size();
-  printf("DEBUG LEAK begin data %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK begin data %lu \n", debug_version_leak_);
 #endif
 
   // compaction pointers
@@ -102,7 +103,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  printf("DEBUG LEAK compaction pointers %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK compaction pointers %lu \n", debug_version_leak_);
 #endif
 
   // deleted range
@@ -114,7 +115,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  printf("DEBUG LEAK begin deleted ranges %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK begin deleted ranges %lu \n", debug_version_leak_);
 #endif
 
   // deleted LN
@@ -143,7 +144,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  printf("DEBUG LEAK deleted LN %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK deleted LN %lu \n", debug_version_leak_);
 #endif
 
   // new files
@@ -154,7 +155,6 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
     if (deleted_ss_.count(std::make_pair(level, m.number)) > 0) {
       continue;
     }
-// printf("added %lu %lu \n", level, m.number);
 #ifdef VERSION_LEAK_SS
     debug_ss_leak_ = dst->size();
 #endif
@@ -184,7 +184,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  printf("DEBUG LEAK new files %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK new files %lu \n", debug_version_leak_);
 #endif
 
   // Fragmented logs
@@ -195,7 +195,7 @@ void ZnsVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  printf("DEBUG LEAK fragmented logs %lu \n", debug_version_leak_);
+  TROPODB_DEBUG("DEBUG LEAK fragmented logs %lu \n", debug_version_leak_);
 #endif
 }
 

@@ -10,6 +10,7 @@
 #include "db/zns_impl/table/ln_zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
@@ -140,7 +141,7 @@ Status ZNSSSTableManager::DeleteL0Table(
 Status ZNSSSTableManager::DeleteLNTable(const uint8_t level,
                                         const SSZoneMetaData& meta) const {
   if (level == 0) {
-    printf("Invalid level for LN delete\n");
+    TROPODB_ERROR("Invalid level for LN delete\n");
     return Status::InvalidArgument();
   }
   Status s =
@@ -210,7 +211,7 @@ Status ZNSSSTableManager::Recover() {
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     s = static_cast<L0ZnsSSTable*>(sstable_level_[i])->Recover();
     if (!s.ok()) {
-      printf("Error recovering L0-%lu\n", i);
+      TROPODB_ERROR("Error recovering L0-%lu\n", i);
       return s;
     }
   }
@@ -226,7 +227,7 @@ Status ZNSSSTableManager::Recover(const std::string& frag) {
   s = static_cast<LNZnsSSTable*>(sstable_level_[ZnsConfig::lower_concurrency])
           ->Recover(frag);
   if (!s.ok()) {
-    printf("Error recovering LN\n");
+    TROPODB_ERROR("Error recovering LN\n");
     return s;
   }
 

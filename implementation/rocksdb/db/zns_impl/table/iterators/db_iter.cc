@@ -8,6 +8,7 @@
 #include "db/zns_impl/db_impl_zns.h"
 #include "port/port.h"
 #include "rocksdb/env.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/iterator.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
@@ -19,9 +20,9 @@ static void DumpInternalIter(Iterator* iter) {
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey k;
     if (!ParseInternalKey(iter->key(), &k)) {
-      std::fprintf(stderr, "Corrupt '%s'\n", EscapeString(iter->key()).c_str());
+      TROPODB_ERROR(stderr, "Corrupt '%s'\n", EscapeString(iter->key()).c_str());
     } else {
-      std::fprintf(stderr, "@ '%s'\n", k.DebugString().c_str());
+      TROPODB_ERROR(stderr, "@ '%s'\n", k.DebugString().c_str());
     }
   }
 }

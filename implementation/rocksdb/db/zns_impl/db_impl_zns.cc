@@ -28,6 +28,7 @@
 #include "db/zns_impl/persistence/zns_wal_manager.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_table_cache.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -78,6 +79,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
       forced_schedule_(false),
       // diag
       clock_(SystemClock::Default().get()) {
+	SetTropoDBLogLevel(ZnsConfig::default_log_level);
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     wal_man_[i] = nullptr;
     wal_[i] = nullptr;
