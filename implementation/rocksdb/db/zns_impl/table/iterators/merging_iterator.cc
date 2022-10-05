@@ -180,7 +180,7 @@ void MergingIterator::FindLargest() {
   }
   current_ = largest;
 }
-}  // namespace
+}  // anonymous namespace
 
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
                              int n) {

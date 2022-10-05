@@ -52,7 +52,7 @@ uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    TROPODB_ERROR("Out of space L0\n");
+    TROPODB_ERROR("ERROR: L0 SSTable: Out of space\n");
     return Status::IOError("Not enough space available for L0");
   }
 #ifdef USE_COMMITTER
@@ -63,8 +63,6 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   meta->L0.lba = log_.GetWriteHead();
   Status s = FromStatus(
       log_.Append(content.data(), content.size(), &meta->lba_count, false));
-  // printf("Added L0 %lu %lu %lu \n", meta->L0.lba, meta->lba_count,
-  //        content.size());
   return s;
 #endif
 }
@@ -79,6 +77,7 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
   InternalIterator* iter = mem->NewIterator();
   iter->SeekToFirst();
   if (!iter->Valid()) {
+    TROPODB_ERROR("ERROR: L0 SSTable: No valid iterator\n");
     return Status::Corruption("No valid iterator in the memtable");
   }
   for (; iter->Valid(); iter->Next()) {
@@ -93,6 +92,7 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
       builder->Finalise();
       s = builder->Flush();
       if (!s.ok()) {
+        TROPODB_ERROR("ERROR: L0 SSTable: Error flushing table\n");
         break;
       }
       metas.push_back(meta);
@@ -130,8 +130,6 @@ uint8_t L0ZnsSSTable::request_read_queue() {
     }
   }
   read_queue_[picked_reader] += 1;
-  // printf("Claimed readerL0 %u %u\n", picked_reader,
-  // read_queue_[picked_reader]);
   mutex_.Unlock();
   return picked_reader;
 }
@@ -141,7 +139,6 @@ void L0ZnsSSTable::release_read_queue(uint8_t reader) {
   assert(reader < ZnsConfig::number_of_concurrent_L0_readers &&
          read_queue_[reader] != 0);
   read_queue_[reader] = 0;
-  // printf("Released readerL0 %u %u \n", reader, read_queue_[reader]);
   cv_.SignalAll();
   mutex_.Unlock();
 }
@@ -150,11 +147,10 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (meta.L0.lba > max_zone_head_ || meta.L0.lba < min_zone_head_ ||
       meta.lba_count > max_zone_head_ - min_zone_head_) {
-    printf("Invalid metadata?\n");
+    TROPODB_ERROR("ERROR: L0 SSTable: Invalid metadata\n");
     return Status::Corruption("Invalid metadata");
   }
   sstable->clear();
-  // printf("Reading L0 from %lu \n", meta.L0.lba);
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
 #ifdef USE_COMMITTER
@@ -165,11 +161,9 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   s = committer_.GetCommitReader(readernr, meta.L0.lba,
                                  meta.L0.lba + meta.lba_count, &reader);
 
-  // printf("reading L0 %lu %lu from reader %u \n", meta.L0.lba, meta.lba_count,
-  //        readernr);
   if (!s.ok()) {
     release_read_queue(readernr);
-    // mutex_.Unlock();
+    TROPODB_ERROR("ERROR: L0 SSTable: Can not get reader\n");
     return s;
   }
   while (committer_.SeekCommitReader(reader, &record)) {
@@ -197,8 +191,9 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
   if (!s.ok()) {
-    TROPODB_ERROR("Error reading L0 table %lu at location %lu %lu\n",
-                  meta.number, meta.L0.lba, meta.lba_count);
+    TROPODB_ERROR(
+        "ERROR: L0 SSTable: failed reading L0 table %lu at location %lu %lu\n",
+        meta.number, meta.L0.lba, meta.lba_count);
     exit(-1);
   }
   return Status::OK();
@@ -218,7 +213,6 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     uint64_t i = 0;
     while (i < metas.size()) {
       SSZoneMetaData* m = metas[i];
-      // printf("Readding first %lu \n", m->number);
       remaining_metas.push_back(m);
       i++;
     }
@@ -235,14 +229,14 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     SSZoneMetaData* m = metas[i];
     // Get adjacents
     if (prev->number == m->number) {
-      exit(-1);
+      TROPODB_ERROR(
+          "ERROR: L0 SSTable: Reset two SSTables with same numbers\n");
+      return Status::Corruption("SSTables with same number detected");
       continue;
     }
     if (log_.wrapped_addr(prev->L0.lba + prev->lba_count) != m->L0.lba) {
       break;
     }
-    // printf("Deleting %lu %lu %lu\n", m->number, m->L0.lba,
-    //        m->L0.lba + m->lba_count);
     blocks += m->lba_count;
     prev = m;
     if (blocks >= zone_cap_) {
@@ -258,21 +252,19 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     blocks_to_delete = safe;
     mock->L0.lba = log_.wrapped_addr(log_.GetWriteTail() + blocks_to_delete);
     remaining_metas.push_back(mock);
-    // printf("Mock delete %lu %lu %lu \n", mock->number, mock->L0.lba,
-    //        mock->lba_count);
   }
   Status s = Status::OK();
   blocks_to_delete = (blocks_to_delete / zone_cap_) * zone_cap_;
   if (blocks_to_delete > 0) {
-    // printf("Deleting from L0 %lu %lu \n", log_.GetWriteTail(),
-    //        log_.GetWriteTail() + blocks_to_delete);
     s = FromStatus(log_.ConsumeTail(log_.GetWriteTail(),
                                     log_.GetWriteTail() + blocks_to_delete));
+    if (!s.ok()) {
+      TROPODB_ERROR("ERROR: L0 SSTable: Failed resetting tail\n");
+    }
   }
   i = upto;
   while (i < metas.size()) {
     SSZoneMetaData* m = metas[i];
-    // printf("Readding %lu %lu %lu \n", m->number, m->L0.lba, m->lba_count);
     remaining_metas.push_back(m);
     i++;
   }
@@ -280,7 +272,6 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
 }
 
 Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
-  // printf("Invalidating L0 %lu %lu \n", meta.L0.lba, meta.lba_count);
   return FromStatus(
       log_.ConsumeTail(meta.L0.lba, meta.L0.lba + meta.lba_count));
 }
@@ -289,10 +280,9 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
                                     const Comparator* cmp) {
   Status s;
   Slice sstable;
-  // printf("Reading L0, meta: %lu %lu \n", meta.L0.lba, meta.lba_count);
   s = ReadSSTable(&sstable, meta);
   if (!s.ok()) {
-    TROPODB_ERROR("Error reading L0\n");
+    TROPODB_ERROR("ERROR: L0 SSTable: Failed reading L0\n");
     return nullptr;
   }
   char* data = (char*)sstable.data();
@@ -300,7 +290,8 @@ Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      TROPODB_ERROR("Reading corrupt L0 header %lu %lu \n", size, count);
+      TROPODB_ERROR("ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n",
+                    size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -315,13 +306,14 @@ Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const SSZoneMetaData& meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
+    TROPODB_ERROR("ERROR: L0 SSTable: Corrupt iterator\n");
     return Status::Corruption();
   }
   it->Seek(key_ptr);
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      TROPODB_ERROR("corrupt key in L0 SSTable\n");
+      TROPODB_ERROR("ERROR: L0 SSTable: Corrupt key found\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;

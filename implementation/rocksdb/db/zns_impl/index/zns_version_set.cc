@@ -58,7 +58,7 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   static uint64_t debug_number = 0;
   debug_number++;
   v->debug_nr_ = debug_number;
-  // printf("added version %lu \n", debug_number);
+  TROPODB_DEBUG("DEBUG: added version %lu \n", debug_number);
 }
 
 void ZnsVersionSet::GetLiveZones(const uint8_t level,
@@ -74,14 +74,13 @@ void ZnsVersionSet::GetLiveZones(const uint8_t level,
   }
 }
 
+// TODO: Do we still use this?
 void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
                                        std::pair<uint64_t, uint64_t>* range) {
   *range = std::make_pair<uint64_t, uint64_t>(0, 0);
   bool first = true;
   for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
-    // printf("V %lu %lu %lu %lu\n", v->debug_nr_, v->ss_deleted_range_.first,
-    //        v->ss_deleted_range_.second, v->ss_[0].size());
     // There can be a couple of cases:
     //  1. The version does not have a deleted range (0,0). skip
     //  2. The version starts at a different range than current_. Immediately
@@ -97,15 +96,12 @@ void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
     if (first || v->ss_deleted_range_.second < range->second) {
       *range = v->ss_deleted_range_;
       first = false;
-      // printf("potential %lu %lu \n", v->ss_deleted_range_.first,
-      //        v->ss_deleted_range_.second);
     }
   }
 }
 
 Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
                                              port::CondVar* cond) {
-  // printf("reclaiming....\n");
   Status s = Status::OK();
   ZnsVersionEdit edit;
 
@@ -118,17 +114,13 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
   for (size_t j = 0; j < current_->ss_d_[0].size(); j++) {
     SSZoneMetaData* todelete = current_->ss_d_[0][j];
     if (live_zones.count(todelete->number) == 0) {
-      // printf("Safe to delete %lu %lu %lu\n", todelete->number,
-      // todelete->L0.lba,
-      //        todelete->lba_count);
       tmp.push_back(todelete);
     } else {
       new_deleted_ss_l0.push_back(todelete);
-      // printf("we can not delete %lu\n", todelete->number);
     }
   }
   // Sort on circular log order
-  printf("Safe to delete %lu \n", tmp.size());
+  TROPODB_DEBUG("DEBUG: Reclaim SSTablesL0: Safe to delete %lu \n", tmp.size());
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
@@ -143,20 +135,16 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     current_->ss_d_[0] = new_deleted_ss_l0;
 
     if (!s.ok()) {
-      printf("error reclaiming L0\n");
+      TROPODB_ERROR("ERROR: SSTable L0 reclaiming: Failed reclaiming L0\n");
       return s;
     }
   }
-  printf("CUR DEL %lu  %lu \n", current_->ss_d_[0].size(),
-         current_->ss_[0].size());
   s = LogAndApply(&edit);
-  printf("DONE reclaiming \n");
   return s;
 }
 
 Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
                                              port::CondVar* cond) {
-  // printf("reclaiming....\n");
   Status s = Status::OK();
   ZnsVersionEdit edit;
   for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
@@ -165,11 +153,8 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
     std::vector<SSZoneMetaData*> to_delete;
     GetLiveZones(i, live_zones);
     for (size_t j = 0; j < current_->ss_d_[i].size(); j++) {
-      // printf("  deleting ln %lu \n", current_->ss_d_[i][j]->number);
       SSZoneMetaData* todelete = current_->ss_d_[i][j];
       if (live_zones.count(todelete->number) != 0) {
-        // printf("Alive can not be deleted: %lu \n",
-        // current_->ss_d_[i][j]->number);
         new_deleted.push_back(todelete);
       } else {
         to_delete.push_back(todelete);
@@ -181,7 +166,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
     for (auto del : to_delete) {
       s = znssstable_->DeleteLNTable(i, *del);
       if (!s.ok()) {
-        printf("Error deleting ln table \n");
+        TROPODB_ERROR("ERROR: SSTable LN reclaimng: Failed reclaiming LN\n");
         return s;
       }
     }
@@ -189,7 +174,6 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
     current_->ss_d_[i] = new_deleted;
   }
   s = LogAndApply(&edit);
-  // printf("DONE reclaiming \n");
   return s;
 }
 
@@ -268,13 +252,6 @@ void ZnsVersionSet::RecalculateScore() {
     if (score > best_score) {
       best_score = score;
       best_level = i;
-      if (best_level > 0) {
-        // printf("Score %f from level %d %lu %lu %f \n", best_score,
-        // best_level,
-        //        current_->ss_[i].size(),
-        //        znssstable_->GetBytesInLevel(current_->ss_[i]),
-        //        ZnsConfig::ss_compact_treshold[i]);
-      }
     }
   }
   v->compaction_level_ = best_level;
@@ -298,9 +275,8 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   s = manifest_->NewManifest(result);
   if (s.ok()) {
     s = manifest_->SetCurrent();
-  }
-  if (!s.ok()) {
-    printf("Error commiting\n");
+  } else {
+    TROPODB_ERROR("ERROR: Version set commit: Failed setting manifest\n");
   }
   return s;
 }
@@ -402,7 +378,9 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
   }
 }
 
-// static int64_t TotalLbas(const std::vector<SSZoneMetaData*>& ss) {
+// FIXME: Left here uncommented because it is not used yet (see
+// setupotherinputs) static int64_t TotalLbas(const
+// std::vector<SSZoneMetaData*>& ss) {
 //   int64_t sum = 0;
 //   for (size_t i = 0; i < ss.size(); i++) {
 //     sum += ss[i]->lba_count;
@@ -430,7 +408,8 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   InternalKey all_start, all_limit;
   GetRange2(c->targets_[0], c->targets_[1], &all_start, &all_limit);
 
-  // See if we can grow the number of inputs in "level" without
+  // FIXME: uncomment at some point and try to debug, there is one (or more)
+  // bug(s) in it. See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
   // if (!c->targets_[1].empty()) {
   //   std::vector<SSZoneMetaData*> expanded0;
@@ -488,10 +467,6 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   c = new ZnsCompaction(this, level, env_);
   c->busy_ = false;
 
-  // printf("Compacting from <%d because score is %f, from %f>\n", level,
-  //        current_->compaction_score_,
-  //        znssstable_->GetFractionFilled(level));
-
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemainingLN();
   max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction_l0
@@ -533,7 +508,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
       }
     }
     if (!number_picked) {
-      printf("Compacting from empty level?\n");
+      TROPODB_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
       return c;
     } else {
       c->targets_[0].push_back(current_->ss_[level][index]);
@@ -592,7 +567,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
         max_lba_c -= current_->ss_[level][0]->lba_count;
       } else {
         // This should not happen
-        printf("Compacting from empty level?\n");
+        TROPODB_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
         return c;
       }
     }
@@ -625,17 +600,17 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
       }
       c->targets_[0].push_back(target);
       max_lba_c -= target->lba_count;
-      // printf("expanding... %lu \n", max_lba_c);
     }
 
     assert(!c->targets_[0].empty());
   }
 
   SetupOtherInputs(c, max_lba_c);
-  printf("Compact from %u, with size %lu/%lu(%lud) %lu/%lu(%lud \n", level,
-         c->targets_[0].size(), current_->ss_[level].size(),
-         current_->ss_d_[level].size(), c->targets_[1].size(),
-         current_->ss_[level + 1].size(), current_->ss_d_[level + 1].size());
+  TROPODB_INFO(
+      "INFO: Pick Compaction: from %u, with size %lu/%lu(%lud) %lu/%lu(%lud \n",
+      level, c->targets_[0].size(), current_->ss_[level].size(),
+      current_->ss_d_[level].size(), c->targets_[1].size(),
+      current_->ss_[level + 1].size(), current_->ss_d_[level + 1].size());
   return c;
 }
 
@@ -661,6 +636,7 @@ Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit) {
         if (GetLengthPrefixedSlice(&input, &sub_input)) {
           s = edit->DecodeFrom(sub_input);
         } else {
+          TROPODB_ERROR("ERROR: VersionSet: Decode corrupt edit data");
           s = Status::Corruption("VersionSet", "edit data");
         }
         break;
@@ -672,11 +648,13 @@ Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit) {
         force = true;
         break;
       default:
+        TROPODB_ERROR("ERROR: VersionSet: Decode unknown tag");
         s = Status::Corruption("VersionSet", "unknown or unsupported tag");
         break;
     }
   }
   if (s.ok() && !input.empty() && !force) {
+    TROPODB_ERROR("ERROR: VersionSet: Decode invalid tag");
     s = Status::Corruption("VersionSet", "invalid tag");
   }
   return s;
@@ -691,6 +669,7 @@ Status ZnsVersionSet::Recover() {
   if (s.ok()) {
     s = manifest_->ReadManifest(&manifest_data);
     if (!s.ok()) {
+      TROPODB_ERROR("ERROR: VersionSet: Could not read manifest");
       printf("error reading manifest \n");
       return s;
     }
@@ -699,7 +678,7 @@ Status ZnsVersionSet::Recover() {
   if (s.ok()) {
     s = DecodeFrom(manifest_data, &edit);
     if (!s.ok()) {
-      printf("Corrupt manifest \n");
+      TROPODB_ERROR("ERROR: VersionSet: Corrupt manifest");
       return s;
     }
   }
@@ -715,7 +694,7 @@ Status ZnsVersionSet::Recover() {
   if (s.ok()) {
     s = LogAndApply(&edit);
   } else {
-    printf("Corrupt fragmented data \n");
+    TROPODB_ERROR("ERROR: VersionSet: Corrupt LN peristency data");
   }
 
   if (edit.has_last_sequence_) {
@@ -726,7 +705,7 @@ Status ZnsVersionSet::Recover() {
   }
 
   if (!s.ok()) {
-    printf("Error setting edit to current \n");
+    TROPODB_ERROR("ERROR: VersionSet: Could not set current");
     return s;
   }
 
@@ -758,13 +737,12 @@ Status ZnsVersionSet::Recover() {
 }
 
 std::string ZnsVersionSet::DebugString() {
-  std::string result;
+  std::ostringstream result;
   for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
     std::vector<SSZoneMetaData*>& m = current_->ss_[i];
-    result.append("\tLevel " + std::to_string(i) + ": " +
-                  std::to_string(m.size()) + " tables \n");
+    result << "\tLevel " << i << ": " << m.size() + " tables \n";
   }
-  return result;
+  return result.str();
 }
 
 }  // namespace ROCKSDB_NAMESPACE

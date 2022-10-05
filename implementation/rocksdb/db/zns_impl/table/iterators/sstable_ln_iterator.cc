@@ -32,31 +32,26 @@ std::pair<SSZoneMetaData, uint8_t> LNZoneIterator::DecodeLNIterator(
       DecodeFixed64(file_value.data() + 10 + 16 * meta.LN.lba_regions);
   meta.lba_count = lba_count;
   meta.number = number;
-
   return {meta, level};
 }
 
 Slice LNZoneIterator::value() const {
   assert(Valid());
-  // printf("Encoding %u %lu %lu %u ", (*slist_)[index_]->LN.lba_regions,
-  //        (*slist_)[index_]->number, (*slist_)[index_]->lba_count, level_);
-  // This is necessary to prevent leaking data into buf. This causes validation
-  // checks to fail (corruption etc.), but should not cause failures itself.
+  // This memset is necessary to prevent leaking data into buf. Otherwise
+  // validation checks can fail (corruption etc.).
   memset(value_buf_, 0, sizeof(value_buf_));
   EncodeFixed8(value_buf_, (*slist_)[index_]->LN.lba_regions);
   for (size_t i = 0; i < (*slist_)[index_]->LN.lba_regions; i++) {
     EncodeFixed64(value_buf_ + 1 + i * 16, (*slist_)[index_]->LN.lbas[i]);
     EncodeFixed64(value_buf_ + 9 + i * 16,
                   (*slist_)[index_]->LN.lba_region_sizes[i]);
-    // printf(" - %lu %lu ", (*slist_)[index_]->LN.lbas[i],
-    //        (*slist_)[index_]->LN.lba_region_sizes[i]);
   }
-  // printf("\n");
   EncodeFixed64(value_buf_ + 1 + 16 * (*slist_)[index_]->LN.lba_regions,
                 (*slist_)[index_]->lba_count);
   EncodeFixed8(value_buf_ + 9 + 16 * (*slist_)[index_]->LN.lba_regions, level_);
   EncodeFixed64(value_buf_ + 10 + 16 * (*slist_)[index_]->LN.lba_regions,
                 (*slist_)[index_]->number);
+  // Note that there can be some padding of 0s at the end
   return Slice(value_buf_, sizeof(value_buf_));
 }
 
@@ -94,9 +89,6 @@ static void LNZonePrefetcher(void* prefetch) {
     while (zone_prefetcher->index_ - zone_prefetcher->tail_read_ >
                ZnsConfig::compaction_maximum_prefetches ||
            zone_prefetcher->index_ == zone_prefetcher->its.size()) {
-      // printf("Prefetcher awaiting new task %lu %lu %lu\n",
-      //        zone_prefetcher->tail_read_, zone_prefetcher->index_,
-      //        zone_prefetcher->its.size());
       if (zone_prefetcher->done_) {
         break;
       }
@@ -106,38 +98,36 @@ static void LNZonePrefetcher(void* prefetch) {
     // Cleanup
     while (zone_prefetcher->tail_ + 1 < zone_prefetcher->tail_read_ &&
            zone_prefetcher->tail_ < zone_prefetcher->its.size()) {
-      // printf("Prefetching cleaning %lu \n", zone_prefetcher->tail_);
       // TODO: The iterator takes ownership of the data. Therefore, we can not
       // do manual deletion. This leads to anti-patterns and strange behaviour.
       // Investigate if there is chance of a memory-leak.
       zone_prefetcher->tail_++;
     }
 
-    // No more work to do
+    // No more work to do, so die
     if (zone_prefetcher->done_) {
-      // printf("Prefetching done \n");
       zone_prefetcher->mut_.Unlock();
       break;
     }
 
     // Get more iterators
-    // printf("Prefetch %lu \n", zone_prefetcher->index_);
-    std::string handle = zone_prefetcher->its[zone_prefetcher->index_].first;
-    zone_prefetcher->mut_.Unlock();
-    Iterator* iter = (*(zone_prefetcher->zonefunc_))(
-        zone_prefetcher->arg_, Slice(handle), zone_prefetcher->cmp_);
-    zone_prefetcher->mut_.Lock();
-    zone_prefetcher->its[zone_prefetcher->index_].second = iter;
-    zone_prefetcher->index_++;
-    // printf("Prefetched %lu \n", zone_prefetcher->index_);
+    {
+      std::string handle = zone_prefetcher->its[zone_prefetcher->index_].first;
+      zone_prefetcher->mut_.Unlock();
+      Iterator* iter = (*(zone_prefetcher->zonefunc_))(
+          zone_prefetcher->arg_, Slice(handle), zone_prefetcher->cmp_);
+      zone_prefetcher->mut_.Lock();
+      zone_prefetcher->its[zone_prefetcher->index_].second = iter;
+      zone_prefetcher->index_++;
+    }
 
-    // Make progress
+    // Allow the prefetch boss to continue
     zone_prefetcher->waiting_.SignalAll();
     zone_prefetcher->mut_.Unlock();
   }
+  // Safely shutdown
   zone_prefetcher->mut_.Lock();
   zone_prefetcher->quit_ = true;
-  // printf("Quiting zone prefetcher \n");
   zone_prefetcher->waiting_.SignalAll();
   zone_prefetcher->mut_.Unlock();
 }
@@ -174,16 +164,16 @@ LNIterator::LNIterator(Iterator* ln_iterator,
 }
 
 LNIterator::~LNIterator() {
+  // TODO: This is an anti-pattern. We stall the destructor till prefetcher is
+  // done
   if (prefetching_) {
     prefetcher_.mut_.Lock();
     prefetcher_.done_ = true;
-    // printf("Prefetch done!?\n");
     prefetcher_.waiting_.SignalAll();
     while (!prefetcher_.quit_) {
       prefetcher_.waiting_.Wait();
     }
     prefetcher_.mut_.Unlock();
-    // printf("Prefetch Quit!?\n");
   }
 }
 
@@ -238,13 +228,12 @@ void LNIterator::SkipEmptyDataLbasForward() {
       prefetcher_.tail_read_++;
       prefetcher_.waiting_.SignalAll();
       while (prefetcher_.tail_read_ >= prefetcher_.index_) {
-        // printf("Waiting for read to complete...\n");
         prefetcher_.waiting_.Wait();
       }
       Slice handle = prefetcher_.its[prefetcher_.tail_read_].first;
       if (handle.compare(index_iter_.value()) != 0) {
-        printf(
-            "FATAL error, LN iterator handle changed. This is "
+        TROPODB_ERROR(
+            "ERROR: LN iterator handle changed. This is "
             "unrecoverable.\n");
         exit(-1);
       }
@@ -254,7 +243,6 @@ void LNIterator::SkipEmptyDataLbasForward() {
       } else {
         SetDataIterator(prefetcher_.its[prefetcher_.tail_read_].second);
         data_zone_handle_.assign(handle.data(), handle.size());
-        // printf("Read %lu...\n", prefetcher_.tail_read_);
         prefetcher_.mut_.Unlock();
       }
     } else {

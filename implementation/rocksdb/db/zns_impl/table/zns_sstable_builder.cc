@@ -29,6 +29,7 @@ SSTableBuilder::~SSTableBuilder() {}
 
 uint64_t SSTableBuilder::EstimateSizeImpact(const Slice& key,
                                             const Slice& value) const {
+  // TODO: this is hardcoded, not maintainable.
   return key.size() + value.size() + 5 * sizeof(uint32_t);
 }
 

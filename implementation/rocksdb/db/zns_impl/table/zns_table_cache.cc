@@ -71,7 +71,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (!s.ok()) {
-    TROPODB_ERROR("Error getting iterator\n");
+    TROPODB_ERROR("ERROR: SSTable cache: Failed getting iterator\n");
     return NewErrorIterator(s);
   }
 

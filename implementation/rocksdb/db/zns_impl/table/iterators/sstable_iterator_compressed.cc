@@ -157,8 +157,10 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
 }
 
 void SSTableIteratorCompressed::CorruptionError() {
-  TROPODB_ERROR("Corrupt entry in SSTable block %lu/%lu \n", current_,
-                data_size_);
+  TROPODB_ERROR(
+      "ERROR: SSTableIteratorCompressed: Corrupt entry in SSTable block "
+      "%lu/%lu \n",
+      current_, data_size_);
   current_ = data_size_;
   restart_index_ = num_restarts_;
   status_ = Status::Corruption("bad entry in block");
