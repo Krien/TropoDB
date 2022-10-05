@@ -280,7 +280,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
     deferred_.new_task_.SignalAll();
     deferred_.mutex_.Unlock();
     metas_.push_back(new SSZoneMetaData);
-    current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1,
+    current_builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1,
                                                      metas_[metas_.size() - 1]);
   } else {
     // uint64_t before = clock_->NowMicros();
@@ -290,7 +290,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
       edit->AddSSDefinition(first_level_ + 1, *meta);
     }
     delete current_builder;
-    current_builder = vset_->znssstable_->NewBuilder(first_level_ + 1, meta);
+    current_builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1, meta);
   }
 
   *builder = current_builder;
@@ -333,10 +333,10 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
     env_->Schedule(&ZnsCompaction::DeferCompactionWrite, &(this->deferred_),
                    rocksdb::Env::LOW);
     metas_.push_back(new SSZoneMetaData);
-    builder = vset_->znssstable_->NewBuilder(first_level_ + 1,
+    builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1,
                                              metas_[metas_.size() - 1]);
   } else {
-    builder = vset_->znssstable_->NewBuilder(first_level_ + 1, &meta);
+    builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1, &meta);
   }
   {
     {

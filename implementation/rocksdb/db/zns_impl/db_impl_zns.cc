@@ -224,6 +224,7 @@ Status DBImplZNS::InitDB(const DBOptions& options,
     return Status::Corruption();
   }
   ss_manager_->Ref();
+  std::cout << ss_manager_->LayoutDivisionString();
   std::cout << std::setfill('_') << std::setw(76) << "\n" << std::setfill(' ');
   zone_head = device_info.max_lba / device_info.zone_size;
 

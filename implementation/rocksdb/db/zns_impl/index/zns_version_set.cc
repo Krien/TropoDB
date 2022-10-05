@@ -218,7 +218,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
     }
   }
   // Fragmented logs
-  std::string data = znssstable_->GetFragmentedLogData();
+  std::string data = znssstable_->GetRecoveryData();
   Slice sdata = Slice(data.data(), data.size());
   edit.AddFragmentedData(sdata);
 
@@ -708,7 +708,7 @@ Status ZnsVersionSet::Recover() {
   if (edit.has_fragmented_data_) {
     s = znssstable_->Recover(edit.fragmented_data_);
   } else {
-    s = znssstable_->Recover();
+    s = znssstable_->Recover("");
   }
 
   // Install recovered edit

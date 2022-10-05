@@ -54,7 +54,6 @@ extern TropoDBLogLevel GetTropoDBLogLevel();
 	TropoDBLog(TropoDBLogLevel::TROPO_INFO_LEVEL, __VA_ARGS__)
 #define TROPODB_ERROR(...) \
 	TropoDBLog(TropoDBLogLevel::TROPO_ERROR_LEVEL, __VA_ARGS__)
-
 #ifdef TROPICAL_DEBUG
 #define TROPODB_DEBUG(...) \
 	TropoDBLog(TropoDBLogLevel::TROPO_DEBUG_LEVEL, __VA_ARGS__)
