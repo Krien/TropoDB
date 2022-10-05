@@ -57,7 +57,6 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
 
 ZNSWAL::~ZNSWAL() {
   Sync();
-  // printf("Tail %lu Head %lu \n", log_.GetWriteTail(), log_.GetWriteHead());
   channel_factory_->Unref();
 #ifdef WAL_BUFFERED
   if (buffered_) {
@@ -159,10 +158,10 @@ Status ZNSWAL::Sync() {
 
 #ifdef WAL_UNORDERED
 Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
-  TROPODB_INFO("Replaying WAL\n");
+  TROPODB_INFO("INFO: WAL: Replaying\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPODB_INFO("Replayed WAL\n");
+    TROPODB_INFO("INFO: WAL: <EMPTY> Replayed\n");
     return s;
   }
   // Used for each batch
@@ -178,7 +177,6 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
   if (!s.ok()) {
     return s;
   }
-  // printf("Read WAL in memory %lu \n", commit_string.size());
 
   committer_.GetCommitReaderString(&commit_string, &reader);
   uint64_t entries_found = 0;
@@ -195,14 +193,12 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     entries_found++;
   }
   committer_.CloseCommitString(reader);
-  // printf("Read WAL into dictionary, total of %lu entries\n", entries_found);
 
   // Sort on sequence number
   std::sort(
       entries.begin(), entries.end(),
       [](std::pair<uint64_t, std::string*> a,
          std::pair<uint64_t, std::string*> b) { return a.first < b.first; });
-  // printf("Sorted WAL dictionary\n");
 
   // Apply changes and wipe entries from memory
   for (auto entry : entries) {
@@ -220,22 +216,20 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
     // Ensure the sequence number is up to date.
     const SequenceNumber last_seq = WriteBatchInternal::Sequence(&batch) +
                                     WriteBatchInternal::Count(&batch) - 1;
-    // printf("LAST SEQ %lu \n", last_seq);
     if (last_seq > *seq) {
       *seq = last_seq;
     }
   }
-  // printf("Applied WAL to memtable\n");
-  TROPODB_INFO("Replayed WAL\n");
+  TROPODB_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
   return s;
 }
 
 #else
 Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
-  TROPODB_INFO("Replaying WAL\n");
+  TROPODB_INFO("INFO: WAL: Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPODB_INFO("Replayed WAL\n");
+    TROPODB_INFO("INFO: WAL: <EMPTY> Replayed\n");
     return s;
   }
   // Used for each batch
@@ -249,7 +243,6 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
   if (!s.ok()) {
     return s;
   }
-  // printf("Read WAL in memory\n");
 
   committer_.GetCommitReaderString(&commit_string, &reader);
   while (committer_.SeekCommitReaderString(reader, &record)) {
@@ -277,6 +270,7 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
     }
   }
   committer_.CloseCommitString(reader);
+  TROPODB_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
   return s;
 }
 #endif

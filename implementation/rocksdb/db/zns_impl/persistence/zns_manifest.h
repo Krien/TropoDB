@@ -21,12 +21,8 @@ class ZnsManifest : public RefCounter {
   Status ReadManifest(std::string* manifest);
   Status SetCurrent();
   Status Recover();
-  inline Status Reset() {
-    Status s = FromStatus(log_.ResetAll());
-    deleted_range_begin_ = min_zone_head_;
-    deleted_range_blocks_ = 0;
-    return s;
-  }
+  Status Reset();
+
   inline ZNSDiagnostics GetDiagnostics() const {
     struct ZNSDiagnostics diag = {
         .name_ = "Manifest",
