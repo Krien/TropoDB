@@ -97,7 +97,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
         *status = EntryStatus::notfound;
         TROPODB_ERROR(
-            "corrupt key in table cache, for level %u and table %lu, str %s\n",
+            "ERROR: SSTable cache: corrupt key in table cache, for level %u and table %lu, str %s\n",
             level, meta.number, it->key().ToString().data());
       } else if (parsed_key.type == kTypeDeletion) {
         *status = EntryStatus::deleted;
