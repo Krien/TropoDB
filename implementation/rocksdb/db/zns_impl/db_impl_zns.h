@@ -92,7 +92,7 @@ class DBImplZNS : public DB {
   Status ResetZNSDevice();
 
   Status InitDB(const DBOptions& options, const size_t max_write_buffer_size);
-  Status InitWAL();
+  void RecoverBackgroundFlow();
 
   virtual Status Close() override;
 
@@ -348,6 +348,7 @@ class DBImplZNS : public DB {
   Env* const env_;
 
   // Should be "constant" after SPDK is initialised.
+  std::string layout_string_;
   SZD::SZDDevice* zns_device_;
   SZD::SZDChannelFactory* channel_factory_;
   ZNSSSTableManager* ss_manager_;
@@ -368,6 +369,8 @@ class DBImplZNS : public DB {
   uint8_t writer_striper_{0};
 
   // Threading variables
+  int low_level_threads_;
+  int high_level_threads_;
   port::Mutex mutex_;
   port::Mutex meta_mutex_;
   port::CondVar bg_work_l0_finished_signal_;
@@ -385,6 +388,7 @@ class DBImplZNS : public DB {
 
   // diagnostics
   SystemClock* const clock_;
+  // Determines what we print
   bool print_compaction_stats_{true};
   bool print_ss_stats_{false};
   bool print_wal_stats_{true};

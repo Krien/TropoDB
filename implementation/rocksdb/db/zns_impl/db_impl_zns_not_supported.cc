@@ -7,6 +7,12 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+Iterator* DBImplZNS::NewIterator(const ReadOptions& options,
+                                 ColumnFamilyHandle* column_family) {
+  TROPODB_ERROR("Not implemented\n");
+  return NULL;
+}
+
 Status DBImplZNS::Merge(const WriteOptions& options,
                         ColumnFamilyHandle* column_family, const Slice& key,
                         const Slice& value) {

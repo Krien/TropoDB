@@ -42,9 +42,10 @@ namespace ROCKSDB_NAMESPACE {
 
 enum TropoDBLogLevel : unsigned char {
 	TROPO_DEBUG_LEVEL = 0,
-	TROPO_INFO_LEVEL = 1,
-	TROPO_ERROR_LEVEL = 2,
-	TROPO_DISABLED = 3
+	TROPO_INFO_LEVEL  = 1,
+	TROPO_PERF_LEVEL  = 2,
+	TROPO_ERROR_LEVEL = 3,
+	TROPO_DISABLED    = 4
 };
 
 extern void SetTropoDBLogLevel(const TropoDBLogLevel log_level);
@@ -52,6 +53,8 @@ extern TropoDBLogLevel GetTropoDBLogLevel();
 
 #define TROPODB_INFO(...) \
 	TropoDBLog(TropoDBLogLevel::TROPO_INFO_LEVEL, __VA_ARGS__)
+#define TROPODB_PERF(...) \
+	TropoDBLog(TropoDBLogLevel::TROPO_PERF_LEVEL, __VA_ARGS__)
 #define TROPODB_ERROR(...) \
 	TropoDBLog(TropoDBLogLevel::TROPO_ERROR_LEVEL, __VA_ARGS__)
 #ifdef TROPICAL_DEBUG
