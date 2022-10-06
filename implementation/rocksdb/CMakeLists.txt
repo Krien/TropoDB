@@ -1111,7 +1111,7 @@ endif()
 
 set(TROPODB_SOURCES
   db/zns_impl/io/szd_port.cc
-  db/zns_impl/memtable/zns_memtable.cc
+  db/zns_impl/memtable/tropodb_memtable.cc
   db/zns_impl/persistence/zns_committer.cc
   db/zns_impl/persistence/zns_wal.cc
   db/zns_impl/persistence/zns_manifest.cc

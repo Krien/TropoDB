@@ -5,7 +5,7 @@
 
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
-#include "db/zns_impl/memtable/zns_memtable.h"
+#include "db/zns_impl/memtable/tropodb_memtable.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
