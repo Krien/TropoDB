@@ -34,7 +34,7 @@ setup() {
 		# Make sure SPDK does not already bind
 		reset="$SPDK_DIR/scripts/setup.sh reset"
 		$reset
-		# ZNSLSM uses trids,
+		# TROPODB uses trids,
 		trid=`ls -l /sys/block/$dev/device/device | awk '{split($11,dev,"/"); print dev[4]}'`
 		export PCI_ALLOWED=$trid
 		$SPDK_DIR/scripts/setup.sh

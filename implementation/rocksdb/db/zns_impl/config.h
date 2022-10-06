@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "rocksdb/rocksdb_namespace.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -19,12 +20,14 @@ namespace ROCKSDB_NAMESPACE {
 #define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
 #define WAL_MANAGER_MANAGES_CHANNELS  // Do not unset, this will break almost
                                       // WAL features.
+#define TROPICAL_DEBUG
 //#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch
 
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
 namespace ZnsConfig {
+constexpr static TropoDBLogLevel default_log_level = TropoDBLogLevel::TROPO_INFO_LEVEL;
 // WAL options
 constexpr static uint8_t level_count =
     6; /**< Amount of LSM-tree levels L0 up to LN */
@@ -109,6 +112,7 @@ constexpr static bool compaction_allow_deferring_writes =
 constexpr static uint8_t compaction_maximum_deferred_writes =
     6; /**< How many SSTables can be deferred at most. Be careful, setting
 this too high can cause OOM.*/
+constexpr static uint64_t compaction_max_grandparents_overlapping_tables = 10; /**< Maximum number of tables that are allowed to overlap with grandparent */
 
 // Containerisation
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/

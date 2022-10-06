@@ -13,9 +13,9 @@ case $TARGET in
         ZENFS_ARGS="-fs_uri=zenfs://dev:$OPT"
         DB_BENCH_ARGS="$DB_BENCH_ARGS $ZENFS_ARGS"
     ;;
-    "znslsm")
-        ZNSLSM_ARGS="--use_zns=true --db=$OPT"
-        DB_BENCH_ARGS="$DB_BENCH_ARGS $ZNSLSM_ARGS"
+    "tropodb")
+        TROPODB_ARGS="--use_zns=true --db=$OPT"
+        DB_BENCH_ARGS="$DB_BENCH_ARGS $TROPODB_ARGS"
     ;;
     *)
         echo "This target is not known..."

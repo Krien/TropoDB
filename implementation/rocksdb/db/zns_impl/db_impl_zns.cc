@@ -375,7 +375,7 @@ Status DBImplZNS::Open(
 
   // Open a SZD connection
   DBImplZNS* impl = new DBImplZNS(db_options, name);
-  s = impl->OpenZNSDevice("ZNSLSM");
+  s = impl->OpenZNSDevice("TropoDB");
   if (!s.ok()) {
     return s;
   }
@@ -438,7 +438,7 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   Status s;
   DBImplZNS* impl = new DBImplZNS(options, dbname);
   TROPODB_INFO("INFO: Attemtping to reset entire ZNS device\n");
-  s = impl->OpenZNSDevice("ZNSLSM");
+  s = impl->OpenZNSDevice("TropoDB");
   if (!s.ok()) {
     return s;
   }

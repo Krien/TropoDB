@@ -27,10 +27,10 @@ It uses a random workload.
 ## TropoDB
 For TropoDB the following is required to run a test (must be root):
 ```bash
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh setup znslsm <nvme_number> # No /dev/ in front!!!
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh setup tropodb <nvme_number> # No /dev/ in front!!!
 # Note the used trid in a variable, for example in $TRID
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh run <benchmark_name> znslsm $TRID $TRID
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh clean znslsm $TRID $TRID
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh run <benchmark_name> tropodb $TRID $TRID
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh clean tropodb $TRID $TRID
 ```
 ## F2FS
 For F2FS the following is required to run a tesst (must be root):
