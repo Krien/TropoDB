@@ -61,7 +61,7 @@ class ZnsCompaction {
   Iterator* MakeCompactionIterator();
   Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
                       SSZoneMetaData* meta);
-  static void DeferCompactionWrite(void* c);
+  static void DeferCompactionWrite(void* deferred_compaction);
 
   // helpers
   bool IsBaseLevelForKey(const Slice& user_key);
