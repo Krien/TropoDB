@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_DIAGNOSTICS_H
-#define ZNS_DIAGNOSTICS_H
+#ifndef TROPODB_DIAGNOSTICS_H
+#define TROPODB_DIAGNOSTICS_H
 
 #include <vector>
 

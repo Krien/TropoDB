@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_MEMTABLE_H
-#define ZNS_MEMTABLE_H
+#ifndef TROPODB_MEMTABLE_H
+#define TROPODB_MEMTABLE_H
 
 #include "db/memtable.h"
 #include "db/write_batch_internal.h"

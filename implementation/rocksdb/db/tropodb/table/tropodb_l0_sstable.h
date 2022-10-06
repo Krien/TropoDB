@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef L0_ZNS_SSTABLE_H
-#define L0_ZNS_SSTABLE_H
+#ifndef TROPODB_L0_SSTABLE_H
+#define TROPODB_L0_SSTABLE_H
 
 #include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/memtable/tropodb_memtable.h"

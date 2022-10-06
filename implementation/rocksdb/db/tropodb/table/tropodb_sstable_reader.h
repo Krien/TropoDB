@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_READER_H
-#define ZNS_SSTABLE_READER_H
+#ifndef TROPODB_SSTABLE_READER_H
+#define TROPODB_SSTABLE_READER_H
 
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "rocksdb/rocksdb_namespace.h"

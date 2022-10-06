@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_WAL_MANAGER_IPP
-#define ZNS_WAL_MANAGER_IPP
+#ifndef TROPODB_WAL_MANAGER_IPP
+#define TROPODB_WAL_MANAGER_IPP
 
 #include <iomanip>
 #include <iostream>

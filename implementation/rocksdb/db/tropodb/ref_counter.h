@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef REF_COUNTER_H
-#define REF_COUNTER_H
+#ifndef TROPODB_REF_COUNTER_H
+#define TROPODB_REF_COUNTER_H
 
 #include <assert.h>
 

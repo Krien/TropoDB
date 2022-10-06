@@ -365,7 +365,7 @@ size_t TropoSSTableManager::FindSSTableIndex(
   return right;
 }
 
-std::optional<TropoSSTableManager*> TropoSSTableManager::NewZNSSTableManager(
+std::optional<TropoSSTableManager*> TropoSSTableManager::NewTropoDBSSTableManager(
     SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
     const uint64_t min_zone, const uint64_t max_zone) {
   uint64_t num_zones = max_zone - min_zone;

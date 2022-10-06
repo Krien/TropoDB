@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_ZONEMETADATA_H
-#define ZNS_ZONEMETADATA_H
+#ifndef TROPODB_ZONEMETADATA_H
+#define TROPODB_ZONEMETADATA_H
 
 #include "db/dbformat.h"
 

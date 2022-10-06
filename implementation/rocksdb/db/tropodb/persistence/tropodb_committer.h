@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_COMMITER_H
-#define ZNS_COMMITER_H
+#ifndef TROPODB_COMMITER_H
+#define TROPODB_COMMITER_H
 
 #include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"

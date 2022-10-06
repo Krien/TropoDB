@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_H
-#define ZNS_SSTABLE_H
+#ifndef TROPODB_SSTABLE_H
+#define TROPODB_SSTABLE_H
 
 #include "db/tropodb/utils/tropodb_diagnostics.h"
 #include "db/tropodb/io/szd_port.h"

@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_CONFIG_H
-#define ZNS_CONFIG_H
+#ifndef TROPODB_CONFIG_H
+#define TROPODB_CONFIG_H
 
 #include <stddef.h>
 #include <stdint.h>

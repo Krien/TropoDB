@@ -2,8 +2,8 @@
 // bit like a precompiled header.
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_DEVICE
-#define ZNS_DEVICE
+#ifndef SZD_PORT_H
+#define SZD_PORT_H
 #include <szd/datastructures/szd_buffer.hpp>
 #include <szd/datastructures/szd_circular_log.hpp>
 #include <szd/datastructures/szd_fragmented_log.hpp>

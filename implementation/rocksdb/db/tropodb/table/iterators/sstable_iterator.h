@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_ITERATOR_H
-#define ZNS_SSTABLE_ITERATOR_H
+#ifndef TROPODB_SSTABLE_ITERATOR_H
+#define TROPODB_SSTABLE_ITERATOR_H
 
 #include "db/dbformat.h"
 #include "rocksdb/iterator.h"

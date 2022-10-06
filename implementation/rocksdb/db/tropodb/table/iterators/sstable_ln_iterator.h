@@ -6,8 +6,8 @@
  */
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_LN_ITERATOR_H
-#define ZNS_SSTABLE_LN_ITERATOR_H
+#ifndef TROPODB_SSTABLE_LN_ITERATOR_H
+#define TROPODB_SSTABLE_LN_ITERATOR_H
 
 #include "db/dbformat.h"
 #include "db/tropodb/table/iterators/iterator_wrapper.h"

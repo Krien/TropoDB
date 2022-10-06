@@ -6,8 +6,8 @@
 
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_CACHE_H
-#define ZNS_SSTABLE_CACHE_H
+#ifndef TROPODB_SSTABLE_CACHE_H
+#define TROPODB_SSTABLE_CACHE_H
 
 #include <memory>
 

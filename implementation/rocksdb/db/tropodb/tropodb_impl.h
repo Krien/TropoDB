@@ -8,8 +8,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef DB_IMPL_ZNS_H
-#define DB_IMPL_ZNS_H
+#ifndef TROPODB_IMPL_H
+#define TROPODB_IMPL_H
 
 //#define WALPerfTest
 

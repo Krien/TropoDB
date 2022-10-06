@@ -33,8 +33,8 @@
 // ^ This code is based on the SPDK logger
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_LOGGER_H
-#define ZNS_LOGGER_H
+#ifndef TROPODB_LOGGER_H
+#define TROPODB_LOGGER_H
 
 #include <rocksdb/rocksdb_namespace.h>
 

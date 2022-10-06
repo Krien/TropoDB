@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_SSTABLE_MANAGER_H
-#define ZNS_SSTABLE_MANAGER_H
+#ifndef TROPODB_SSTABLE_MANAGER_H
+#define TROPODB_SSTABLE_MANAGER_H
 
 #include <optional>
 
@@ -21,7 +21,7 @@ namespace ROCKSDB_NAMESPACE {
 class TropoSSTableManagerInternal;
 class TropoSSTableManager : public RefCounter {
  public:
-  static std::optional<TropoSSTableManager*> NewZNSSTableManager(
+  static std::optional<TropoSSTableManager*> NewTropoDBSSTableManager(
       SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
       const uint64_t min_zone, const uint64_t max_zone);
   static size_t FindSSTableIndex(const Comparator* cmp,

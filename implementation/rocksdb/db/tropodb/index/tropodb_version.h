@@ -3,8 +3,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_VERSION_H
-#define ZNS_VERSION_H
+#ifndef TROPODB_VERSION_H
+#define TROPODB_VERSION_H
 
 #include "db/dbformat.h"
 #include "db/lookup_key.h"

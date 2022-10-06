@@ -1,7 +1,7 @@
 #pragma once
 #ifdef TROPODB_PLUGIN_ENABLED
-#ifndef ZNS_WAL_MANAGER_H
-#define ZNS_WAL_MANAGER_H
+#ifndef TROPODB_WAL_MANAGER_H
+#define TROPODB_WAL_MANAGER_H
 
 #include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
