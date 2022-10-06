@@ -7,7 +7,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef DB_IMPL_ZNS_H
 #define DB_IMPL_ZNS_H
 

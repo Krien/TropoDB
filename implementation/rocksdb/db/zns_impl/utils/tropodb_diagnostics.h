@@ -1,5 +1,5 @@
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef ZNS_DIAGNOSTICS_H
 #define ZNS_DIAGNOSTICS_H
 

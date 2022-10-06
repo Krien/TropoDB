@@ -5,7 +5,7 @@
  * This logic is heavily based on the TwoLevelIterator from LevelDB
  */
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef ZNS_SSTABLE_LN_ITERATOR_H
 #define ZNS_SSTABLE_LN_ITERATOR_H
 

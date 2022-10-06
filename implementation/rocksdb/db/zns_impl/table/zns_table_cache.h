@@ -5,7 +5,7 @@
 // Thread-safe (provides internal synchronization)
 
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef ZNS_SSTABLE_CACHE_H
 #define ZNS_SSTABLE_CACHE_H
 

@@ -324,7 +324,7 @@ DEFINE_bool(use_uint64_comparator, false, "use Uint64 user comparator");
 
 DEFINE_int64(batch_size, 1, "Batch size");
 
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 DEFINE_bool(use_zns, false, "use zns device implementation");
 #endif
 
@@ -2482,7 +2482,7 @@ class Benchmark {
   bool report_file_operations_;
   bool use_blob_db_;  // Stacked BlobDB
   std::vector<std::string> keys_;
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
   bool use_zns_;
 #endif
   class ErrorHandlerListener : public EventListener {
@@ -2878,7 +2878,7 @@ class Benchmark {
 #else
         use_blob_db_(false),  // Stacked BlobDB
 #endif  // !ROCKSDB_LITE
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
         use_zns_(FLAGS_use_zns)
 #endif
 
@@ -2923,7 +2923,7 @@ class Benchmark {
         blob_db::DestroyBlobDB(FLAGS_db, options, blob_db::BlobDBOptions());
       }
 #endif  // !ROCKSDB_LITE
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
       options.use_zns_impl = FLAGS_use_zns;
 #endif
       DestroyDB(FLAGS_db, options);
@@ -3410,7 +3410,7 @@ class Benchmark {
         } else {
           if (db_.db != nullptr) {
             db_.DeleteDBs();
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
             open_options_.use_zns_impl = FLAGS_use_zns;
 #endif
             DestroyDB(FLAGS_db, open_options_);
@@ -4267,7 +4267,7 @@ class Benchmark {
     }
 #endif  // ROCKSDB_LITE
 
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
     options.use_zns_impl = FLAGS_use_zns;
 #endif
   }
@@ -4362,7 +4362,7 @@ class Benchmark {
           new FileChecksumGenCrc32cFactory());
     }
 
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
     options.use_zns_impl = FLAGS_use_zns;
 #endif
 

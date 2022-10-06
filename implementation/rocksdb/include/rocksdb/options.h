@@ -456,7 +456,7 @@ struct DBOptions {
 
 #endif  // ROCKSDB_LITE
 
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
   // Set to true if the goal is to use impl_zns
   bool use_zns_impl = false;
 #endif

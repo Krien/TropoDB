@@ -1,7 +1,7 @@
 // Prevents loading the device dependency multiple times.
 // bit like a precompiled header.
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef ZNS_DEVICE
 #define ZNS_DEVICE
 #include <szd/datastructures/szd_buffer.hpp>
