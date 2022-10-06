@@ -399,7 +399,7 @@ class TropoDBImpl : public DB {
   TimingCounter flush_flush_memtable_counter_;
   TimingCounter flush_update_version_counter_;
   TimingCounter flush_reset_wal_counter_;
-  // diag compaction
+  // Diag compaction
   std::array<uint64_t, TropoDBConfig::level_count - 1> compactions_;
   TimingCounter compaction_compaction_L0_total_;
   TimingCounter compaction_reset_L0_counter_;
@@ -413,6 +413,11 @@ class TropoDBImpl : public DB {
   TimingCounter compaction_compaction_LN_;
   TimingCounter compaction_compaction_trivial_LN_;
   TimingCounter compaction_version_edit_LN_;
+  // Diag compaction internals
+  TimingCounter compaction_setup_perf_counter_;
+  TimingCounter compaction_k_merge_perf_counter_;
+  TimingCounter compaction_flush_perf_counter_;
+  TimingCounter compaction_breakdown_perf_counter_;
 };
 
 struct FlushData {

@@ -94,6 +94,15 @@ void TropoDBImpl::PrintCompactionStats() {
                      {"Copying LN", compaction_compaction_trivial_LN_},
                      {"Updating version", compaction_version_edit_LN_},
                      {"Resetting LN", compaction_reset_LN_counter_}});
+
+  TimingCounter total = compaction_compaction_;
+  total += compaction_compaction_LN_;
+  TROPO_LOG_PERF("Compaction Write latency breakdown:\n");
+  PrintCounterTable({{"Total", total},
+                     {"Setup", compaction_setup_perf_counter_},
+                     {"K-merge", compaction_k_merge_perf_counter_},
+                     {"Flush", compaction_flush_perf_counter_},
+                     {"Cleanup", compaction_breakdown_perf_counter_}});
 }
 
 void TropoDBImpl::PrintSSTableStats() {

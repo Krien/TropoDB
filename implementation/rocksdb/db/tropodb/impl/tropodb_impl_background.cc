@@ -296,6 +296,13 @@ void TropoDBImpl::BackgroundCompactionL0() {
     } else {
       TROPO_LOG_INFO("BG Operation: Starting L0 Non-trivial compaction\n");
       s = c->DoCompaction(&edit);
+      // Compaction perf counters
+      {
+        compaction_setup_perf_counter_ += c->GetCompactionSetupPerfCounter();
+        compaction_k_merge_perf_counter_ += c->GetCompactionKMergePerfCounter();
+        compaction_flush_perf_counter_ += c->GetCompactionFlushPerfCounter();
+        compaction_breakdown_perf_counter_ += c->GetCompactionBreakdownPerfCounter();
+      }
       TROPO_LOG_INFO("BG Operation: Finished L0 Non-trivial compaction\n");
     }
     // Note if this delete is somehow not reached, a stale version will remain
@@ -447,6 +454,13 @@ void TropoDBImpl::BackgroundCompaction() {
     } else {
       TROPO_LOG_INFO("BG Operation: Starting LN Non-trivial compaction\n");
       s = c->DoCompaction(&edit);
+      // Compaction perf counters
+      {
+        compaction_setup_perf_counter_ += c->GetCompactionSetupPerfCounter();
+        compaction_k_merge_perf_counter_ += c->GetCompactionKMergePerfCounter();
+        compaction_flush_perf_counter_ += c->GetCompactionFlushPerfCounter();
+        compaction_breakdown_perf_counter_ += c->GetCompactionBreakdownPerfCounter();
+      }
       TROPO_LOG_INFO("BG Operation: Finished LN Non-trivial compaction\n");
     }
     // Note if this delete is not reached, a stale version will remain in memory
