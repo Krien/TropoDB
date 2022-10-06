@@ -40,15 +40,15 @@
 
 namespace ROCKSDB_NAMESPACE {
 // Globals
-TropoDBLogLevel g_TropoDB_log_level = TropoDBLogLevel::TROPO_DISABLED;
+TropoLogLevel g_TropoDB_log_level = TropoLogLevel::TROPO_DISABLED;
 
-void SetTropoDBLogLevel(const TropoDBLogLevel log_level) {
+void SetTropoLogLevel(const TropoLogLevel log_level) {
   g_TropoDB_log_level = log_level;
 }
 
-TropoDBLogLevel GetTropoDBLogLevel() { return g_TropoDB_log_level; }
+TropoLogLevel GetTropoLogLevel() { return g_TropoDB_log_level; }
 
-static void TropoDBVlog(const TropoDBLogLevel level, const char *format,
+static void TropoDBVlog(const TropoLogLevel level, const char *format,
                         va_list ap) {
   if (level < g_TropoDB_log_level) {
     return;
@@ -56,7 +56,7 @@ static void TropoDBVlog(const TropoDBLogLevel level, const char *format,
   vprintf(format, ap);
 }
 
-void TropoDBLog(const TropoDBLogLevel level, const char *format, ...) {
+void TropoDBLog(const TropoLogLevel level, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   TropoDBVlog(level, format, ap);

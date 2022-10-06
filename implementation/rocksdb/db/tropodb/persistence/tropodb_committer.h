@@ -12,7 +12,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 // prepended Zns for namespaces issues
-enum class ZnsRecordType : uint32_t {
+enum class TropoRecordType : uint32_t {
   // All types that we do not support are coalesced to invalid
   kInvalid = 0,
   kFullType = 1,
@@ -23,12 +23,12 @@ enum class ZnsRecordType : uint32_t {
   kLastType = 4
 };
 // Header is checksum (4 bytes), length (3 bytes), type (1 byte).
-static const uint32_t kZnsHeaderSize = 4 + 3 + 1;
-static const uint32_t kZnsRecordTypeLast =
-    static_cast<uint32_t>(ZnsRecordType::kLastType) + 1;
-static_assert(kZnsRecordTypeLast == 5);
+static const uint32_t kTropoHeaderSize = 4 + 3 + 1;
+static const uint32_t kTropoRecordTypeLast =
+    static_cast<uint32_t>(TropoRecordType::kLastType) + 1;
+static_assert(kTropoRecordTypeLast == 5);
 
-struct ZnsCommitReader {
+struct TropoCommitReader {
   uint64_t commit_start;
   uint64_t commit_end;
   uint64_t commit_ptr;
@@ -36,7 +36,7 @@ struct ZnsCommitReader {
   std::string scratch;
 };
 
-struct ZnsCommitReaderString {
+struct TropoCommitReaderString {
   uint64_t commit_start;
   uint64_t commit_end;
   uint64_t commit_ptr;
@@ -48,13 +48,13 @@ struct ZnsCommitReaderString {
  * @brief ZnsCommiter is a helper class that can be used for persistent commits
  * in a log. It requires external synchronisation and verification!
  */
-class ZnsCommitter {
+class TropoCommitter {
  public:
-  ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info, bool keep_buffer);
+  TropoCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info, bool keep_buffer);
   // No copying or implicits
-  ZnsCommitter(const ZnsCommitter&) = delete;
-  ZnsCommitter& operator=(const ZnsCommitter&) = delete;
-  ~ZnsCommitter();
+  TropoCommitter(const TropoCommitter&) = delete;
+  TropoCommitter& operator=(const TropoCommitter&) = delete;
+  ~TropoCommitter();
 
   size_t SpaceNeeded(size_t data_size) const;
   bool SpaceEnough(size_t size) const;
@@ -65,15 +65,15 @@ class ZnsCommitter {
 
   // Get the commit
   Status GetCommitReader(uint8_t reader_number, uint64_t begin, uint64_t end,
-                         ZnsCommitReader* reader);
+                         TropoCommitReader* reader);
   // Can not be called without first getting the commit
-  bool SeekCommitReader(ZnsCommitReader& reader, Slice* record);
+  bool SeekCommitReader(TropoCommitReader& reader, Slice* record);
   // Can not be called without first getting the commit
-  bool CloseCommit(ZnsCommitReader& reader);
+  bool CloseCommit(TropoCommitReader& reader);
 
-  Status GetCommitReaderString(std::string* in, ZnsCommitReaderString* reader);
-  bool SeekCommitReaderString(ZnsCommitReaderString& reader, Slice* record);
-  bool CloseCommitString(ZnsCommitReaderString& reader);
+  Status GetCommitReaderString(std::string* in, TropoCommitReaderString* reader);
+  bool SeekCommitReaderString(TropoCommitReaderString& reader, Slice* record);
+  bool CloseCommitString(TropoCommitReaderString& reader);
 
   //TODO: Remove?
   // Clears buffer if it is filled.
@@ -92,7 +92,7 @@ class ZnsCommitter {
   SZD::SZDBuffer write_buffer_;
   bool keep_buffer_;
   // CRC
-  std::array<uint32_t, kZnsRecordTypeLast + 1> type_crc_;
+  std::array<uint32_t, kTropoRecordTypeLast + 1> type_crc_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

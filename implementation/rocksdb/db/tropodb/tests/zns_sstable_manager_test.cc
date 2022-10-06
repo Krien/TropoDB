@@ -12,7 +12,7 @@ static void WasteLba(Device* device) {
   WriteOptions woptions;
   InternalKeyComparator icmp = InternalKeyComparator(BytewiseComparator());
   SSZoneMetaData meta;
-  ZNSMemTable* mem = new ZNSMemTable(options, icmp);
+  TropoMemtable* mem = new TropoMemtable(options, icmp);
   mem->Ref();
   WriteBatch batch = WriteBatch();
   batch.Put(Slice("123"), Slice("456"));
@@ -33,13 +33,13 @@ TEST_F(SSTableTest, TESTFILL) {
   SetupDev(&dev, begin, end, false);
   ZnsDevice::DeviceInfo info = (*dev.device_manager)->info;
   ValidateMeta(&dev, begin, end);
-  L0ZnsSSTable* sstable = dev.ss_manager->GetL0SSTableLog();
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneHead(sstable),
+  TropoL0SSTable* sstable = dev.ss_manager->GetL0SSTableLog();
+  ASSERT_EQ(TropoSSTableManagerInternal::GetZoneHead(sstable),
             info.zone_size * begin);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetWriteHead(sstable),
+  ASSERT_EQ(TropoSSTableManagerInternal::GetWriteHead(sstable),
             info.zone_size * begin);
   // 1 pair
-  ZNSMemTable* mem = new ZNSMemTable(options, icmp);
+  TropoMemtable* mem = new TropoMemtable(options, icmp);
   mem->Ref();
   ASSERT_EQ(mem->GetInternalSize(), 0);
   WriteBatch batch;
@@ -58,7 +58,7 @@ TEST_F(SSTableTest, TESTFILL) {
   ASSERT_TRUE(meta.smallest.Encode() == meta.largest.Encode());
   // 1000 pairs (enough to cause multiple lbas for 4kb lbasize)
   mem->Unref();
-  mem = new ZNSMemTable(options, icmp);
+  mem = new TropoMemtable(options, icmp);
   mem->Ref();
   batch = WriteBatch();
   for (int i = 0; i < 1000; i++) {
@@ -89,7 +89,7 @@ TEST_F(SSTableTest, TESTFILL) {
   }
   // Now do a multiple zone SSTable...
   mem->Unref();
-  mem = new ZNSMemTable(options, icmp);
+  mem = new TropoMemtable(options, icmp);
   mem->Ref();
   batch = WriteBatch();
   for (int i = 0; i < 1000; i++) {
@@ -118,13 +118,13 @@ TEST_F(SSTableTest, TESTFILL) {
     ASSERT_TRUE(Slice(std::to_string(i)) == Slice(value));
   }
   // fill
-  for (uint64_t i = ZnsSSTableManagerInternal::GetWriteHead(sstable);
-       i < ZnsSSTableManagerInternal::GetMaxZoneHead(sstable); i++) {
+  for (uint64_t i = TropoSSTableManagerInternal::GetWriteHead(sstable);
+       i < TropoSSTableManagerInternal::GetMaxZoneHead(sstable); i++) {
     WasteLba(&dev);
   }
   // check what happens when no space.
   {
-    mem = new ZNSMemTable(options, icmp);
+    mem = new TropoMemtable(options, icmp);
     mem->Ref();
     batch = WriteBatch();
     batch.Put(Slice("break"), Slice("down"));
@@ -132,13 +132,13 @@ TEST_F(SSTableTest, TESTFILL) {
     s = dev.ss_manager->FlushMemTable(mem, &meta);
     ASSERT_FALSE(s.ok());
     // try to eat parts of the tail
-    s = ZnsSSTableManagerInternal::ConsumeTail(sstable, begin * info.zone_size,
+    s = TropoSSTableManagerInternal::ConsumeTail(sstable, begin * info.zone_size,
                                                begin * info.zone_size + 3);
     ASSERT_TRUE(s.ok());
-    s = ZnsSSTableManagerInternal::ConsumeTail(
+    s = TropoSSTableManagerInternal::ConsumeTail(
         sstable, begin * info.zone_size + 3, (begin + 1) * info.zone_size);
     ASSERT_TRUE(s.ok());
-    s = ZnsSSTableManagerInternal::ConsumeTail(
+    s = TropoSSTableManagerInternal::ConsumeTail(
         sstable, (begin + 1) * info.zone_size, info.zone_size * end);
     ASSERT_TRUE(s.ok());
   }

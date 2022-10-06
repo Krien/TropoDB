@@ -56,7 +56,7 @@ Slice LNZoneIterator::value() const {
 }
 
 void LNZoneIterator::Seek(const Slice& target) {
-  index_ = ZNSSSTableManager::FindSSTableIndex(cmp_, *slist_, target);
+  index_ = TropoSSTableManager::FindSSTableIndex(cmp_, *slist_, target);
 }
 
 void LNZoneIterator::SeekForPrev(const Slice& target) {
@@ -87,7 +87,7 @@ static void LNZonePrefetcher(void* prefetch) {
 
     // Wait for tasks
     while (zone_prefetcher->index_ - zone_prefetcher->tail_read_ >
-               ZnsConfig::compaction_maximum_prefetches ||
+               TropoDBConfig::compaction_maximum_prefetches ||
            zone_prefetcher->index_ == zone_prefetcher->its.size()) {
       if (zone_prefetcher->done_) {
         break;
@@ -141,7 +141,7 @@ LNIterator::LNIterator(Iterator* ln_iterator,
       data_iter_(nullptr),
       cmp_(cmp),
       env_(env) {
-  if (ZnsConfig::compaction_allow_prefetching && env_ != nullptr) {
+  if (TropoDBConfig::compaction_allow_prefetching && env_ != nullptr) {
     index_iter_.SeekToFirst();
     while (index_iter_.Valid()) {
       Slice handle = index_iter_.value();
@@ -232,7 +232,7 @@ void LNIterator::SkipEmptyDataLbasForward() {
       }
       Slice handle = prefetcher_.its[prefetcher_.tail_read_].first;
       if (handle.compare(index_iter_.value()) != 0) {
-        TROPODB_ERROR(
+        TROPO_LOG_ERROR(
             "ERROR: LN iterator handle changed. This is "
             "unrecoverable.\n");
         exit(-1);

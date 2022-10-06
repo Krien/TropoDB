@@ -18,16 +18,16 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZnsSSTableManagerInternal;
-class ZNSSSTableManager : public RefCounter {
+class TropoSSTableManagerInternal;
+class TropoSSTableManager : public RefCounter {
  public:
-  static std::optional<ZNSSSTableManager*> NewZNSSTableManager(
+  static std::optional<TropoSSTableManager*> NewZNSSTableManager(
       SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
       const uint64_t min_zone, const uint64_t max_zone);
   static size_t FindSSTableIndex(const Comparator* cmp,
                                  const std::vector<SSZoneMetaData*>& ss,
                                  const Slice& key);
-  ~ZNSSSTableManager();
+  ~TropoSSTableManager();
 
   // Reading
   Status Get(const uint8_t level, const InternalKeyComparator& icmp,
@@ -41,7 +41,7 @@ class ZNSSSTableManager : public RefCounter {
   std::string GetRecoveryData();
   
   // Compaction
-  SSTableBuilder* NewSSTableBuilder(const uint8_t level, SSZoneMetaData* meta) const;
+  TropoSSTableBuilder* NewTropoSSTableBuilder(const uint8_t level, SSZoneMetaData* meta) const;
   Status CopySSTable(const uint8_t level1, const uint8_t level2,
                      const SSZoneMetaData& meta,
                      SSZoneMetaData* new_meta) const;
@@ -49,8 +49,8 @@ class ZNSSSTableManager : public RefCounter {
   bool EnoughSpaceAvailable(const uint8_t level, const Slice& slice) const;
 
   // L0 specific
-  L0ZnsSSTable* GetL0SSTableLog(uint8_t parallel_number) const;
-  Status FlushMemTable(ZNSMemTable* mem, std::vector<SSZoneMetaData>& metas,
+  TropoL0SSTable* GetL0SSTableLog(uint8_t parallel_number) const;
+  Status FlushMemTable(TropoMemtable* mem, std::vector<SSZoneMetaData>& metas,
                        uint8_t parallel_number) const;
   Status DeleteL0Table(const std::vector<SSZoneMetaData*>& metas_to_delete,
                        std::vector<SSZoneMetaData*>& remaining_metas) const;
@@ -67,16 +67,16 @@ class ZNSSSTableManager : public RefCounter {
   
   // util
   uint64_t GetBytesInLevel(const std::vector<SSZoneMetaData*>& metas);
-  std::vector<ZNSDiagnostics> IODiagnostics();
+  std::vector<TropoDiagnostics> IODiagnostics();
   std::string LayoutDivisionString();
 
  private:
   using RangeArray = std::array<std::pair<uint64_t, uint64_t>,
-                                1 + ZnsConfig::lower_concurrency>;
+                                1 + TropoDBConfig::lower_concurrency>;
   using SSTableArray =
-      std::array<ZnsSSTable*, 1 + ZnsConfig::lower_concurrency>;
+      std::array<TropoSSTable*, 1 + TropoDBConfig::lower_concurrency>;
 
-  ZNSSSTableManager(SZD::SZDChannelFactory* channel_factory,
+  TropoSSTableManager(SZD::SZDChannelFactory* channel_factory,
                     const SZD::DeviceInfo& info, const RangeArray& ranges);
 
    // Recovery

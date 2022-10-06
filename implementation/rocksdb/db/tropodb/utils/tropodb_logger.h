@@ -40,7 +40,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-enum TropoDBLogLevel : unsigned char {
+enum TropoLogLevel : unsigned char {
 	TROPO_DEBUG_LEVEL = 0,
 	TROPO_INFO_LEVEL  = 1,
 	TROPO_PERF_LEVEL  = 2,
@@ -48,23 +48,23 @@ enum TropoDBLogLevel : unsigned char {
 	TROPO_DISABLED    = 4
 };
 
-extern void SetTropoDBLogLevel(const TropoDBLogLevel log_level);
-extern TropoDBLogLevel GetTropoDBLogLevel();
+extern void SetTropoLogLevel(const TropoLogLevel log_level);
+extern TropoLogLevel GetTropoLogLevel();
 
-#define TROPODB_INFO(...) \
-	TropoDBLog(TropoDBLogLevel::TROPO_INFO_LEVEL, __VA_ARGS__)
-#define TROPODB_PERF(...) \
-	TropoDBLog(TropoDBLogLevel::TROPO_PERF_LEVEL, __VA_ARGS__)
-#define TROPODB_ERROR(...) \
-	TropoDBLog(TropoDBLogLevel::TROPO_ERROR_LEVEL, __VA_ARGS__)
+#define TROPO_LOG_INFO(...) \
+	TropoDBLog(TropoLogLevel::TROPO_INFO_LEVEL, __VA_ARGS__)
+#define TROPO_LOG_PERF(...) \
+	TropoDBLog(TropoLogLevel::TROPO_PERF_LEVEL, __VA_ARGS__)
+#define TROPO_LOG_ERROR(...) \
+	TropoDBLog(TropoLogLevel::TROPO_ERROR_LEVEL, __VA_ARGS__)
 #ifdef TROPICAL_DEBUG
-#define TROPODB_DEBUG(...) \
-	TropoDBLog(TropoDBLogLevel::TROPO_DEBUG_LEVEL, __VA_ARGS__)
+#define TROPO_LOG_DEBUG(...) \
+	TropoDBLog(TropoLogLevel::TROPO_DEBUG_LEVEL, __VA_ARGS__)
 #else 
-#define TROPODB_DEBUG(...) do {} while (0)
+#define TROPO_LOG_DEBUG(...) do {} while (0)
 #endif
 
-extern void TropoDBLog(const TropoDBLogLevel level, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+extern void TropoDBLog(const TropoLogLevel level, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
 }
 #endif
 #endif

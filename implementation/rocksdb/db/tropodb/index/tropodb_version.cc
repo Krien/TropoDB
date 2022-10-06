@@ -14,23 +14,23 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-ZnsVersion::ZnsVersion() { Clear(); }
+TropoVersion::TropoVersion() { Clear(); }
 
-ZnsVersion::ZnsVersion(ZnsVersionSet* vset)
+TropoVersion::TropoVersion(TropoVersionSet* vset)
     : vset_(vset),
       next_(this),
       prev_(this),
       compaction_score_(-1),
-      compaction_level_(ZnsConfig::level_count + 1),
+      compaction_level_(TropoDBConfig::level_count + 1),
       debug_nr_(0) {}
 
-ZnsVersion::~ZnsVersion() {
+TropoVersion::~TropoVersion() {
   assert(refs_ == 0);
   // Remove from linked list
   prev_->next_ = next_;
   next_->prev_ = prev_;
   // Drop all refs
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     for (size_t i = 0; i < ss_[level].size(); i++) {
       SSZoneMetaData* m = ss_[level][i];
       assert(m->refs > 0);
@@ -40,18 +40,18 @@ ZnsVersion::~ZnsVersion() {
       }
     }
   }
-  TROPODB_DEBUG("DEBUG: Removed version structure %lu\n", debug_nr_);
+  TROPO_LOG_DEBUG("DEBUG: Removed version structure %lu\n", debug_nr_);
 }
 
 // TODO: Remove?
-void ZnsVersion::Clear() {}
+void TropoVersion::Clear() {}
 
-Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
+Status TropoVersion::Get(const ReadOptions& options, const LookupKey& lkey,
                        std::string* value) {
   Status call_status;
   EntryStatus entry_status;
   const Comparator* ucmp = vset_->icmp_.user_comparator();
-  ZNSSSTableManager* znssstable = vset_->znssstable_;
+  TropoSSTableManager* znssstable = vset_->znssstable_;
   znssstable->Ref();
   Slice key = lkey.user_key();
   Slice internal_key = lkey.internal_key();
@@ -103,13 +103,13 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
 
   // Look in LN
   {
-    for (uint8_t level = 1; level < ZnsConfig::level_count; ++level) {
+    for (uint8_t level = 1; level < TropoDBConfig::level_count; ++level) {
       size_t sstable_nrs = ss_[level].size();
       // level is empty
       if (sstable_nrs == 0) continue;
 
       // In LN only ONE table can overlap for each level, find this table
-      uint32_t index = ZNSSSTableManager::FindSSTableIndex(
+      uint32_t index = TropoSSTableManager::FindSSTableIndex(
           vset_->icmp_.user_comparator(), ss_[level], internal_key);
       // No SSTable in range
       if (index >= sstable_nrs) {
@@ -142,17 +142,17 @@ Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
   return Status::NotFound("No matching table");
 }
 
-Iterator* ZnsVersion::GetLNIterator(void* arg, const Slice& file_value,
+Iterator* TropoVersion::GetLNIterator(void* arg, const Slice& file_value,
                                     const Comparator* cmp) {
-  return reinterpret_cast<ZNSSSTableManager*>(arg)->GetLNIterator(file_value,
+  return reinterpret_cast<TropoSSTableManager*>(arg)->GetLNIterator(file_value,
                                                                   cmp);
 }
 
-void ZnsVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
+void TropoVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
                                       const InternalKey* end,
                                       std::vector<SSZoneMetaData*>* inputs) {
   assert(level >= 0);
-  assert(level < ZnsConfig::level_count);
+  assert(level < TropoDBConfig::level_count);
   inputs->clear();
   Slice user_begin, user_end;
   if (begin != nullptr) {
@@ -193,7 +193,7 @@ void ZnsVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
 }
 
 // FIXME: Do not use this function! It is broken and will not be maintained
-void ZnsVersion::AddIterators(const ReadOptions& options,
+void TropoVersion::AddIterators(const ReadOptions& options,
                               std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
   for (size_t i = 0; i < ss_[0].size(); i++) {
@@ -204,7 +204,7 @@ void ZnsVersion::AddIterators(const ReadOptions& options,
   // For levels > 0, we can use a concatenating iterator that sequentially
   // walks through the non-overlapping files in the level, opening them
   // lazily.
-  for (int level = 1; level < ZnsConfig::level_count; level++) {
+  for (int level = 1; level < TropoDBConfig::level_count; level++) {
     if (!ss_[level].empty()) {
       iters->push_back(
           new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),

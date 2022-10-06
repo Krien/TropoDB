@@ -8,7 +8,7 @@
 #include "table/internal_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
+TropoMemtable::TropoMemtable(const DBOptions& db_options,
                          const InternalKeyComparator& ikc,
                          const size_t buffer_size)
     : options_(db_options, ColumnFamilyOptions()),
@@ -24,17 +24,17 @@ ZNSMemTable::ZNSMemTable(const DBOptions& db_options,
   mem_->GetMemTable()->Ref();
 }
 
-ZNSMemTable::~ZNSMemTable() {
+TropoMemtable::~TropoMemtable() {
   mem_->GetMemTable()->Unref();
   delete mem_->GetMemTable();
   delete mem_;
 }
 
-Status ZNSMemTable::Write(const WriteOptions& options, WriteBatch* updates) {
+Status TropoMemtable::Write(const WriteOptions& options, WriteBatch* updates) {
   return WriteBatchInternal::InsertInto(updates, this->mem_, nullptr, nullptr);
 }
 
-bool ZNSMemTable::Get(const ReadOptions& options, const LookupKey& lkey,
+bool TropoMemtable::Get(const ReadOptions& options, const LookupKey& lkey,
                       std::string* value, Status* s, SequenceNumber* seq) {
   ReadOptions roptions;
   SequenceNumber max_covering_tombstone_seq = 0;
@@ -44,13 +44,13 @@ bool ZNSMemTable::Get(const ReadOptions& options, const LookupKey& lkey,
                                   seq, roptions);
 }
 
-bool ZNSMemTable::ShouldScheduleFlush() {
+bool TropoMemtable::ShouldScheduleFlush() {
   size_t current_size = mem_->GetMemTable()->ApproximateMemoryUsage();
   size_t allowed_size = write_buffer_size_;
   return current_size > allowed_size;
 }
 
-InternalIterator* ZNSMemTable::NewIterator() {
+InternalIterator* TropoMemtable::NewIterator() {
   return mem_->GetMemTable()->NewIterator(ReadOptions(), &arena_);
 }
 }  // namespace ROCKSDB_NAMESPACE

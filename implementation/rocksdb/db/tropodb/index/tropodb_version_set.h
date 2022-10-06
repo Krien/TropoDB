@@ -26,20 +26,20 @@ namespace ROCKSDB_NAMESPACE {
  * a new index.
  *
  */
-class ZnsVersionSet {
+class TropoVersionSet {
  public:
-  ZnsVersionSet(const InternalKeyComparator& icmp,
-                ZNSSSTableManager* znssstable, ZnsManifest* manifest,
+  TropoVersionSet(const InternalKeyComparator& icmp,
+                TropoSSTableManager* znssstable, TropoManifest* manifest,
                 const uint64_t lba_size, const uint64_t zone_cap,
-                ZnsTableCache* table_cache, Env* env);
-  ZnsVersionSet(const ZnsVersionSet&) = delete;
-  ZnsVersionSet& operator=(const ZnsVersionSet&) = delete;
-  ~ZnsVersionSet();
+                TropoTableCache* table_cache, Env* env);
+  TropoVersionSet(const TropoVersionSet&) = delete;
+  TropoVersionSet& operator=(const TropoVersionSet&) = delete;
+  ~TropoVersionSet();
 
-  Status WriteSnapshot(std::string* snapshot_dst, ZnsVersion* version);
-  Status LogAndApply(ZnsVersionEdit* edit);
+  Status WriteSnapshot(std::string* snapshot_dst, TropoVersion* version);
+  Status LogAndApply(TropoVersionEdit* edit);
   void RecalculateScore();
-  Status RemoveObsoleteZones(ZnsVersionEdit* edit);
+  Status RemoveObsoleteZones(TropoVersionEdit* edit);
 
   void GetLiveZones(const uint8_t level, std::set<uint64_t>& live);
   void GetSaveDeleteRange(const uint8_t level,
@@ -47,7 +47,7 @@ class ZnsVersionSet {
   Status ReclaimStaleSSTablesL0(port::Mutex* mutex_, port::CondVar* cond);
   Status ReclaimStaleSSTablesLN(port::Mutex* mutex_, port::CondVar* cond);
 
-  inline ZnsVersion* current() const { return current_; }
+  inline TropoVersion* current() const { return current_; }
   inline uint64_t LastSequence() const { return last_sequence_; }
   inline void SetLastSequence(uint64_t s) {
     assert(s >= last_sequence_);
@@ -57,7 +57,7 @@ class ZnsVersionSet {
   inline uint64_t NewSSNumberL0() { return ss_number_l0_++; }
 
   inline int NumLevelZones(uint8_t level) const {
-    assert(level < ZnsConfig::level_count);
+    assert(level < TropoDBConfig::level_count);
     return current_->ss_[level].size();
   }
   inline int NumLevelBytes(uint8_t level) const {
@@ -72,15 +72,15 @@ class ZnsVersionSet {
   bool NeedsCompaction() const {
     // printf("Score %f \n", current_->compaction_score_);
     return current_->compaction_score_ >= 1 &&
-           current_->compaction_level_ != ZnsConfig::level_count + 1;
+           current_->compaction_level_ != TropoDBConfig::level_count + 1;
   }
 
   bool NeedsL0Compaction() const {
     bool needcompaction =
-        current_->ss_[0].size() > ZnsConfig::ss_compact_treshold[0] ||
+        current_->ss_[0].size() > TropoDBConfig::ss_compact_treshold[0] ||
         NeedsL0CompactionForce();
     if (!needcompaction) {
-      for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+      for (size_t i = 0; i < TropoDBConfig::wal_concurrency; i++) {
         if (NeedsL0CompactionForceParallel(i)) {
           return true;
         }
@@ -91,13 +91,13 @@ class ZnsVersionSet {
 
   bool NeedsL0CompactionForce() const {
     return znssstable_->GetFractionFilled(0) /
-               ZnsConfig::ss_compact_treshold_force[0] >=
+               TropoDBConfig::ss_compact_treshold_force[0] >=
            1;
   }
 
   bool NeedsL0CompactionForceParallel(uint8_t parallel_number) const {
     return znssstable_->GetFractionFilledL0(parallel_number) /
-               ZnsConfig::ss_compact_treshold_force[0] >=
+               TropoDBConfig::ss_compact_treshold_force[0] >=
            1;
   }
 
@@ -106,9 +106,9 @@ class ZnsVersionSet {
   void GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
                  const std::vector<SSZoneMetaData*>& inputs2,
                  InternalKey* smallest, InternalKey* largest);
-  void SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c);
+  void SetupOtherInputs(TropoCompaction* c, uint64_t max_lba_c);
   bool OnlyNeedDeletes(uint8_t level);
-  ZnsCompaction* PickCompaction(uint8_t level,
+  TropoCompaction* PickCompaction(uint8_t level,
                                 const std::vector<SSZoneMetaData*>& busy);
   // ONLY call on startup or recovery, this is not thread safe and drops current
   // data.
@@ -118,39 +118,39 @@ class ZnsVersionSet {
  private:
   class Builder;
 
-  friend class ZnsVersion;
-  friend class ZnsCompaction;
+  friend class TropoVersion;
+  friend class TropoCompaction;
 
-  void AppendVersion(ZnsVersion* v);
-  Status CommitVersion(ZnsVersion* v, ZNSSSTableManager* man);
-  Status DecodeFrom(const Slice& input, ZnsVersionEdit* edit);
+  void AppendVersion(TropoVersion* v);
+  Status CommitVersion(TropoVersion* v, TropoSSTableManager* man);
+  Status DecodeFrom(const Slice& input, TropoVersionEdit* edit);
 
-  ZnsVersion dummy_versions_;
-  ZnsVersion* current_;
+  TropoVersion dummy_versions_;
+  TropoVersion* current_;
   const InternalKeyComparator icmp_;
-  ZNSSSTableManager* znssstable_;
-  ZnsManifest* manifest_;
+  TropoSSTableManager* znssstable_;
+  TropoManifest* manifest_;
   uint64_t lba_size_;
   uint64_t zone_cap_;
   uint64_t last_sequence_;
   std::atomic<uint64_t> ss_number_;
   std::atomic<uint64_t> ss_number_l0_;
   bool logged_;
-  ZnsTableCache* table_cache_;
+  TropoTableCache* table_cache_;
   Env* env_;
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
-  std::array<std::string, ZnsConfig::level_count> compact_pointer_;
+  std::array<std::string, TropoDBConfig::level_count> compact_pointer_;
 };
 
-class ZnsVersionSet::Builder {
+class TropoVersionSet::Builder {
  public:
-  Builder(ZnsVersionSet* vset, ZnsVersion* base);
+  Builder(TropoVersionSet* vset, TropoVersion* base);
   ~Builder();
-  void Apply(const ZnsVersionEdit* edit);
-  void SaveTo(ZnsVersion* v);
-  void MaybeAddZone(ZnsVersion* v, uint8_t level, SSZoneMetaData* f);
+  void Apply(const TropoVersionEdit* edit);
+  void SaveTo(TropoVersion* v);
+  void MaybeAddZone(TropoVersion* v, uint8_t level, SSZoneMetaData* f);
 
  private:
   // Helper to sort by v->files_[file_number].smallest
@@ -178,9 +178,9 @@ class ZnsVersionSet::Builder {
   std::pair<uint64_t, uint64_t> ss_deleted_range_;
   Slice fragmented_data_;
 
-  ZnsVersionSet* vset_;
-  ZnsVersion* base_;
-  std::array<LevelState, ZnsConfig::level_count> levels_;
+  TropoVersionSet* vset_;
+  TropoVersion* base_;
+  std::array<LevelState, TropoDBConfig::level_count> levels_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

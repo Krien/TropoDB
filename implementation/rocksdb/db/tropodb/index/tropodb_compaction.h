@@ -25,17 +25,17 @@ struct DeferredLNCompaction {
   port::CondVar new_task_;  // In case deferred is waiting for main
   bool last_{false};        // Signal that we are done and deferred should be gone
   bool done_{false};        // Signal that deferred is done
-  std::vector<SSTableBuilder*> deferred_builds_; // All deferred builders to use for compaction
+  std::vector<TropoSSTableBuilder*> deferred_builds_; // All deferred builders to use for compaction
   uint8_t index_{0};
   uint8_t level_{0};
-  ZnsVersionEdit* edit_{nullptr};
+  TropoVersionEdit* edit_{nullptr};
   DeferredLNCompaction() : new_task_(&mutex_) {}
 };
 
-class ZnsCompaction {
+class TropoCompaction {
  public:
-  ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env);
-  ~ZnsCompaction();
+  TropoCompaction(TropoVersionSet* vset, uint8_t first_level, Env* env);
+  ~TropoCompaction();
 
   // BG Thread coordination
   bool HasOverlapWithOtherCompaction(std::vector<SSZoneMetaData*> metas);
@@ -46,20 +46,20 @@ class ZnsCompaction {
 
   // Trivial ops
   bool IsTrivialMove() const;
-  Status DoTrivialMove(ZnsVersionEdit* edit);
+  Status DoTrivialMove(TropoVersionEdit* edit);
 
   // Compactions
-  void MarkCompactedTablesAsDead(ZnsVersionEdit* edit);
-  Status DoCompaction(ZnsVersionEdit* edit);
+  void MarkCompactedTablesAsDead(TropoVersionEdit* edit);
+  Status DoCompaction(TropoVersionEdit* edit);
 
  private:
-  friend class ZnsVersionSet;
+  friend class TropoVersionSet;
 
   // Compaction
   static Iterator* GetLNIterator(void* arg, const Slice& file_value,
                                  const Comparator* cmp);
   Iterator* MakeCompactionIterator();
-  Status FlushSSTable(SSTableBuilder** builder, ZnsVersionEdit* edit_,
+  Status FlushSSTable(TropoSSTableBuilder** builder, TropoVersionEdit* edit_,
                       SSZoneMetaData* meta);
   static void DeferCompactionWrite(void* deferred_compaction);
 
@@ -70,12 +70,12 @@ class ZnsCompaction {
   uint8_t first_level_;
   uint64_t max_lba_count_;
   // References
-  ZnsVersionSet* vset_;
-  ZnsVersion* version_;
-  ZnsVersionEdit edit_;
+  TropoVersionSet* vset_;
+  TropoVersion* version_;
+  TropoVersionEdit edit_;
   // Target
   std::array<std::vector<SSZoneMetaData*>, 2U> targets_;
-  size_t level_ptrs_[ZnsConfig::level_count];
+  size_t level_ptrs_[TropoDBConfig::level_count];
 
   std::vector<SSZoneMetaData*> grandparents_;
   bool busy_;

@@ -39,7 +39,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       s = bg_error_;
       return s;
     }
-    if (allow_delay && versions_->NumLevelZones(0) > ZnsConfig::L0_slow_down) {
+    if (allow_delay && versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
       // Throttle
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
@@ -54,13 +54,13 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       bg_flush_work_finished_signal_.Wait();
     } else if (versions_->NeedsL0Compaction()) {
       // No more space in L0. Better to wait till compaction is done
-      TROPODB_DEBUG("DEBUG: Forcing L0 compaction, no space left\n");
+      TROPO_LOG_DEBUG("DEBUG: Forcing L0 compaction, no space left\n");
       MaybeScheduleCompactionL0();
       bg_work_l0_finished_signal_.Wait();
     } else if (!wal_man_[parallel_number]->WALAvailable()) {
       // This can not happen in current implementation, but we do treat it.
       // Simply wait for WALs to become available
-      TROPODB_DEBUG("DEBUG: out of WALs\n");
+      TROPO_LOG_DEBUG("DEBUG: out of WALs\n");
       bg_flush_work_finished_signal_.Wait();
     } else {
       // create new WAL
@@ -69,21 +69,21 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       wal_[parallel_number]->Unref();
       s = wal_man_[parallel_number]->NewWAL(&mutex_, &wal_[parallel_number]);
       if (!s.ok()) {
-        TROPODB_ERROR("ERROR: Can not create WAL");
+        TROPO_LOG_ERROR("ERROR: Can not create WAL");
       }
       wal_[parallel_number]->Ref();
       // Hack to prevent needing background operations
 #ifdef WALPerfTest
       // Drop all that was in the memtable (NOT PERSISTENT!)
       mem_[parallel_number]->Unref();
-      mem_[parallel_number] = new ZNSMemTable(options_, internal_comparator_,
+      mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
                                               max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       env_->Schedule(&TropoDBImpl::BGFlushWork, this, rocksdb::Env::HIGH);
 #else
       // Switch to fresh memtable
       imm_[parallel_number] = mem_[parallel_number];
-      mem_[parallel_number] = new ZNSMemTable(options_, internal_comparator_,
+      mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
                                               max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       // Ensure the background knows about these thingss
@@ -153,7 +153,7 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 
   // TODO: Striping is NOT the way to go.
   uint8_t striped_index = writer_striper_;
-  writer_striper_ = writer_striper_ + 1 == ZnsConfig::lower_concurrency
+  writer_striper_ = writer_striper_ + 1 == TropoDBConfig::lower_concurrency
                         ? 0
                         : writer_striper_ + 1;
 
@@ -201,10 +201,10 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       if (s.ok()) {
         s = mem_[striped_index]->Write(options, write_batch);
         if (!s.ok()) {
-          TROPODB_ERROR("ERROR: memtable error: %s\n", s.getState());
+          TROPO_LOG_ERROR("ERROR: memtable error: %s\n", s.getState());
         }
       } else {
-        TROPODB_ERROR("ERROR: WAL append error\n");
+        TROPO_LOG_ERROR("ERROR: WAL append error\n");
       }
       mutex_.Lock();
       wal_[striped_index]->Unref();
@@ -241,15 +241,15 @@ Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
   value->clear();
   // This is absolutely necessary for locking logic because private pointers
   // can be changed in background work. (snapshotting)
-  std::vector<ZNSMemTable*> mem;
-  std::vector<ZNSMemTable*> imm;
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  std::vector<TropoMemtable*> mem;
+  std::vector<TropoMemtable*> imm;
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     mem.push_back(mem_[i]);
     imm.push_back(imm_[i]);
     mem[i]->Ref();
     if (imm[i] != nullptr) imm[i]->Ref();
   }
-  ZnsVersion* current = versions_->current();
+  TropoVersion* current = versions_->current();
   current->Ref();
 
   // Get on the snapshot
@@ -261,7 +261,7 @@ Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
     bool found = false;
     std::string tmp;
     // TODO: ALL memtables?
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
       if (mem[i]->Get(options, lkey, &tmp, &s, &seq_pot)) {
         if (!found) {
           found = true;
@@ -291,7 +291,7 @@ Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
   }
 
   // Ensures that old data can be removed by dereffing.
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     mem[i]->Unref();
     if (imm[i] != nullptr) imm[i]->Unref();
   }

@@ -16,12 +16,12 @@
 namespace ROCKSDB_NAMESPACE {
 enum class EntryStatus { found, deleted, notfound };
 
-class ZNSSSTableManager;
-class SSTableBuilder;
+class TropoSSTableManager;
+class TropoSSTableBuilder;
 
-class ZnsSSTable {
+class TropoSSTable {
  public:
-  ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
+  TropoSSTable(SZD::SZDChannelFactory* channel_factory,
              const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
              const uint64_t max_zone_nr)
       : min_zone_head_(min_zone_nr * info.zone_cap),
@@ -34,7 +34,7 @@ class ZnsSSTable {
     assert(channel_factory_ != nullptr);
     channel_factory_->Ref();
   }
-  virtual ~ZnsSSTable() {
+  virtual ~TropoSSTable() {
     channel_factory_->Unref();
     channel_factory_ = nullptr;
   }
@@ -45,7 +45,7 @@ class ZnsSSTable {
   virtual bool EnoughSpaceAvailable(const Slice& slice) const = 0;
   virtual uint64_t SpaceAvailable() const = 0;
   virtual Status InvalidateSSZone(const SSZoneMetaData& meta) = 0;
-  virtual SSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
+  virtual TropoSSTableBuilder* NewBuilder(SSZoneMetaData* meta) = 0;
   virtual Status WriteSSTable(const Slice& content, SSZoneMetaData* meta) = 0;
   virtual Iterator* NewIterator(const SSZoneMetaData& meta,
                                 const Comparator* cmp) = 0;
@@ -53,7 +53,7 @@ class ZnsSSTable {
   virtual uint64_t GetTail() const = 0;
   virtual uint64_t GetHead() const = 0;
 
-  virtual ZNSDiagnostics GetDiagnostics() const = 0;
+  virtual TropoDiagnostics GetDiagnostics() const = 0;
 
  protected:
   // const after init

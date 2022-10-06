@@ -6,7 +6,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
+TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table, SSZoneMetaData* meta,
                                bool use_encoding, int8_t writer)
     : started_(false),
       kv_numbers_(0),
@@ -17,7 +17,7 @@ SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
       writer_(writer) {
   meta_->lba_count = 0;
   buffer_.clear();
-  buffer_.reserve(ZnsConfig::max_bytes_sstable_);
+  buffer_.reserve(TropoDBConfig::max_bytes_sstable_);
   kv_pair_offsets_.clear();
   if (use_encoding_) {
     kv_pair_offsets_.push_back(0);
@@ -25,15 +25,15 @@ SSTableBuilder::SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta,
   }
 }
 
-SSTableBuilder::~SSTableBuilder() {}
+TropoSSTableBuilder::~TropoSSTableBuilder() {}
 
-uint64_t SSTableBuilder::EstimateSizeImpact(const Slice& key,
+uint64_t TropoSSTableBuilder::EstimateSizeImpact(const Slice& key,
                                             const Slice& value) const {
   // TODO: this is hardcoded, not maintainable.
   return key.size() + value.size() + 5 * sizeof(uint32_t);
 }
 
-Status SSTableBuilder::Apply(const Slice& key, const Slice& value) {
+Status TropoSSTableBuilder::Apply(const Slice& key, const Slice& value) {
   if (!started_) {
     meta_->smallest.DecodeFrom(key);
     started_ = true;
@@ -42,7 +42,7 @@ Status SSTableBuilder::Apply(const Slice& key, const Slice& value) {
   if (use_encoding_) {
     Slice last_key_piece(last_key_);
     size_t shared = 0;
-    if (counter_ < ZnsConfig::max_sstable_encoding) {
+    if (counter_ < TropoDBConfig::max_sstable_encoding) {
       const size_t min_length = std::min(last_key_piece.size(), key.size());
       while ((shared < min_length) && (last_key_piece[shared] == key[shared])) {
         shared++;
@@ -79,7 +79,7 @@ Status SSTableBuilder::Apply(const Slice& key, const Slice& value) {
   return Status::OK();
 }
 
-Status SSTableBuilder::Finalise() {
+Status TropoSSTableBuilder::Finalise() {
   meta_->numbers = kv_numbers_;
   // TODO: this is not a bottleneck, but it is ugly...
   std::string preamble;
@@ -96,9 +96,9 @@ Status SSTableBuilder::Finalise() {
   return Status::OK();
 }
 
-Status SSTableBuilder::Flush() {
+Status TropoSSTableBuilder::Flush() {
   if (writer_ != -1) {
-    return static_cast<LNZnsSSTable*>(table_)->WriteSSTable(Slice(buffer_),
+    return static_cast<TropoLNSSTable*>(table_)->WriteSSTable(Slice(buffer_),
                                                             meta_, writer_);
   } else {
     return table_->WriteSSTable(Slice(buffer_), meta_);

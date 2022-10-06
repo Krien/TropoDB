@@ -3,7 +3,7 @@
 #include "db/tropodb/table/tropodb_sstable.h"
 
 namespace ROCKSDB_NAMESPACE {
-namespace ZNSEncoding {
+namespace TropoEncoding {
 const char* DecodeEncodedEntry(const char* p, const char* limit,
                                uint32_t* shared, uint32_t* non_shared,
                                uint32_t* value_length) {
@@ -36,5 +36,5 @@ void ParseNextNonEncoded(char** src, Slice* key, Slice* value) {
   *src += valuesize;
 }
 
-}  // namespace ZNSEncoding
+}  // namespace TropoEncoding
 }  // namespace ROCKSDB_NAMESPACE

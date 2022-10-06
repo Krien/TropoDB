@@ -13,11 +13,11 @@
 #include "table/internal_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZNSMemTable : public RefCounter {
+class TropoMemtable : public RefCounter {
  public:
-  ZNSMemTable(const DBOptions& options, const InternalKeyComparator& ikc,
+  TropoMemtable(const DBOptions& options, const InternalKeyComparator& ikc,
               const size_t buffer_size);
-  ~ZNSMemTable();
+  ~TropoMemtable();
   Status Write(const WriteOptions& options, WriteBatch* updates);
   bool Get(const ReadOptions& options, const LookupKey& key, std::string* value,
            Status* s, SequenceNumber* seq = nullptr);

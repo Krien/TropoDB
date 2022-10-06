@@ -64,7 +64,7 @@ struct ExternalSstFileInfo;
 struct MemTableInfo;
 class ColumnFamilyMemTables;
 class WriteBufferManager;
-class ZnsTableCache;
+class TropoTableCache;
 struct FlushData;
 
 class TropoDBImpl : public DB {
@@ -351,21 +351,21 @@ class TropoDBImpl : public DB {
   std::string layout_string_;
   SZD::SZDDevice* zns_device_;
   SZD::SZDChannelFactory* channel_factory_;
-  ZNSSSTableManager* ss_manager_;
-  ZnsManifest* manifest_;
-  ZnsTableCache* table_cache_;
-  std::array<ZnsWALManager<ZnsConfig::wal_manager_zone_count>*,
-             ZnsConfig::lower_concurrency>
+  TropoSSTableManager* ss_manager_;
+  TropoManifest* manifest_;
+  TropoTableCache* table_cache_;
+  std::array<TropoWALManager<TropoDBConfig::wal_manager_zone_count>*,
+             TropoDBConfig::lower_concurrency>
       wal_man_;
-  ZnsVersionSet* versions_;
+  TropoVersionSet* versions_;
   size_t max_write_buffer_size_;
 
   // Dynamic data objects, protected by mutex
-  std::array<ZNSWAL*, ZnsConfig::lower_concurrency> wal_;
-  std::array<ZNSMemTable*, ZnsConfig::lower_concurrency> mem_;
-  std::array<ZNSMemTable*, ZnsConfig::lower_concurrency> imm_;
-  std::array<std::deque<Writer*>, ZnsConfig::lower_concurrency> writers_;
-  WriteBatch* tmp_batch_[ZnsConfig::lower_concurrency];
+  std::array<TropoWAL*, TropoDBConfig::lower_concurrency> wal_;
+  std::array<TropoMemtable*, TropoDBConfig::lower_concurrency> mem_;
+  std::array<TropoMemtable*, TropoDBConfig::lower_concurrency> imm_;
+  std::array<std::deque<Writer*>, TropoDBConfig::lower_concurrency> writers_;
+  WriteBatch* tmp_batch_[TropoDBConfig::lower_concurrency];
   uint8_t writer_striper_{0};
 
   // Threading variables
@@ -378,13 +378,13 @@ class TropoDBImpl : public DB {
   port::CondVar bg_flush_work_finished_signal_;
   bool bg_compaction_l0_scheduled_;
   bool bg_compaction_scheduled_;
-  std::array<bool, ZnsConfig::lower_concurrency> bg_flush_scheduled_;
+  std::array<bool, TropoDBConfig::lower_concurrency> bg_flush_scheduled_;
   bool shutdown_;
   Status bg_error_;
   bool forced_schedule_;
   std::array<std::vector<SSZoneMetaData*>, 2> reserved_comp_;
   int reserve_claimed_ = -1;
-  std::array<size_t, ZnsConfig::lower_concurrency> wal_reserved_;
+  std::array<size_t, TropoDBConfig::lower_concurrency> wal_reserved_;
 
   // diagnostics
   SystemClock* const clock_;
@@ -400,7 +400,7 @@ class TropoDBImpl : public DB {
   TimingCounter flush_update_version_counter_;
   TimingCounter flush_reset_wal_counter_;
   // diag compaction
-  std::array<uint64_t, ZnsConfig::level_count - 1> compactions_;
+  std::array<uint64_t, TropoDBConfig::level_count - 1> compactions_;
   TimingCounter compaction_compaction_L0_total_;
   TimingCounter compaction_reset_L0_counter_;
   TimingCounter compaction_pick_compaction_;

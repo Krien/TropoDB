@@ -19,16 +19,16 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZnsTableCache {
+class TropoTableCache {
  public:
-  ZnsTableCache(const Options& options, const InternalKeyComparator& icmp,
-                const size_t entries, ZNSSSTableManager* ssmanager);
-  ZnsTableCache(const ZnsTableCache&) = delete;
-  ZnsTableCache& operator=(const ZnsTableCache&) = delete;
-  ~ZnsTableCache();
+  TropoTableCache(const Options& options, const InternalKeyComparator& icmp,
+                const size_t entries, TropoSSTableManager* ssmanager);
+  TropoTableCache(const TropoTableCache&) = delete;
+  TropoTableCache& operator=(const TropoTableCache&) = delete;
+  ~TropoTableCache();
 
   Iterator* NewIterator(const ReadOptions& options, const SSZoneMetaData& meta,
-                        const uint8_t level, ZnsSSTable** tableptr = nullptr);
+                        const uint8_t level, TropoSSTable** tableptr = nullptr);
 
   Status Get(const ReadOptions& options, const SSZoneMetaData& meta,
              const uint8_t level, const Slice& key, std::string* value,
@@ -43,7 +43,7 @@ class ZnsTableCache {
   const InternalKeyComparator icmp_;
   const Options& options_;
   std::shared_ptr<Cache> cache_;
-  ZNSSSTableManager* ssmanager_;
+  TropoSSTableManager* ssmanager_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

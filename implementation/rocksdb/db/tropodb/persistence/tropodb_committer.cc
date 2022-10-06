@@ -16,14 +16,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 static void InitTypeCrc(
-    std::array<uint32_t, kZnsRecordTypeLast + 1>& type_crc) {
+    std::array<uint32_t, kTropoRecordTypeLast + 1>& type_crc) {
   for (uint32_t i = 0; i <= type_crc.size(); i++) {
     char t = static_cast<char>(i);
     type_crc[i] = crc32c::Value(&t, 1);
   }
 }
 
-ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
+TropoCommitter::TropoCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
                            bool keep_buffer)
     : zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
@@ -40,29 +40,29 @@ ZnsCommitter::ZnsCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
   }
 }
 
-ZnsCommitter::~ZnsCommitter() {
+TropoCommitter::~TropoCommitter() {
   for (uint8_t i = 0; i < number_of_readers_; i++) {
     delete read_buffer_[i];
   }
   delete[] read_buffer_;
 }
 
-size_t ZnsCommitter::SpaceNeeded(size_t data_size) const {
+size_t TropoCommitter::SpaceNeeded(size_t data_size) const {
   size_t fragcount = data_size / lba_size_ + 1;
-  size_t size_needed = fragcount * kZnsHeaderSize + data_size;
+  size_t size_needed = fragcount * kTropoHeaderSize + data_size;
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
   return size_needed;
 }
 
-bool ZnsCommitter::SpaceEnough(size_t size) const {
+bool TropoCommitter::SpaceEnough(size_t size) const {
   return log_->SpaceLeft(SpaceNeeded(size));
 }
 
-bool ZnsCommitter::SpaceEnough(const Slice& data) const {
+bool TropoCommitter::SpaceEnough(const Slice& data) const {
   return SpaceEnough(data.size());
 }
 
-Status ZnsCommitter::CommitToCharArray(const Slice& in, char** out) {
+Status TropoCommitter::CommitToCharArray(const Slice& in, char** out) {
   assert(out != nullptr);
   Status s = Status::OK();
   const char* ptr = in.data();
@@ -77,24 +77,24 @@ Status ZnsCommitter::CommitToCharArray(const Slice& in, char** out) {
   do {
     // determine next fragment part.
     size_t avail = lba_size_;
-    avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
+    avail = avail > kTropoHeaderSize ? avail - kTropoHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 
-    ZnsRecordType type;
+    TropoRecordType type;
     const bool end = (left == fragment_length);
     if (begin && end) {
-      type = ZnsRecordType::kFullType;
+      type = TropoRecordType::kFullType;
     } else if (begin) {
-      type = ZnsRecordType::kFirstType;
+      type = TropoRecordType::kFirstType;
     } else if (end) {
-      type = ZnsRecordType::kLastType;
+      type = TropoRecordType::kLastType;
     } else {
-      type = ZnsRecordType::kMiddleType;
+      type = TropoRecordType::kMiddleType;
     }
     size_t frag_begin_addr = walker;
 
     memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
-    memcpy(fragment + frag_begin_addr + kZnsHeaderSize, ptr,
+    memcpy(fragment + frag_begin_addr + kTropoHeaderSize, ptr,
            fragment_length);  // new body.
     // Build header
     fragment[frag_begin_addr + 4] = static_cast<char>(fragment_length & 0xffu);
@@ -108,7 +108,7 @@ Status ZnsCommitter::CommitToCharArray(const Slice& in, char** out) {
                                   fragment_length);
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment + frag_begin_addr, crc);
-    walker += fragment_length + kZnsHeaderSize;
+    walker += fragment_length + kTropoHeaderSize;
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
@@ -116,7 +116,7 @@ Status ZnsCommitter::CommitToCharArray(const Slice& in, char** out) {
   return s;
 }
 
-Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
+Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();
 #ifdef DIRECT_COMMIT
@@ -125,7 +125,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   size_t left = data.size();
 
   size_t fragcount = data.size() / lba_size_ + 1;
-  size_t size_needed = fragcount * kZnsHeaderSize + data.size();
+  size_t size_needed = fragcount * kTropoHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
 
   if (!(s = FromStatus(write_buffer_.ReallocBuffer(
@@ -136,12 +136,12 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
 #endif
             )))
            .ok()) {
-    TROPODB_ERROR("Error: Commit: Failed resizing buffer\n");
+    TROPO_LOG_ERROR("Error: Commit: Failed resizing buffer\n");
     return s;
   }
   char* fragment;
   if (!(s = FromStatus(write_buffer_.GetBuffer((void**)&fragment))).ok()) {
-    TROPODB_ERROR("Error: Commit: Failed getting buffer\n");
+    TROPO_LOG_ERROR("Error: Commit: Failed getting buffer\n");
     return s;
   }
 
@@ -153,19 +153,19 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
   do {
     // determine next fragment part.
     size_t avail = lba_size_;
-    avail = avail > kZnsHeaderSize ? avail - kZnsHeaderSize : 0;
+    avail = avail > kTropoHeaderSize ? avail - kTropoHeaderSize : 0;
     const size_t fragment_length = (left < avail) ? left : avail;
 
-    ZnsRecordType type;
+    TropoRecordType type;
     const bool end = (left == fragment_length);
     if (begin && end) {
-      type = ZnsRecordType::kFullType;
+      type = TropoRecordType::kFullType;
     } else if (begin) {
-      type = ZnsRecordType::kFirstType;
+      type = TropoRecordType::kFirstType;
     } else if (end) {
-      type = ZnsRecordType::kLastType;
+      type = TropoRecordType::kLastType;
     } else {
-      type = ZnsRecordType::kMiddleType;
+      type = TropoRecordType::kMiddleType;
     }
     size_t frag_begin_addr = 0;
 #ifdef DIRECT_COMMIT
@@ -173,7 +173,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
 #endif
 
     memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
-    memcpy(fragment + frag_begin_addr + kZnsHeaderSize, ptr,
+    memcpy(fragment + frag_begin_addr + kTropoHeaderSize, ptr,
            fragment_length);  // new body.
     // Build header
     fragment[frag_begin_addr + 4] = static_cast<char>(fragment_length & 0xffu);
@@ -188,16 +188,16 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment + frag_begin_addr, crc);
 #ifdef DIRECT_COMMIT
-    walker += fragment_length + kZnsHeaderSize;
+    walker += fragment_length + kTropoHeaderSize;
 #else
     // Actual commit
     s = FromStatus(log_->Append(
-        write_buffer_, 0, fragment_length + kZnsHeaderSize, &lbas_iter, false));
+        write_buffer_, 0, fragment_length + kTropoHeaderSize, &lbas_iter, false));
     if (lbas != nullptr) {
       *lbas += lbas_iter;
     }
     if (!s.ok()) {
-      TROPODB_ERROR("Error: Commit: Fatal append error\n");
+      TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
       return s;
     }
 #endif
@@ -212,29 +212,29 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     *lbas += lbas_iter;
   }
   if (!s.ok()) {
-    TROPODB_ERROR("Error: Commit: Fatal append error\n");
+    TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
   }
 #endif
 
   if (!keep_buffer_) {
     s = FromStatus(write_buffer_.FreeBuffer());
     if (!s.ok()) {
-      TROPODB_ERROR("Error: Commit: Failed freeing buffer\n");
+      TROPO_LOG_ERROR("Error: Commit: Failed freeing buffer\n");
     }
   }
   return s;
 }
 
-Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
+Status TropoCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   if (!SpaceEnough(data)) {
-    TROPODB_ERROR("ERROR: Committer: No space left for Committer\n");
+    TROPO_LOG_ERROR("ERROR: Committer: No space left for Committer\n");
     return Status::IOError("No space left");
   }
   return Commit(data, lbas);
 }
 
-Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
-                                     uint64_t end, ZnsCommitReader* reader) {
+Status TropoCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
+                                     uint64_t end, TropoCommitReader* reader) {
   if (begin >= end || reader_number >= number_of_readers_) {
     return Status::InvalidArgument();
   }
@@ -242,20 +242,20 @@ Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
   reader->commit_end = end;
   reader->commit_ptr = reader->commit_start;
   reader->reader_nr = reader_number;
-  reader->scratch = ZnsConfig::deadbeef;
+  reader->scratch = TropoDBConfig::deadbeef;
   if (!FromStatus(read_buffer_[reader->reader_nr]->ReallocBuffer(lba_size_))
            .ok()) {
-    TROPODB_ERROR("Error: Commit: Buffer memory limit\n");
+    TROPO_LOG_ERROR("Error: Commit: Buffer memory limit\n");
     return Status::MemoryLimit();
   }
 
   return Status::OK();
 }
 
-bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
+bool TropoCommitter::SeekCommitReader(TropoCommitReader& reader, Slice* record) {
   // buffering issue
   if (read_buffer_[reader.reader_nr]->GetBufferSize() == 0) {
-    TROPODB_ERROR("ERROR: Commit: try to seek an undefined commit\n");
+    TROPO_LOG_ERROR("ERROR: Commit: try to seek an undefined commit\n");
     return false;
   }
   if (reader.commit_ptr >= reader.commit_end) {
@@ -281,11 +281,11 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
     const uint32_t d = static_cast<uint32_t>(header[7]);
-    ZnsRecordType type = d > kZnsRecordTypeLast ? ZnsRecordType::kInvalid
-                                                : static_cast<ZnsRecordType>(d);
+    TropoRecordType type = d > kTropoRecordTypeLast ? TropoRecordType::kInvalid
+                                                : static_cast<TropoRecordType>(d);
     const uint32_t length = a | (b << 8) | (c << 16);
     // read potential body
-    if (length > lba_size_ && length <= to_read - kZnsHeaderSize) {
+    if (length > lba_size_ && length <= to_read - kTropoHeaderSize) {
       read_buffer_[reader.reader_nr]->ReallocBuffer(to_read);
       read_buffer_[reader.reader_nr]->GetBuffer((void**)&header);
       // TODO: Could also skip first block, but atm addr is bugged.
@@ -294,39 +294,39 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
     }
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
-    if (kZnsHeaderSize + length > to_read) {
-      type = ZnsRecordType::kInvalid;
+    if (kTropoHeaderSize + length > to_read) {
+      type = TropoRecordType::kInvalid;
     }
     // Validate CRC
     {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        TROPODB_ERROR("ERROR: Seek commit: Corrupt crc %u %u %lu %lu\n", length,
+        TROPO_LOG_ERROR("ERROR: Seek commit: Corrupt crc %u %u %lu %lu\n", length,
                       d, reader.commit_ptr, reader.commit_end);
-        type = ZnsRecordType::kInvalid;
+        type = TropoRecordType::kInvalid;
       }
     }
     reader.commit_ptr += (length + lba_size_ - 1) / lba_size_;
     switch (type) {
-      case ZnsRecordType::kFullType:
-        reader.scratch.assign(header + kZnsHeaderSize, length);
+      case TropoRecordType::kFullType:
+        reader.scratch.assign(header + kTropoHeaderSize, length);
         *record = Slice(reader.scratch);
         return true;
-      case ZnsRecordType::kFirstType:
-        reader.scratch.assign(header + kZnsHeaderSize, length);
+      case TropoRecordType::kFirstType:
+        reader.scratch.assign(header + kTropoHeaderSize, length);
         in_fragmented_record = true;
         break;
-      case ZnsRecordType::kMiddleType:
+      case TropoRecordType::kMiddleType:
         if (!in_fragmented_record) {
         } else {
-          reader.scratch.append(header + kZnsHeaderSize, length);
+          reader.scratch.append(header + kTropoHeaderSize, length);
         }
         break;
-      case ZnsRecordType::kLastType:
+      case TropoRecordType::kLastType:
         if (!in_fragmented_record) {
         } else {
-          reader.scratch.append(header + kZnsHeaderSize, length);
+          reader.scratch.append(header + kTropoHeaderSize, length);
           *record = Slice(reader.scratch);
           return true;
         }
@@ -341,7 +341,7 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
   return false;
 }
 
-bool ZnsCommitter::CloseCommit(ZnsCommitReader& reader) {
+bool TropoCommitter::CloseCommit(TropoCommitReader& reader) {
   if (!keep_buffer_) {
     read_buffer_[reader.reader_nr]->FreeBuffer();
   }
@@ -349,17 +349,17 @@ bool ZnsCommitter::CloseCommit(ZnsCommitReader& reader) {
   return true;
 }
 
-Status ZnsCommitter::GetCommitReaderString(std::string* in,
-                                           ZnsCommitReaderString* reader) {
+Status TropoCommitter::GetCommitReaderString(std::string* in,
+                                           TropoCommitReaderString* reader) {
   reader->commit_start = 0;
   reader->commit_end = in->size();
   reader->commit_ptr = reader->commit_start;
   reader->in = in;
-  reader->scratch = ZnsConfig::deadbeef;
+  reader->scratch = TropoDBConfig::deadbeef;
   return Status::OK();
 }
 
-bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
+bool TropoCommitter::SeekCommitReaderString(TropoCommitReaderString& reader,
                                           Slice* record) {
   if (reader.commit_ptr >= reader.commit_end) {
     return false;
@@ -379,45 +379,45 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
     const uint32_t d = static_cast<uint32_t>(header[7]);
-    ZnsRecordType type = d > kZnsRecordTypeLast ? ZnsRecordType::kInvalid
-                                                : static_cast<ZnsRecordType>(d);
+    TropoRecordType type = d > kTropoRecordTypeLast ? TropoRecordType::kInvalid
+                                                : static_cast<TropoRecordType>(d);
     const uint32_t length = a | (b << 8) | (c << 16);
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
-    if (kZnsHeaderSize + length > to_read) {
-      type = ZnsRecordType::kInvalid;
+    if (kTropoHeaderSize + length > to_read) {
+      type = TropoRecordType::kInvalid;
     }
     // Validate CRC
     {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
+        TROPO_LOG_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
                       reader.commit_ptr, reader.commit_end);
-        type = ZnsRecordType::kInvalid;
+        type = TropoRecordType::kInvalid;
       }
     }
     reader.commit_ptr +=
-        ((length + kZnsHeaderSize + lba_size_ - 1) / lba_size_) * lba_size_;
+        ((length + kTropoHeaderSize + lba_size_ - 1) / lba_size_) * lba_size_;
     switch (type) {
-      case ZnsRecordType::kFullType:
-        reader.scratch.assign(header + kZnsHeaderSize, length);
+      case TropoRecordType::kFullType:
+        reader.scratch.assign(header + kTropoHeaderSize, length);
         *record = Slice(reader.scratch);
         return true;
-      case ZnsRecordType::kFirstType:
-        reader.scratch.assign(header + kZnsHeaderSize, length);
+      case TropoRecordType::kFirstType:
+        reader.scratch.assign(header + kTropoHeaderSize, length);
         in_fragmented_record = true;
         break;
-      case ZnsRecordType::kMiddleType:
+      case TropoRecordType::kMiddleType:
         if (!in_fragmented_record) {
         } else {
-          reader.scratch.append(header + kZnsHeaderSize, length);
+          reader.scratch.append(header + kTropoHeaderSize, length);
         }
         break;
-      case ZnsRecordType::kLastType:
+      case TropoRecordType::kLastType:
         if (!in_fragmented_record) {
         } else {
-          reader.scratch.append(header + kZnsHeaderSize, length);
+          reader.scratch.append(header + kTropoHeaderSize, length);
           *record = Slice(reader.scratch);
           return true;
         }
@@ -432,7 +432,7 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
   return false;
 }
 
-bool ZnsCommitter::CloseCommitString(ZnsCommitReaderString& reader) {
+bool TropoCommitter::CloseCommitString(TropoCommitReaderString& reader) {
   reader.scratch.clear();
   return true;
 }

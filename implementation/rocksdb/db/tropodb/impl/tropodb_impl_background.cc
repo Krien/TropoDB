@@ -56,7 +56,7 @@ Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {
          ss_manager_->SpaceRemainingInBytesL0(parallel_number)) {
     // Maybe there is no peer yet?, try to create one.
     MaybeScheduleCompactionL0();
-    TROPODB_DEBUG(
+    TROPO_LOG_DEBUG(
         "Flush: waiting for peer thread, can not flush: memtable %f Mb "
         "approaches available %f Mb \n",
         (float)imm_[parallel_number]->GetInternalSize() / 1024. / 1024.,
@@ -83,12 +83,12 @@ Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {
     flush_flush_memtable_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
       bg_error_ = s;
-      TROPODB_ERROR("ERROR: Flush: Can not flush memtable to storage\n");
+      TROPO_LOG_ERROR("ERROR: Flush: Can not flush memtable to storage\n");
     }
 
     if (s.ok() && metas.size() > 0) {
       before = clock_->NowMicros();
-      ZnsVersionEdit edit;
+      TropoVersionEdit edit;
       uint64_t l0_number = versions_->NewSSNumberL0();
       // Auto-correct all SSTables to get unique monotic numbers
       for (auto& meta : metas) {
@@ -102,7 +102,7 @@ Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {
       flush_update_version_counter_.AddTiming(clock_->NowMicros() - before);
       if (!s.ok()) {
         bg_error_ = s;
-        TROPODB_ERROR("ERROR: Flush: Can not alter version structure\n");
+        TROPO_LOG_ERROR("ERROR: Flush: Can not alter version structure\n");
       }
     }
     imm_[parallel_number]->Unref();
@@ -116,7 +116,7 @@ Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {
     flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
       bg_error_ = s;
-      TROPODB_ERROR("ERROR: Flush: WALs could not be reset\n");
+      TROPO_LOG_ERROR("ERROR: Flush: WALs could not be reset\n");
     }
   }
   return s;
@@ -131,16 +131,16 @@ void TropoDBImpl::BackgroundFlush(uint8_t parallel_number) {
   if (imm_[parallel_number] != nullptr) {
     s = CompactMemtable(parallel_number);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Flush: Can not flush memtable\n");
+      TROPO_LOG_ERROR("ERROR: Flush: Can not flush memtable\n");
     }
   } else if (!wal_man_[parallel_number]->WALAvailable()) {
-    TROPODB_INFO("BG operation: Resetting WALs to make space\n");
+    TROPO_LOG_INFO("BG operation: Resetting WALs to make space\n");
     uint64_t before = clock_->NowMicros();
     s = wal_man_[parallel_number]->ResetOldWALs(&mutex_);
     flush_reset_wal_counter_.AddTiming(clock_->NowMicros() - before);
-    TROPODB_INFO("BG operation: Reset WALs to make space\n");
+    TROPO_LOG_INFO("BG operation: Reset WALs to make space\n");
   } else {
-    TROPODB_ERROR(
+    TROPO_LOG_ERROR(
         "ERROR: Flush: No immutable table to flush or WAL to reset\n");
   }
 }
@@ -157,11 +157,11 @@ void TropoDBImpl::BackgroundFlushCall(uint8_t parallel_number) {
   // TODO: how to deal with bg_error?
   if (!bg_error_.ok()) {
   } else {
-    TROPODB_INFO("BG operation: Flush started\n");
+    TROPO_LOG_INFO("BG operation: Flush started\n");
     uint64_t before = clock_->NowMicros();
     BackgroundFlush(parallel_number);
     flush_total_counter_.AddTiming(clock_->NowMicros() - before);
-    TROPODB_INFO("BG operation: Flush completed\n");
+    TROPO_LOG_INFO("BG operation: Flush completed\n");
   }
   bg_flush_scheduled_[parallel_number] = false;
   forced_schedule_ = false;
@@ -202,7 +202,7 @@ Status TropoDBImpl::RemoveObsoleteZonesL0() {
   Status s =
       versions_->ReclaimStaleSSTablesL0(&mutex_, &bg_work_l0_finished_signal_);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Reclaiming L0 zones \n");
+    TROPO_LOG_ERROR("ERROR: Reclaiming L0 zones \n");
   }
   return s;
 }
@@ -213,11 +213,11 @@ void TropoDBImpl::BackgroundCompactionL0Call() {
   // TODO: how to deal with bg_error_?
   if (!bg_error_.ok()) {
   } else {
-    TROPODB_INFO("BG operation: L0 compaction started\n");
+    TROPO_LOG_INFO("BG operation: L0 compaction started\n");
     uint64_t before = clock_->NowMicros();
     BackgroundCompactionL0();
     compaction_compaction_L0_total_.AddTiming(clock_->NowMicros() - before);
-    TROPODB_INFO("BG operation: L0 compaction finished\n");
+    TROPO_LOG_INFO("BG operation: L0 compaction finished\n");
   }
   bg_compaction_l0_scheduled_ = false;
   // Background orders can cascade, but shutdown if ordered
@@ -252,24 +252,24 @@ void TropoDBImpl::BackgroundCompactionL0() {
     compaction_reset_L0_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
       bg_error_ = s;
-      TROPODB_ERROR("ERROR: L0 compaction: Can not reclaim L0 zones\n");
+      TROPO_LOG_ERROR("ERROR: L0 compaction: Can not reclaim L0 zones\n");
     }
-    TROPODB_DEBUG("BG Operation: L0 only reclaimed\n");
+    TROPO_LOG_DEBUG("BG Operation: L0 only reclaimed\n");
     return;
   }
 
   // Compact L0 to storage and prepare version
-  ZnsVersion* current = versions_->current();
-  ZnsVersionEdit edit;
+  TropoVersion* current = versions_->current();
+  TropoVersionEdit edit;
   {
     // Pick compaction
     before = clock_->NowMicros();
-    ZnsCompaction* c =
+    TropoCompaction* c =
         versions_->PickCompaction(0 /*level*/, reserved_comp_[1] /*LN thread*/);
     // Can not do this compaction while the other BG uses the same tables
     while (reserve_claimed_ == 1 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[1])) {
-      TROPODB_DEBUG(
+      TROPO_LOG_DEBUG(
           "BG Operation: L0 compaction: Overlap with LN write %u %u\n",
           reserve_claimed_ == 1,
           c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
@@ -290,13 +290,13 @@ void TropoDBImpl::BackgroundCompactionL0() {
     mutex_.Unlock();
     c->MarkCompactedTablesAsDead(&edit);
     if (trivial) {
-      TROPODB_INFO("BG Operation: Starting L0 Trivial move\n");
+      TROPO_LOG_INFO("BG Operation: Starting L0 Trivial move\n");
       s = c->DoTrivialMove(&edit);
-      TROPODB_INFO("BG Operation: Finished L0 Trivial move\n");
+      TROPO_LOG_INFO("BG Operation: Finished L0 Trivial move\n");
     } else {
-      TROPODB_INFO("BG Operation: Starting L0 Non-trivial compaction\n");
+      TROPO_LOG_INFO("BG Operation: Starting L0 Non-trivial compaction\n");
       s = c->DoCompaction(&edit);
-      TROPODB_INFO("BG Operation: Finished L0 Non-trivial compaction\n");
+      TROPO_LOG_INFO("BG Operation: Finished L0 Non-trivial compaction\n");
     }
     // Note if this delete is somehow not reached, a stale version will remain
     // in memory for the rest of this session (memory leak).
@@ -310,7 +310,7 @@ void TropoDBImpl::BackgroundCompactionL0() {
     current->Unref();
 
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction L0: Could not compact\n");
+      TROPO_LOG_ERROR("ERROR: Compaction L0: Could not compact\n");
       reserved_comp_[0].clear();
       bg_error_ = s;
       return;
@@ -324,7 +324,7 @@ void TropoDBImpl::BackgroundCompactionL0() {
     reserved_comp_[0].clear();
     compaction_version_edit_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction L0: Could not apply to version\n");
+      TROPO_LOG_ERROR("ERROR: Compaction L0: Could not apply to version\n");
       bg_error_ = s;
       return;
     }
@@ -338,14 +338,14 @@ void TropoDBImpl::BackgroundCompactionL0() {
     s = RemoveObsoleteZonesL0();
     compaction_reset_L0_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction L0: Resetting L0 Zones\n");
+      TROPO_LOG_ERROR("ERROR: Compaction L0: Resetting L0 Zones\n");
       bg_error_ = s;
       return;
     }
   }
 
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Compaction L0: error in flow control of %s:%s \n",
+    TROPO_LOG_ERROR("ERROR: Compaction L0: error in flow control of %s:%s \n",
                   __FILE__, __func__);
     bg_error_ = s;
   }
@@ -374,7 +374,7 @@ Status TropoDBImpl::RemoveObsoleteZonesLN() {
   Status s =
       versions_->ReclaimStaleSSTablesLN(&mutex_, &bg_work_finished_signal_);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Reclaiming LN zones\n");
+    TROPO_LOG_ERROR("ERROR: Reclaiming LN zones\n");
   }
   return s;
 }
@@ -383,12 +383,12 @@ void TropoDBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
   Status s;
-  ZnsVersion* current = versions_->current();
+  TropoVersion* current = versions_->current();
   uint64_t before;
 
   // Not a valid compaction
-  if (current->CompactionLevel() >= ZnsConfig::level_count) {
-    TROPODB_ERROR("ERROR: LN Compaction: not a valid compaction level \n");
+  if (current->CompactionLevel() >= TropoDBConfig::level_count) {
+    TROPO_LOG_ERROR("ERROR: LN Compaction: not a valid compaction level \n");
     return;
   }
 
@@ -404,22 +404,22 @@ void TropoDBImpl::BackgroundCompaction() {
     versions_->RecalculateScore();
     if (!s.ok()) {
       bg_error_ = s;
-      TROPODB_ERROR("ERROR: LN compaction: Can not reclaim LN zones\n");
+      TROPO_LOG_ERROR("ERROR: LN compaction: Can not reclaim LN zones\n");
     }
-    TROPODB_DEBUG("BG Operation: LN only reclaimed\n");
+    TROPO_LOG_DEBUG("BG Operation: LN only reclaimed\n");
     return;
   }
 
   // Compact LN to storage and prepare version
-  ZnsVersionEdit edit;
+  TropoVersionEdit edit;
   {
     // Pick compaction
     before = clock_->NowMicros();
-    ZnsCompaction* c = versions_->PickCompaction(current->CompactionLevel(),
+    TropoCompaction* c = versions_->PickCompaction(current->CompactionLevel(),
                                                  reserved_comp_[0]);
     while (reserve_claimed_ == 0 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[0]) || c->IsBusy()) {
-      TROPODB_DEBUG(
+      TROPO_LOG_DEBUG(
           "BG Operation: LN compaction: Overlap with L0 write %u %u %u\n",
           reserve_claimed_ == 0,
           c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
@@ -441,13 +441,13 @@ void TropoDBImpl::BackgroundCompaction() {
     mutex_.Unlock();
     c->MarkCompactedTablesAsDead(&edit);
     if (istrivial) {
-      TROPODB_INFO("BG Operation: Starting LN Trivial move\n");
+      TROPO_LOG_INFO("BG Operation: Starting LN Trivial move\n");
       s = c->DoTrivialMove(&edit);
-      TROPODB_INFO("BG Operation: Finished LN Trivial move\n");
+      TROPO_LOG_INFO("BG Operation: Finished LN Trivial move\n");
     } else {
-      TROPODB_INFO("BG Operation: Starting LN Non-trivial compaction\n");
+      TROPO_LOG_INFO("BG Operation: Starting LN Non-trivial compaction\n");
       s = c->DoCompaction(&edit);
-      TROPODB_INFO("BG Operation: Finished LN Non-trivial compaction\n");
+      TROPO_LOG_INFO("BG Operation: Finished LN Non-trivial compaction\n");
     }
     // Note if this delete is not reached, a stale version will remain in memory
     // for the rest of this session (memory leak).
@@ -461,7 +461,7 @@ void TropoDBImpl::BackgroundCompaction() {
     current->Unref();
 
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction LN: Could not compact\n");
+      TROPO_LOG_ERROR("ERROR: Compaction LN: Could not compact\n");
       bg_error_ = s;
       return;
     }
@@ -474,7 +474,7 @@ void TropoDBImpl::BackgroundCompaction() {
     reserved_comp_[1].clear();
     compaction_version_edit_LN_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction LN: Could not apply to version\n");
+      TROPO_LOG_ERROR("ERROR: Compaction LN: Could not apply to version\n");
       bg_error_ = s;
       return;
     }
@@ -488,7 +488,7 @@ void TropoDBImpl::BackgroundCompaction() {
     s = s.ok() ? RemoveObsoleteZonesLN() : s;
     compaction_reset_LN_counter_.AddTiming(clock_->NowMicros() - before);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Compaction LN: Resetting LN zones\n");
+      TROPO_LOG_ERROR("ERROR: Compaction LN: Resetting LN zones\n");
       bg_error_ = s;
     }
     // LN compaction uses bytes (dead and alive) to determine score
@@ -496,7 +496,7 @@ void TropoDBImpl::BackgroundCompaction() {
   }
 
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Compaction LN: error in flow control of %s:%s \n",
+    TROPO_LOG_ERROR("ERROR: Compaction LN: error in flow control of %s:%s \n",
                   __FILE__, __func__);
     bg_error_ = s;
   }
@@ -508,11 +508,11 @@ void TropoDBImpl::BackgroundCompactionCall() {
   // TODO: How to deal with background errors?
   if (!bg_error_.ok()) {
   } else {
-    TROPODB_INFO("BG operation: LN compaction started\n");
+    TROPO_LOG_INFO("BG operation: LN compaction started\n");
     uint64_t before = clock_->NowMicros();
     BackgroundCompaction();
     compaction_compaction_LN_total_.AddTiming(clock_->NowMicros() - before);
-    TROPODB_INFO("BG operation: LN compaction finished\n");
+    TROPO_LOG_INFO("BG operation: LN compaction finished\n");
   }
   bg_compaction_scheduled_ = false;
   forced_schedule_ = false;

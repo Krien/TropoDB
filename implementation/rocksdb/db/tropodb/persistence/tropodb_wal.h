@@ -18,16 +18,16 @@ namespace ROCKSDB_NAMESPACE {
  * @brief
  *
  */
-class ZNSWAL : public RefCounter {
+class TropoWAL : public RefCounter {
  public:
-  ZNSWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
+  TropoWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_nr, const uint64_t max_zone_nr,
          const uint8_t number_of_writers,
          SZD::SZDChannel** borrowed_write_channel = nullptr);
   // No copying or implicits
-  ZNSWAL(const ZNSWAL&) = delete;
-  ZNSWAL& operator=(const ZNSWAL&) = delete;
-  ~ZNSWAL();
+  TropoWAL(const TropoWAL&) = delete;
+  TropoWAL& operator=(const TropoWAL&) = delete;
+  ~TropoWAL();
 
 #ifdef WAL_BUFFERED
   // Sync buffer from heap to I/O
@@ -43,11 +43,11 @@ class ZNSWAL : public RefCounter {
   Status Sync();
 // Replay all changes present in this WAL to the memtable
 #ifdef WAL_UNORDERED
-  Status ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq);
+  Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
 #else
-  Status ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq);
+  Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
 #endif
-  Status Replay(ZNSMemTable* mem, SequenceNumber* seq);
+  Status Replay(TropoMemtable* mem, SequenceNumber* seq);
   // Closes the WAL gracefully (sync, free buffers)
   Status Close();
   Status Reset();
@@ -70,8 +70,8 @@ class ZNSWAL : public RefCounter {
   inline bool SpaceLeft(const size_t size) {
     return committer_.SpaceEnough(SpaceNeeded(size));
   }
-  inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {
+  inline TropoDiagnostics GetDiagnostics() const {
+    struct TropoDiagnostics diag = {
         .name_ = "WAL",
         .bytes_written_ = log_.GetBytesWritten(),
         .append_operations_counter_ = log_.GetAppendOperationsCounter(),
@@ -95,7 +95,7 @@ class ZNSWAL : public RefCounter {
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;
-  ZnsCommitter committer_;
+  TropoCommitter committer_;
 #ifdef WAL_BUFFERED
   // buffer
   bool buffered_;

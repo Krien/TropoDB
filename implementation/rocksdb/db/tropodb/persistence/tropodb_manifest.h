@@ -11,20 +11,20 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZnsManifest : public RefCounter {
+class TropoManifest : public RefCounter {
  public:
-  ZnsManifest(SZD::SZDChannelFactory* channel_factory,
+  TropoManifest(SZD::SZDChannelFactory* channel_factory,
               const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
               const uint64_t max_zone_nr);
-  ~ZnsManifest();
+  ~TropoManifest();
   Status NewManifest(const Slice& record);
   Status ReadManifest(std::string* manifest);
   Status SetCurrent();
   Status Recover();
   Status Reset();
 
-  inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {
+  inline TropoDiagnostics GetDiagnostics() const {
+    struct TropoDiagnostics diag = {
         .name_ = "Manifest",
         .bytes_written_ = log_.GetBytesWritten(),
         .append_operations_counter_ = log_.GetAppendOperationsCounter(),
@@ -35,8 +35,8 @@ class ZnsManifest : public RefCounter {
         .append_operations_ = log_.GetAppendOperations()};
     return diag;
   }
-  inline ZNSDiagnostics IODiagnostics() {
-    struct ZNSDiagnostics diag = GetDiagnostics();
+  inline TropoDiagnostics IODiagnostics() {
+    struct TropoDiagnostics diag = GetDiagnostics();
     return diag;
   }
 
@@ -49,7 +49,7 @@ class ZnsManifest : public RefCounter {
                          uint64_t* end_manifest,
                          uint64_t* start_manifest_delete,
                          uint64_t* end_manifest_delete,
-                         ZnsCommitReader& reader);
+                         TropoCommitReader& reader);
   Status ValidateManifestPointers() const;
 
   // State
@@ -61,7 +61,7 @@ class ZnsManifest : public RefCounter {
   uint64_t deleted_range_blocks_;
   // Log
   SZD::SZDCircularLog log_;
-  ZnsCommitter committer_;
+  TropoCommitter committer_;
   // const after init
   const uint64_t min_zone_head_;
   const uint64_t max_zone_head_;

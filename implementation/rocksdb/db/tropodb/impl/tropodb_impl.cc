@@ -63,12 +63,12 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
       versions_(nullptr),
       // Thread count (1 HIGH for each flush thread, 1~3 HIGH for each L0 thread
       // and 1~3 LOW for each LN thread)
-      low_level_threads_((1 + ZnsConfig::compaction_allow_prefetching +
-                          ZnsConfig::compaction_allow_deferring_writes)),
-      high_level_threads_(ZnsConfig::lower_concurrency +
-                          ZnsConfig::lower_concurrency *
-                              (1 + ZnsConfig::compaction_allow_prefetching +
-                               ZnsConfig::compaction_allow_deferring_writes)),
+      low_level_threads_((1 + TropoDBConfig::compaction_allow_prefetching +
+                          TropoDBConfig::compaction_allow_deferring_writes)),
+      high_level_threads_(TropoDBConfig::lower_concurrency +
+                          TropoDBConfig::lower_concurrency *
+                              (1 + TropoDBConfig::compaction_allow_prefetching +
+                               TropoDBConfig::compaction_allow_deferring_writes)),
       // State
       bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
@@ -80,9 +80,9 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
       forced_schedule_(false),
       // diag
       clock_(SystemClock::Default().get()) {
-  SetTropoDBLogLevel(ZnsConfig::default_log_level);
+  SetTropoLogLevel(TropoDBConfig::default_log_level);
   // The following variables are set to safeguards
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     wal_man_[i] = nullptr;
     wal_[i] = nullptr;
     mem_[i] = nullptr;
@@ -94,7 +94,7 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
   std::fill(compactions_.begin(), compactions_.end(), 0);
   // Setup background threads (RocksDB env will not let us make threads
   // otherwise)
-  TROPODB_INFO("INFO: TropoDB will use a maximum of %u background threads\n",
+  TROPO_LOG_INFO("INFO: TropoDB will use a maximum of %u background threads\n",
                low_level_threads_ + high_level_threads_);
   env_->SetBackgroundThreads(high_level_threads_,
                              ROCKSDB_NAMESPACE::Env::Priority::HIGH);
@@ -103,7 +103,7 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
 }
 
 TropoDBImpl::~TropoDBImpl() {
-  TROPODB_INFO("INFO: Shutting down TropoDB\n");
+  TROPO_LOG_INFO("INFO: Shutting down TropoDB\n");
   // Close all tasks
   {
     mutex_.Lock();
@@ -121,20 +121,20 @@ TropoDBImpl::~TropoDBImpl() {
         bg_flush_work_finished_signal_.Wait();
       }
     }
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
       if (wal_[i] != nullptr) {
         wal_[i]->Sync();
       }
     }
     mutex_.Unlock();
   }
-  TROPODB_INFO("INFO: All jobs done - ready to exit\n");
+  TROPO_LOG_INFO("INFO: All jobs done - ready to exit\n");
   PrintStats();
 
   // Reaping what we have sown with ref counters
   {
     if (versions_ != nullptr) delete versions_;
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
       if (mem_[i] != nullptr) mem_[i]->Unref();
       if (imm_[i] != nullptr) imm_[i]->Unref();
       if (wal_[i] != nullptr) wal_[i]->Unref();
@@ -147,7 +147,7 @@ TropoDBImpl::~TropoDBImpl() {
     if (channel_factory_ != nullptr) channel_factory_->Unref();
     if (zns_device_ != nullptr) delete zns_device_;
   }
-  TROPODB_INFO("INFO: Exiting\n");
+  TROPO_LOG_INFO("INFO: Exiting\n");
 }
 
 Status TropoDBImpl::ValidateOptions(const DBOptions& db_options) {
@@ -166,17 +166,17 @@ Status TropoDBImpl::OpenZNSDevice(const std::string dbname) {
   Status s;
   s = FromStatus(zns_device_->Init());
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: SPDK will not init. Are you root?\n");
+    TROPO_LOG_ERROR("ERROR: SPDK will not init. Are you root?\n");
     return Status::IOError("Error opening SPDK");
   }
   s = FromStatus(
-      zns_device_->Open(this->name_, ZnsConfig::min_zone, ZnsConfig::max_zone));
+      zns_device_->Open(this->name_, TropoDBConfig::min_zone, TropoDBConfig::max_zone));
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: SZD device does not open. Is it ZNS?\n");
+    TROPO_LOG_ERROR("ERROR: SZD device does not open. Is it ZNS?\n");
     return Status::IOError("Error opening ZNS device");
   }
   channel_factory_ = new SZD::SZDChannelFactory(zns_device_->GetDeviceManager(),
-                                                ZnsConfig::max_channels);
+                                                TropoDBConfig::max_channels);
   channel_factory_->Ref();
   return Status::OK();
 }
@@ -189,12 +189,12 @@ Status TropoDBImpl::ResetZNSDevice() {
   if (s.ok()) {
     s = FromStatus(channel->ResetAllZones());
   } else {
-    TROPODB_ERROR("ERROR: Can not create I/O QPair for clearing device\n");
+    TROPO_LOG_ERROR("ERROR: Can not create I/O QPair for clearing device\n");
   }
   if (s.ok()) {
     s = FromStatus(channel_factory_->unregister_channel(channel));
   } else {
-    TROPODB_ERROR("ERROR: Can not clear device \n");
+    TROPO_LOG_ERROR("ERROR: Can not clear device \n");
   }
   channel_factory_->Unref();
   return s.ok() ? Status::OK() : Status::IOError("Error resetting device");
@@ -223,8 +223,8 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
 
   // Init manifest
   {
-    zone_step = ZnsConfig::manifest_zones;
-    manifest_ = new ZnsManifest(channel_factory_, device_info, zone_head,
+    zone_step = TropoDBConfig::manifest_zones;
+    manifest_ = new TropoManifest(channel_factory_, device_info, zone_head,
                                 zone_head + zone_step);
     manifest_->Ref();
     info_str << std::left << std::setw(15) << "Manifest" << std::right
@@ -235,10 +235,10 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
 
   // Init WALs
   {
-    zone_step = ZnsConfig::wal_count * ZnsConfig::zones_foreach_wal;
-    zone_step /= ZnsConfig::lower_concurrency;
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-      wal_man_[i] = new ZnsWALManager<ZnsConfig::wal_manager_zone_count>(
+    zone_step = TropoDBConfig::wal_count * TropoDBConfig::zones_foreach_wal;
+    zone_step /= TropoDBConfig::lower_concurrency;
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
+      wal_man_[i] = new TropoWALManager<TropoDBConfig::wal_manager_zone_count>(
           channel_factory_, device_info, zone_head, zone_step + zone_head);
       wal_man_[i]->Ref();
       info_str << std::left << std::setw(15) << ("WALMAN-" + std::to_string(i))
@@ -253,11 +253,11 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
     zone_step = device_info.max_lba / device_info.zone_size - zone_head - 1;
     // If only we had access to C++23.
     ss_manager_ =
-        ZNSSSTableManager::NewZNSSTableManager(channel_factory_, device_info,
+        TropoSSTableManager::NewZNSSTableManager(channel_factory_, device_info,
                                                zone_head, zone_head + zone_step)
             .value_or(nullptr);
     if (ss_manager_ == nullptr) {
-      TROPODB_ERROR("ERROR: Could not initialise SSTable manager\n");
+      TROPO_LOG_ERROR("ERROR: Could not initialise SSTable manager\n");
       return Status::Corruption();
     }
     ss_manager_->Ref();
@@ -267,17 +267,17 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
 
   // Init Memtables, table ache and version structure
   {
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-      mem_[i] = new ZNSMemTable(options, internal_comparator_,
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
+      mem_[i] = new TropoMemtable(options, internal_comparator_,
                                 max_write_buffer_size_);
       mem_[i]->Ref();
     }
 
     Options opts(options, ColumnFamilyOptions());
-    table_cache_ = new ZnsTableCache(opts, internal_comparator_,
+    table_cache_ = new TropoTableCache(opts, internal_comparator_,
                                      1024 * 1024 * 4, ss_manager_);
 
-    versions_ = new ZnsVersionSet(internal_comparator_, ss_manager_, manifest_,
+    versions_ = new TropoVersionSet(internal_comparator_, ss_manager_, manifest_,
                                   device_info.lba_size, device_info.zone_cap,
                                   table_cache_, this->env_);
   }
@@ -285,19 +285,19 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
   // Print info string (if enabled)
   info_str << std::setfill('-') << std::setw(76) << "\n" << std::setfill(' ');
   layout_string_ = info_str.str();
-  TROPODB_INFO("%s", layout_string_.data());
+  TROPO_LOG_INFO("%s", layout_string_.data());
 
   return Status::OK();
 }
 
 void TropoDBImpl::RecoverBackgroundFlow() {
   // Make WALs lively again
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     // We must force flush all WALs if there is not enough space.
     if (!wal_man_[i]->WALAvailable()) {
       if (mem_[i]->GetInternalSize() > 0) {
         imm_[i] = mem_[i];
-        mem_[i] = new ZNSMemTable(options_, internal_comparator_,
+        mem_[i] = new TropoMemtable(options_, internal_comparator_,
                                   max_write_buffer_size_);
         mem_[i]->Ref();
       }
@@ -310,7 +310,7 @@ void TropoDBImpl::RecoverBackgroundFlow() {
     wal_[i]->Ref();
   }
   // Reinstigate background jobs
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     MaybeScheduleFlush(i);
   }
   MaybeScheduleCompactionL0();
@@ -318,7 +318,7 @@ void TropoDBImpl::RecoverBackgroundFlow() {
 }
 
 Status TropoDBImpl::Recover() {
-  TROPODB_INFO("INFO: recovering TropoDB\n");
+  TROPO_LOG_INFO("INFO: recovering TropoDB\n");
   Status s;
 
   // Recover index structure
@@ -338,7 +338,7 @@ Status TropoDBImpl::Recover() {
   // Recover WAL and MVCC
   {
     SequenceNumber old_seq;
-    for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+    for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
       s = wal_man_[i]->Recover(mem_[i], &old_seq);
     }
     if (!s.ok()) {
@@ -360,7 +360,7 @@ Status TropoDBImpl::Open(
   Status s;
   s = ValidateOptions(db_options);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Invalid options for TropoDB\n");
+    TROPO_LOG_ERROR("ERROR: Invalid options for TropoDB\n");
     return s;
   }
   // We do not support column families, so we just clear them
@@ -400,7 +400,7 @@ Status TropoDBImpl::Open(
 }
 
 bool TropoDBImpl::AnyFlushScheduled() {
-  for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     if (bg_flush_scheduled_[i]) {
       return true;
     }
@@ -410,7 +410,7 @@ bool TropoDBImpl::AnyFlushScheduled() {
 
 Status TropoDBImpl::Close() {
   // Wait till all jobs are done
-  TROPODB_INFO("INFO: Closing: waiting for background jobs to finish\n");
+  TROPO_LOG_INFO("INFO: Closing: waiting for background jobs to finish\n");
   mutex_.Lock();
   while (bg_compaction_l0_scheduled_ || bg_compaction_scheduled_ ||
          AnyFlushScheduled()) {
@@ -428,7 +428,7 @@ Status TropoDBImpl::Close() {
   }
   mutex_.Unlock();
   // TODO: close device.
-  TROPODB_ERROR("ERROR: Closing: Not implemented\n");
+  TROPO_LOG_ERROR("ERROR: Closing: Not implemented\n");
   return Status::OK();
 }
 
@@ -437,7 +437,7 @@ Status TropoDBImpl::DestroyDB(const std::string& dbname, const Options& options)
   // might as well reset the device.
   Status s;
   TropoDBImpl* impl = new TropoDBImpl(options, dbname);
-  TROPODB_INFO("INFO: Attemtping to reset entire ZNS device\n");
+  TROPO_LOG_INFO("INFO: Attemtping to reset entire ZNS device\n");
   s = impl->OpenZNSDevice("TropoDB");
   if (!s.ok()) {
     return s;
@@ -450,13 +450,13 @@ Status TropoDBImpl::DestroyDB(const std::string& dbname, const Options& options)
   if (!s.ok()) {
     return s;
   }
-  TROPODB_INFO("INFO: Entire ZNS device has been reset\n");
+  TROPO_LOG_INFO("INFO: Entire ZNS device has been reset\n");
   delete impl;
   return s;
 }
 
 int TropoDBImpl::NumberLevels(ColumnFamilyHandle* column_family) {
-  return ZnsConfig::level_count;
+  return TropoDBConfig::level_count;
 }
 
 const std::string& TropoDBImpl::GetName() const { return name_; }

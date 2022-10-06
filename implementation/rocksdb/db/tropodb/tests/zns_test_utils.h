@@ -7,7 +7,7 @@ struct Device {
   ZnsDevice::DeviceManager** device_manager = nullptr;
   ZnsDevice::QPair** qpair = nullptr;
   QPairFactory* qpair_factory = nullptr;
-  ZNSSSTableManager* ss_manager = nullptr;
+  TropoSSTableManager* ss_manager = nullptr;
 };
 
 static void SetupDev(Device* device, int first_zone, int last_zone,
@@ -27,7 +27,7 @@ static void SetupDev(Device* device, int first_zone, int last_zone,
   device->qpair_factory->Ref();
   ASSERT_EQ(device->qpair_factory->Getref(), 1);
   uint64_t zsize = (*device->device_manager)->info.zone_size;
-  std::pair<uint64_t, uint64_t> ranges[ZnsConfig::level_count] = {
+  std::pair<uint64_t, uint64_t> ranges[TropoDBConfig::level_count] = {
       std::make_pair(zsize * first_zone, zsize * last_zone),
       std::make_pair(zsize * last_zone, zsize * (last_zone + 5)),
       std::make_pair(zsize * (last_zone + 5), zsize * (last_zone + 10)),
@@ -35,7 +35,7 @@ static void SetupDev(Device* device, int first_zone, int last_zone,
       std::make_pair(zsize * (last_zone + 15), zsize * (last_zone + 20)),
       std::make_pair(zsize * (last_zone + 20), zsize * (last_zone + 25)),
       std::make_pair(zsize * (last_zone + 25), zsize * (last_zone + 30))};
-  device->ss_manager = new ZNSSSTableManager(
+  device->ss_manager = new TropoSSTableManager(
       device->qpair_factory, (*device->device_manager)->info, ranges);
   ASSERT_EQ(device->qpair_factory->Getref(), 2 + 7);
   device->ss_manager->Ref();
@@ -55,13 +55,13 @@ static void TearDownDev(Device* device) {
 
 static void ValidateMeta(Device* device, int first_zone, int last_zone) {
   ZnsDevice::DeviceInfo info = (*device->device_manager)->info;
-  L0ZnsSSTable* sstable = device->ss_manager->GetL0SSTableLog();
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetMinZoneHead(sstable),
+  TropoL0SSTable* sstable = device->ss_manager->GetL0SSTableLog();
+  ASSERT_EQ(TropoSSTableManagerInternal::GetMinZoneHead(sstable),
             info.zone_size * first_zone);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetMaxZoneHead(sstable),
+  ASSERT_EQ(TropoSSTableManagerInternal::GetMaxZoneHead(sstable),
             info.zone_size * last_zone);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetZoneSize(sstable), info.zone_size);
-  ASSERT_EQ(ZnsSSTableManagerInternal::GetLbaSize(sstable), info.lba_size);
+  ASSERT_EQ(TropoSSTableManagerInternal::GetZoneSize(sstable), info.zone_size);
+  ASSERT_EQ(TropoSSTableManagerInternal::GetLbaSize(sstable), info.lba_size);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -8,12 +8,12 @@
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
-class ZnsSSTable;
-class SSTableBuilder {
+class TropoSSTable;
+class TropoSSTableBuilder {
  public:
-  SSTableBuilder(ZnsSSTable* table, SSZoneMetaData* meta, bool use_encoding,
+  TropoSSTableBuilder(TropoSSTable* table, SSZoneMetaData* meta, bool use_encoding,
                  int8_t writer = -1);
-  ~SSTableBuilder();
+  ~TropoSSTableBuilder();
   uint64_t EstimateSizeImpact(const Slice& key, const Slice& value) const;
   Status Apply(const Slice& key, const Slice& value);
   Status Finalise();
@@ -32,7 +32,7 @@ class SSTableBuilder {
   bool use_encoding_;
   std::string last_key_;
   // References
-  ZnsSSTable* table_;
+  TropoSSTable* table_;
   SSZoneMetaData* meta_;
   // force different writer
   int8_t writer_;

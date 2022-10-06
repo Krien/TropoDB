@@ -11,7 +11,7 @@ namespace ROCKSDB_NAMESPACE {
 static constexpr const char* current_preamble = "CURRENT:";
 static constexpr const size_t current_preamble_size = strlen(current_preamble);
 
-ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
+TropoManifest::TropoManifest(SZD::SZDChannelFactory* channel_factory,
                          const SZD::DeviceInfo& info,
                          const uint64_t min_zone_nr, const uint64_t max_zone_nr)
     : manifest_start_(max_zone_nr * info.zone_cap),  // enforce corruption
@@ -33,11 +33,11 @@ ZnsManifest::ZnsManifest(SZD::SZDChannelFactory* channel_factory,
   assert(min_zone_head_ < max_zone_head_);
 }
 
-ZnsManifest::~ZnsManifest() { channel_factory_->Unref(); }
+TropoManifest::~TropoManifest() { channel_factory_->Unref(); }
 
-Status ZnsManifest::NewManifest(const Slice& record) {
+Status TropoManifest::NewManifest(const Slice& record) {
   if (!committer_.SpaceEnough(record)) {
-    TROPODB_ERROR(
+    TROPO_LOG_ERROR(
         "ERROR: Manifest: Not enough space: needed %lu available %lu\n",
         record.size() / lba_size_, log_.SpaceAvailable() / lba_size_);
     return Status::NoSpace();
@@ -48,7 +48,7 @@ Status ZnsManifest::NewManifest(const Slice& record) {
   return s;
 }
 
-Status ZnsManifest::SetCurrent() {
+Status TropoManifest::SetCurrent() {
   assert(current > min_zone_head_ && current < max_zone_head_);
   Status s;
 
@@ -58,7 +58,7 @@ Status ZnsManifest::SetCurrent() {
     s = FromStatus(log_.ConsumeTail(deleted_range_begin_,
                                     deleted_range_begin_ + delete_blocks_));
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Manifest: Error consuming tail %lu %lu %lu\n",
+      TROPO_LOG_ERROR("ERROR: Manifest: Error consuming tail %lu %lu %lu\n",
                     log_.GetWriteTail(), deleted_range_begin_, delete_blocks_);
     }
     deleted_range_blocks_ -= delete_blocks_;
@@ -78,7 +78,7 @@ Status ZnsManifest::SetCurrent() {
   // Then commit/install on storage
   s = committer_.SafeCommit(Slice(current_name));
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Failed setting current\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Failed setting current\n");
     return s;
   }
 
@@ -88,11 +88,11 @@ Status ZnsManifest::SetCurrent() {
   return s;
 }
 
-Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
+Status TropoManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
                                     uint64_t* end_manifest,
                                     uint64_t* start_manifest_delete,
                                     uint64_t* end_manifest_delete,
-                                    ZnsCommitReader& reader) {
+                                    TropoCommitReader& reader) {
   Slice potential;
   committer_.GetCommitReader(0, slba, slba + 1, &reader);
   // Prevent reaeding invalid blocks
@@ -125,7 +125,7 @@ Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
   return Status::OK();
 }
 
-Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
+Status TropoManifest::TryGetCurrent(uint64_t* start_manifest,
                                   uint64_t* end_manifest,
                                   uint64_t* start_manifest_delete,
                                   uint64_t* end_manifest_delete) {
@@ -137,7 +137,7 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
   // It is possible that a previous manifest was written, but not yet installed.
   // Therefore move back from head till tail until it is found.
   bool found = false;
-  ZnsCommitReader reader;
+  TropoCommitReader reader;
   uint64_t slba = log_.GetWriteHead() == min_zone_head_
                       ? max_zone_head_ - 1
                       : log_.GetWriteHead() - 1;
@@ -157,33 +157,33 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
   return Status::OK();
 }
 
-Status ZnsManifest::Recover() {
+Status TropoManifest::Recover() {
   Status s = Status::OK();
   s = RecoverLog();
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Failed to recover\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Failed to recover\n");
     return s;
   }
   s = TryGetCurrent(&manifest_start_, &manifest_blocks_, &deleted_range_begin_,
                     &deleted_range_blocks_);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Failed to get current\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Failed to get current\n");
     return s;
   }
   return s;
 }
 
-Status ZnsManifest::Reset() {
+Status TropoManifest::Reset() {
   Status s = FromStatus(log_.ResetAll());
   deleted_range_begin_ = min_zone_head_;
   deleted_range_blocks_ = 0;
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Failed to reset\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Failed to reset\n");
   }
   return s;
 }
 
-Status ZnsManifest::ValidateManifestPointers() const {
+Status TropoManifest::ValidateManifestPointers() const {
   const uint64_t write_head_ = log_.GetWriteHead();
   const uint64_t zone_tail_ = log_.GetWriteTail();
   // Out of bounds
@@ -204,25 +204,25 @@ Status ZnsManifest::ValidateManifestPointers() const {
   return Status::OK();
 }
 
-Status ZnsManifest::ReadManifest(std::string* manifest) {
-  TROPODB_INFO("INFO: Recovery: Reading manifest\n");
+Status TropoManifest::ReadManifest(std::string* manifest) {
+  TROPO_LOG_INFO("INFO: Recovery: Reading manifest\n");
   Status s = ValidateManifestPointers();
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Invalid pointers\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Invalid pointers\n");
     return s;
   }
   if (manifest_blocks_ == 0) {
-    TROPODB_ERROR("ERROR: Manifest: No blocks?\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: No blocks?\n");
     return Status::IOError();
   }
 
   Slice record;
   // Read data from commits. If necessary wraparound from end to start.
-  ZnsCommitReader reader;
+  TropoCommitReader reader;
   s = committer_.GetCommitReader(0, manifest_start_,
                                  manifest_start_ + manifest_blocks_, &reader);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Manifest: Could not get a reader\n");
+    TROPO_LOG_ERROR("ERROR: Manifest: Could not get a reader\n");
     return s;
   }
   while (committer_.SeekCommitReader(reader, &record)) {

@@ -14,16 +14,16 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class LNZnsSSTable : public ZnsSSTable {
+class TropoLNSSTable : public TropoSSTable {
  public:
-  LNZnsSSTable(SZD::SZDChannelFactory* channel_factory_,
+  TropoLNSSTable(SZD::SZDChannelFactory* channel_factory_,
                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                const uint64_t max_zone_nr);
-  ~LNZnsSSTable();
+  ~TropoLNSSTable();
   bool EnoughSpaceAvailable(const Slice& slice) const override;
   uint64_t SpaceAvailable() const override;
-  SSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
-  SSTableBuilder* NewLNBuilder(SSZoneMetaData* meta);
+  TropoSSTableBuilder* NewBuilder(SSZoneMetaData* meta) override;
+  TropoSSTableBuilder* NewLNBuilder(SSZoneMetaData* meta);
   Iterator* NewIterator(const SSZoneMetaData& meta,
                         const Comparator* cmp) override;
   Status Get(const InternalKeyComparator& icmp, const Slice& key,
@@ -40,8 +40,8 @@ class LNZnsSSTable : public ZnsSSTable {
   uint64_t GetTail() const override { return 0; }
   uint64_t GetHead() const override { return 0; }
 
-  inline ZNSDiagnostics GetDiagnostics() const {
-    struct ZNSDiagnostics diag = {
+  inline TropoDiagnostics GetDiagnostics() const {
+    struct TropoDiagnostics diag = {
         .name_ = "LN",
         .bytes_written_ = log_.GetBytesWritten(),
         .append_operations_counter_ = log_.GetAppendOperationsCounter(),
@@ -60,7 +60,7 @@ class LNZnsSSTable : public ZnsSSTable {
   SZD::SZDFragmentedLog log_;
   port::Mutex mutex_;  // TODO: find a way to remove the mutex...
   port::CondVar cv_;
-  std::array<uint8_t, ZnsConfig::number_of_concurrent_LN_readers> read_queue_;
+  std::array<uint8_t, TropoDBConfig::number_of_concurrent_LN_readers> read_queue_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 

@@ -6,21 +6,21 @@
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsVersionSet::Builder::Builder(ZnsVersionSet* vset, ZnsVersion* base)
+TropoVersionSet::Builder::Builder(TropoVersionSet* vset, TropoVersion* base)
     : vset_(vset), base_(base) {
   // Unreffed in destructor
   base_->Ref();
   BySmallestKey cmp;
   cmp.internal_comparator = &vset_->icmp_;
   // Add an empty zone set for each level
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     levels_[level].added_ss = new ZoneSet(cmp);
   }
   ss_deleted_range_ = vset->current_->ss_deleted_range_;
 }
 
-ZnsVersionSet::Builder::~Builder() {
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+TropoVersionSet::Builder::~Builder() {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     const ZoneSet* added = levels_[level].added_ss;
     std::vector<SSZoneMetaData*> to_unref;
     to_unref.reserve(added->size());
@@ -41,7 +41,7 @@ ZnsVersionSet::Builder::~Builder() {
 }
 
 // Apply all of the edits in *edit to the current state.
-void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
+void TropoVersionSet::Builder::Apply(const TropoVersionEdit* edit) {
   // TODO: Update compaction pointers more cleanly
   for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
     const uint8_t level = edit->compact_pointers_[i].first;
@@ -86,10 +86,10 @@ void ZnsVersionSet::Builder::Apply(const ZnsVersionEdit* edit) {
 }
 
 // Save the current state in *v.
-void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
+void TropoVersionSet::Builder::SaveTo(TropoVersion* v) {
   BySmallestKey cmp;
   cmp.internal_comparator = &vset_->icmp_;
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     // Merge the set of added tables with the set of pre-existing tables.
     // Drop any deleted tables. Store the result in *v.
     const std::vector<SSZoneMetaData*>& base_sstables = base_->ss_[level];
@@ -121,7 +121,7 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
         const InternalKey& prev_end = v->ss_[level][i - 1]->largest;
         const InternalKey& this_begin = v->ss_[level][i]->smallest;
         if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
-          TROPODB_ERROR(
+          TROPO_LOG_ERROR(
               "ERROR: Incorrect SSTables: Overlapping ranges in same level %s "
               "vs. %s\n",
               prev_end.DebugString(true).c_str(),
@@ -144,7 +144,7 @@ void ZnsVersionSet::Builder::SaveTo(ZnsVersion* v) {
   v->ss_deleted_range_ = ss_deleted_range_;
 }
 
-void ZnsVersionSet::Builder::MaybeAddZone(ZnsVersion* v, const uint8_t level,
+void TropoVersionSet::Builder::MaybeAddZone(TropoVersion* v, const uint8_t level,
                                           SSZoneMetaData* m) {
   // Only add if the table is not deleted
   if (levels_[level].deleted_ss.count(m->number) > 0) {

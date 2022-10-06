@@ -20,7 +20,7 @@
 #include "util/crc32c.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
+TropoWAL::TropoWAL(SZD::SZDChannelFactory* channel_factory,
                const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                const uint64_t max_zone_nr, const uint8_t number_of_writers,
                SZD::SZDChannel** borrowed_write_channel)
@@ -35,7 +35,7 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
       committer_(&log_, info, false)
 #ifdef WAL_BUFFERED
       ,
-      buffered_(ZnsConfig::wal_allow_buffering),
+      buffered_(TropoDBConfig::wal_allow_buffering),
       buffsize_(info.zasl),
       buf_(0),
       pos_(0)
@@ -55,7 +55,7 @@ ZNSWAL::ZNSWAL(SZD::SZDChannelFactory* channel_factory,
 #endif
 }
 
-ZNSWAL::~ZNSWAL() {
+TropoWAL::~TropoWAL() {
   Sync();
   channel_factory_->Unref();
 #ifdef WAL_BUFFERED
@@ -66,7 +66,7 @@ ZNSWAL::~ZNSWAL() {
 }
 
 #ifdef WAL_BUFFERED
-Status ZNSWAL::BufferedAppend(const Slice& data) {
+Status TropoWAL::BufferedAppend(const Slice& data) {
   Status s = Status::OK();
   size_t sizeleft = buffsize_ - pos_;
   size_t sizeneeded = data.size();
@@ -94,7 +94,7 @@ Status ZNSWAL::BufferedAppend(const Slice& data) {
   return s;
 }
 
-Status ZNSWAL::DataSync() {
+Status TropoWAL::DataSync() {
   Status s = Status::OK();
   if (pos_ != 0) {
     s = DirectAppend(Slice(buf_, pos_));
@@ -104,7 +104,7 @@ Status ZNSWAL::DataSync() {
 }
 #endif
 
-Status ZNSWAL::DirectAppend(const Slice& data) {
+Status TropoWAL::DirectAppend(const Slice& data) {
   uint64_t before = clock_->NowMicros();
   Status s =
       FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
@@ -112,7 +112,7 @@ Status ZNSWAL::DirectAppend(const Slice& data) {
   return s;
 }
 
-Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
+Status TropoWAL::Append(const Slice& data, uint64_t seq) {
   uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
   size_t space_needed = SpaceNeeded(data);
@@ -149,7 +149,7 @@ Status ZNSWAL::Append(const Slice& data, uint64_t seq) {
   return s;
 }
 
-Status ZNSWAL::Sync() {
+Status TropoWAL::Sync() {
 #ifdef WAL_BUFFERED
   DataSync();
 #endif
@@ -157,11 +157,11 @@ Status ZNSWAL::Sync() {
 }
 
 #ifdef WAL_UNORDERED
-Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
-  TROPODB_INFO("INFO: WAL: Replaying\n");
+Status TropoWAL::ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq) {
+  TROPO_LOG_INFO("INFO: WAL: Replaying\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPODB_INFO("INFO: WAL: <EMPTY> Replayed\n");
+    TROPO_LOG_INFO("INFO: WAL: <EMPTY> Replayed\n");
     return s;
   }
   // Used for each batch
@@ -169,7 +169,7 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
   Slice record;
 
   // Iterate over all written entries
-  ZnsCommitReaderString reader;
+  TropoCommitReaderString reader;
   std::vector<std::pair<uint64_t, std::string*> > entries;
 
   std::string commit_string;
@@ -220,16 +220,16 @@ Status ZNSWAL::ReplayUnordered(ZNSMemTable* mem, SequenceNumber* seq) {
       *seq = last_seq;
     }
   }
-  TROPODB_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
+  TROPO_LOG_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
   return s;
 }
 
 #else
-Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
-  TROPODB_INFO("INFO: WAL: Replaying WAL\n");
+Status TropoWAL::ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq) {
+  TROPO_LOG_INFO("INFO: WAL: Replaying WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPODB_INFO("INFO: WAL: <EMPTY> Replayed\n");
+    TROPO_LOG_INFO("INFO: WAL: <EMPTY> Replayed\n");
     return s;
   }
   // Used for each batch
@@ -237,7 +237,7 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
   Slice record;
 
   // Iterate over all written entries
-  ZnsCommitReaderString reader;
+  TropoCommitReaderString reader;
   std::string commit_string;
   s = FromStatus(log_.ReadAll(commit_string));
   if (!s.ok()) {
@@ -270,12 +270,12 @@ Status ZNSWAL::ReplayOrdered(ZNSMemTable* mem, SequenceNumber* seq) {
     }
   }
   committer_.CloseCommitString(reader);
-  TROPODB_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
+  TROPO_LOG_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
   return s;
 }
 #endif
 
-Status ZNSWAL::Reset() {
+Status TropoWAL::Reset() {
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.ResetAll());
 #ifdef WAL_UNORDERED
@@ -285,14 +285,14 @@ Status ZNSWAL::Reset() {
   return s;
 }
 
-Status ZNSWAL::Recover() {
+Status TropoWAL::Recover() {
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.RecoverPointers());
   recovery_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
-Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
+Status TropoWAL::Replay(TropoMemtable* mem, SequenceNumber* seq) {
   Status s = Status::OK();
   // This check is also done in both replays, but ensures we do NOT measure it
   // for perf!!
@@ -309,7 +309,7 @@ Status ZNSWAL::Replay(ZNSMemTable* mem, SequenceNumber* seq) {
   return s;
 }
 
-Status ZNSWAL::Close() {
+Status TropoWAL::Close() {
   Status s = Sync();
   s = MarkInactive();
   return s;

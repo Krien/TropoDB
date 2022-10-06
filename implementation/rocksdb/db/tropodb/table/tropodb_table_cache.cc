@@ -32,18 +32,18 @@ static void DeleteEntry(const Slice& key, void* value) {
 //   cache->Release(h);
 // }
 
-ZnsTableCache::ZnsTableCache(const Options& options,
+TropoTableCache::TropoTableCache(const Options& options,
                              const InternalKeyComparator& icmp,
-                             const size_t entries, ZNSSSTableManager* ssmanager)
+                             const size_t entries, TropoSSTableManager* ssmanager)
     : icmp_(icmp), options_(options), ssmanager_(ssmanager) {
   LRUCacheOptions opts;
   opts.capacity = entries;
   cache_ = NewLRUCache(opts);
 }
 
-ZnsTableCache::~ZnsTableCache() { cache_.reset(); }
+TropoTableCache::~TropoTableCache() { cache_.reset(); }
 
-Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta,
+Status TropoTableCache::FindSSZone(const SSZoneMetaData& meta,
                                  const uint8_t level, Cache::Handle** handle) {
   Status s;
   char buf[sizeof(meta.number)];
@@ -60,10 +60,10 @@ Status ZnsTableCache::FindSSZone(const SSZoneMetaData& meta,
   return s;
 }
 
-Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
+Iterator* TropoTableCache::NewIterator(const ReadOptions& options,
                                      const SSZoneMetaData& meta,
                                      const uint8_t level,
-                                     ZnsSSTable** tableptr) {
+                                     TropoSSTable** tableptr) {
   if (tableptr != nullptr) {
     *tableptr = nullptr;
   }
@@ -71,7 +71,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: SSTable cache: Failed getting iterator\n");
+    TROPO_LOG_ERROR("ERROR: SSTable cache: Failed getting iterator\n");
     return NewErrorIterator(s);
   }
 
@@ -80,7 +80,7 @@ Iterator* ZnsTableCache::NewIterator(const ReadOptions& options,
   return it;
 }
 
-Status ZnsTableCache::Get(const ReadOptions& options,
+Status TropoTableCache::Get(const ReadOptions& options,
                           const SSZoneMetaData& meta, const uint8_t level,
                           const Slice& key, std::string* value,
                           EntryStatus* status) {
@@ -96,7 +96,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
       ParsedInternalKey parsed_key;
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
         *status = EntryStatus::notfound;
-        TROPODB_ERROR(
+        TROPO_LOG_ERROR(
             "ERROR: SSTable cache: corrupt key in table cache, for level %u and table %lu, str %s\n",
             level, meta.number, it->key().ToString().data());
       } else if (parsed_key.type == kTypeDeletion) {
@@ -115,7 +115,7 @@ Status ZnsTableCache::Get(const ReadOptions& options,
   return s;
 }
 
-void ZnsTableCache::Evict(const uint64_t ss_number) {
+void TropoTableCache::Evict(const uint64_t ss_number) {
   char buf[sizeof(ss_number)];
   EncodeFixed64(buf, ss_number);
   cache_->Erase(Slice(buf, sizeof(buf)));

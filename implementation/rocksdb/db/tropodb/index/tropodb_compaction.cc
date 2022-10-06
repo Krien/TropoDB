@@ -17,9 +17,9 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env)
+TropoCompaction::TropoCompaction(TropoVersionSet* vset, uint8_t first_level, Env* env)
     : first_level_(first_level),
-      max_lba_count_((ZnsConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
+      max_lba_count_((TropoDBConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
                      vset->lba_size_),
       vset_(vset),
       version_(nullptr),
@@ -27,18 +27,18 @@ ZnsCompaction::ZnsCompaction(ZnsVersionSet* vset, uint8_t first_level, Env* env)
       clock_(SystemClock::Default().get()),
       env_(env) {
   // Initialise array to 0s
-  for (size_t i = 0; i < ZnsConfig::level_count; i++) {
+  for (size_t i = 0; i < TropoDBConfig::level_count; i++) {
     level_ptrs_[i] = 0;
   }
 }
 
-ZnsCompaction::~ZnsCompaction() {
+TropoCompaction::~TropoCompaction() {
   if (version_ != nullptr) {
     version_->Unref();
   }
 }
 
-bool ZnsCompaction::HasOverlapWithOtherCompaction(
+bool TropoCompaction::HasOverlapWithOtherCompaction(
     std::vector<SSZoneMetaData*> metas) {
   for (const auto& target : metas) {
     for (const auto& c0 : targets_[0]) {
@@ -55,7 +55,7 @@ bool ZnsCompaction::HasOverlapWithOtherCompaction(
   return false;
 }
 
-void ZnsCompaction::GetCompactionTargets(std::vector<SSZoneMetaData*>* metas) {
+void TropoCompaction::GetCompactionTargets(std::vector<SSZoneMetaData*>* metas) {
   metas->clear();
   metas->insert(metas->end(), targets_[0].begin(), targets_[0].end());
   metas->insert(metas->end(), targets_[1].begin(), targets_[1].end());
@@ -69,12 +69,12 @@ static uint64_t LbasInSSTables(const std::vector<SSZoneMetaData*>& ss) {
 }
 
 static uint64_t MaxGrandParentOverlapBytes(uint64_t lba_size) {
-  return ZnsConfig::compaction_max_grandparents_overlapping_tables *
-         (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+  return TropoDBConfig::compaction_max_grandparents_overlapping_tables *
+         (((TropoDBConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
           lba_size);
 }
 
-bool ZnsCompaction::IsTrivialMove() const {
+bool TropoCompaction::IsTrivialMove() const {
   // A move is trivial if it requires no merging in the next level.
   // Unlesss, a move has many impacts on grandparents (level + 2), requiring
   // high costs later.
@@ -83,7 +83,7 @@ bool ZnsCompaction::IsTrivialMove() const {
              MaxGrandParentOverlapBytes(vset_->lba_size_);
 }
 
-Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
+Status TropoCompaction::DoTrivialMove(TropoVersionEdit* edit) {
   Status s = Status::OK();
   SSZoneMetaData* old_meta = targets_[0][0];
   SSZoneMetaData meta;
@@ -97,7 +97,7 @@ Status ZnsCompaction::DoTrivialMove(ZnsVersionEdit* edit) {
   return s;
 }
 
-void ZnsCompaction::MarkCompactedTablesAsDead(ZnsVersionEdit* edit) {
+void TropoCompaction::MarkCompactedTablesAsDead(TropoVersionEdit* edit) {
   for (int i = 0; i <= 1; i++) {
     std::vector<SSZoneMetaData*>::const_iterator base_iter =
         targets_[i].begin();
@@ -139,14 +139,14 @@ void ZnsCompaction::MarkCompactedTablesAsDead(ZnsVersionEdit* edit) {
   }
 }
 
-Iterator* ZnsCompaction::GetLNIterator(void* arg, const Slice& file_value,
+Iterator* TropoCompaction::GetLNIterator(void* arg, const Slice& file_value,
                                        const Comparator* cmp) {
-  ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
+  TropoSSTableManager* zns = reinterpret_cast<TropoSSTableManager*>(arg);
   Iterator* iterator = zns->GetLNIterator(file_value, cmp);
   return iterator;
 }
 
-Iterator* ZnsCompaction::MakeCompactionIterator() {
+Iterator* TropoCompaction::MakeCompactionIterator() {
   size_t iterators_needed = 0;
   // When first level = 0, we need an iterator for each target L0 SStable, else
   // only one LN.
@@ -179,7 +179,7 @@ Iterator* ZnsCompaction::MakeCompactionIterator() {
   return NewMergingIterator(&vset_->icmp_, iterators, iterators_needed);
 }
 
-void ZnsCompaction::DeferCompactionWrite(void* deferred_compaction) {
+void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
   DeferredLNCompaction* deferred =
       reinterpret_cast<DeferredLNCompaction*>(deferred_compaction);
   while (true) {
@@ -194,14 +194,14 @@ void ZnsCompaction::DeferCompactionWrite(void* deferred_compaction) {
     }
 
     // Set current task
-    SSTableBuilder* current_builder =
+    TropoSSTableBuilder* current_builder =
         deferred->deferred_builds_[deferred->index_];
     deferred->mutex_.Unlock();
 
     // Process task
     Status s = Status::OK();
     if (current_builder == nullptr) {
-      TROPODB_ERROR("ERROR: Deferred flush: current builder == nullptr");
+      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr");
       s = Status::Corruption();
     } else {
       s = current_builder->Flush();
@@ -211,7 +211,7 @@ void ZnsCompaction::DeferCompactionWrite(void* deferred_compaction) {
     // Add to (potential) version structure
     deferred->mutex_.Lock();
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: Deferred flush: error writing table\n");
+      TROPO_LOG_ERROR("ERROR: Deferred flush: error writing table\n");
     } else {
       deferred->edit_->AddSSDefinition(deferred->level_,
                                        *(current_builder->GetMeta()));
@@ -230,24 +230,24 @@ void ZnsCompaction::DeferCompactionWrite(void* deferred_compaction) {
   deferred->mutex_.Unlock();
 }
 
-Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
-                                   ZnsVersionEdit* edit, SSZoneMetaData* meta) {
+Status TropoCompaction::FlushSSTable(TropoSSTableBuilder** builder,
+                                   TropoVersionEdit* edit, SSZoneMetaData* meta) {
   Status s = Status::OK();
   // Setup flush task
-  SSTableBuilder* current_builder = *builder;
+  TropoSSTableBuilder* current_builder = *builder;
   meta->number = vset_->NewSSNumber();
   s = current_builder->Finalise();
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: Compaction: Error creating flush task\n");
+    TROPO_LOG_ERROR("ERROR: Compaction: Error creating flush task\n");
   }
 
   // Either defer or block current thread and do it now
-  if (ZnsConfig::compaction_allow_deferring_writes) {
+  if (TropoDBConfig::compaction_allow_deferring_writes) {
     // It is possible the deferred threads mailbox is full, be polite and wait.
     deferred_.mutex_.Lock();
     while (deferred_.deferred_builds_.size() > deferred_.index_ &&
            deferred_.deferred_builds_.size() - deferred_.index_ >
-               ZnsConfig::compaction_maximum_deferred_writes) {
+               TropoDBConfig::compaction_maximum_deferred_writes) {
       deferred_.new_task_.Wait();
     }
 
@@ -258,7 +258,7 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
     metas_.push_back(new SSZoneMetaData);
 
     // Create a new task to do in the main thread
-    current_builder = vset_->znssstable_->NewSSTableBuilder(
+    current_builder = vset_->znssstable_->NewTropoSSTableBuilder(
         first_level_ + 1, metas_[metas_.size() - 1]);
     *builder = current_builder;
     return s;
@@ -268,22 +268,22 @@ Status ZnsCompaction::FlushSSTable(SSTableBuilder** builder,
     if (s.ok()) {
       edit->AddSSDefinition(first_level_ + 1, *meta);
     } else {
-      TROPODB_ERROR("ERROR: Compaction: Error writing table\n");
+      TROPO_LOG_ERROR("ERROR: Compaction: Error writing table\n");
     }
 
     // Cleanup our work and create a new task.
     delete current_builder;
     current_builder =
-        vset_->znssstable_->NewSSTableBuilder(first_level_ + 1, meta);
+        vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1, meta);
     *builder = current_builder;
     return s;
   }
 }
 
-bool ZnsCompaction::IsBaseLevelForKey(const Slice& user_key) {
+bool TropoCompaction::IsBaseLevelForKey(const Slice& user_key) {
   // Look if the key has potential to live further in the tree.
   const Comparator* user_cmp = vset_->icmp_.user_comparator();
-  for (size_t lvl = first_level_ + 1; lvl < ZnsConfig::level_count; lvl++) {
+  for (size_t lvl = first_level_ + 1; lvl < TropoDBConfig::level_count; lvl++) {
     const std::vector<SSZoneMetaData*>& sstables = vset_->current_->ss_[lvl];
     while (level_ptrs_[lvl] < sstables.size()) {
       SSZoneMetaData* m = sstables[level_ptrs_[lvl]];
@@ -301,25 +301,25 @@ bool ZnsCompaction::IsBaseLevelForKey(const Slice& user_key) {
   return true;
 }
 
-Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
+Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
   Status s = Status::OK();
   SSZoneMetaData meta;
-  SSTableBuilder* builder;
+  TropoSSTableBuilder* builder;
 
   // Spawn deferred thread (if we have enabled it)
-  if (ZnsConfig::compaction_allow_deferring_writes) {
+  if (TropoDBConfig::compaction_allow_deferring_writes) {
     deferred_.edit_ = edit;
     deferred_.level_ = first_level_ + 1;
-    env_->Schedule(&ZnsCompaction::DeferCompactionWrite, &(this->deferred_),
+    env_->Schedule(&TropoCompaction::DeferCompactionWrite, &(this->deferred_),
                    rocksdb::Env::LOW);
     // Setup our joblist
     metas_.push_back(new SSZoneMetaData);
-    builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1,
+    builder = vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1,
                                                     metas_[metas_.size() - 1]);
   } else {
     // Setup our job(list). We can only process one at the same time without
     // deferred.
-    builder = vset_->znssstable_->NewSSTableBuilder(first_level_ + 1, &meta);
+    builder = vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1, &meta);
   }
 
   // Setup SSTable iterator
@@ -329,7 +329,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
     merger->SeekToFirst();
     if (!merger->Valid()) {
       delete merger;
-      TROPODB_ERROR("ERROR: Compaction: Merging iterator invalid\n");
+      TROPO_LOG_ERROR("ERROR: Compaction: Merging iterator invalid\n");
       return Status::Corruption("No valid merging iterator");
     }
   }
@@ -354,7 +354,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         current_user_key.clear();
         has_current_user_key = false;
         last_sequence_for_key = kMaxSequenceNumber;
-        TROPODB_ERROR("ERROR: Compaction: Invalid key found\n");
+        TROPO_LOG_ERROR("ERROR: Compaction: Invalid key found\n");
       } else {
         if (!has_current_user_key ||
             ucmp->Compare(ikey.user_key, Slice(current_user_key)) != 0) {
@@ -384,13 +384,13 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
                 vset_->lba_size_ >=
             max_size) {
           // Flush
-          if (ZnsConfig::compaction_allow_deferring_writes) {
+          if (TropoDBConfig::compaction_allow_deferring_writes) {
             s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
           } else {
             s = FlushSSTable(&builder, edit, &meta);
           }
           if (!s.ok()) {
-            TROPODB_ERROR("ERROR: Compaction: Could not flush\n");
+            TROPO_LOG_ERROR("ERROR: Compaction: Could not flush\n");
             break;
           }
         }
@@ -401,20 +401,20 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
 
     // Now write the last remaining SSTable to storage
     if (s.ok() && builder->GetSize() > 0) {
-      if (ZnsConfig::compaction_allow_deferring_writes) {
+      if (TropoDBConfig::compaction_allow_deferring_writes) {
         s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
       } else {
         s = FlushSSTable(&builder, edit, &meta);
       }
       if (!s.ok()) {
-        TROPODB_ERROR("ERROR: Compaction: Could not flush last SSTable\n");
+        TROPO_LOG_ERROR("ERROR: Compaction: Could not flush last SSTable\n");
       }
     }
   }
 
   // Shutdown deffered thread
   {
-    if (ZnsConfig::compaction_allow_deferring_writes) {
+    if (TropoDBConfig::compaction_allow_deferring_writes) {
       deferred_.mutex_.Lock();
       deferred_.last_ = true;
       deferred_.new_task_.SignalAll();
@@ -422,7 +422,7 @@ Status ZnsCompaction::DoCompaction(ZnsVersionEdit* edit) {
         deferred_.new_task_.Wait();
         deferred_.mutex_.Unlock();
       }
-      TROPODB_DEBUG("Deferred quiting \n");
+      TROPO_LOG_DEBUG("Deferred quiting \n");
       for (int i = metas_.size() - 1; i >= 0; i--) {
         delete metas_[i];
       }

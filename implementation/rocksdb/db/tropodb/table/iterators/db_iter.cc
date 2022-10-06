@@ -20,9 +20,9 @@ static void DumpInternalIter(Iterator* iter) {
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey k;
     if (!ParseInternalKey(iter->key(), &k)) {
-      TROPODB_ERROR("ERROR: db_iter: Corrupt '%s'\n", EscapeString(iter->key()).c_str());
+      TROPO_LOG_ERROR("ERROR: db_iter: Corrupt '%s'\n", EscapeString(iter->key()).c_str());
     } else {
-      TROPODB_ERROR("ERROR: db_iter: @ '%s'\n", k.DebugString().c_str());
+      TROPO_LOG_ERROR("ERROR: db_iter: @ '%s'\n", k.DebugString().c_str());
     }
   }
 }

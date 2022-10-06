@@ -24,7 +24,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 template <std::size_t N>
-ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
+TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
                                 const SZD::DeviceInfo& info,
                                 const uint64_t min_zone_nr,
                                 const uint64_t max_zone_nr)
@@ -42,13 +42,13 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
 
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
   // WalManager is the boss of the channels. Prevents stale channels.
-  write_channels_ = new SZD::SZDChannel*[ZnsConfig::wal_concurrency];
+  write_channels_ = new SZD::SZDChannel*[TropoDBConfig::wal_concurrency];
   channel_factory_->Ref();
-  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; ++i) {
     channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
-                                       max_zone_nr, ZnsConfig::wal_preserve_dma,
+                                       max_zone_nr, TropoDBConfig::wal_preserve_dma,
 #ifdef WAL_UNORDERED
-                                       ZnsConfig::wal_iodepth
+                                       TropoDBConfig::wal_iodepth
 #else
                                        1
 #endif
@@ -56,12 +56,12 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
   }
 #endif
   for (size_t i = 0; i < N; ++i) {
-    ZNSWAL* newwal =
-        new ZNSWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
+    TropoWAL* newwal =
+        new TropoWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
-                   ZnsConfig::wal_concurrency, write_channels_
+                   TropoDBConfig::wal_concurrency, write_channels_
 #else
-                   ZnsConfig::wal_concurrency / N, nullptr
+                   TropoDBConfig::wal_concurrency / N, nullptr
 #endif
         );
     newwal->Ref();
@@ -71,7 +71,7 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
 }
 
 template <std::size_t N>
-ZnsWALManager<N>::~ZnsWALManager() {
+TropoWALManager<N>::~TropoWALManager() {
   for (auto i = wals_.begin(); i != wals_.end(); ++i) {
     if ((*i) != nullptr) {
       (*i)->Sync();
@@ -79,7 +79,7 @@ ZnsWALManager<N>::~ZnsWALManager() {
     }
   }
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
-  for (size_t i = 0; i < ZnsConfig::wal_concurrency; ++i) {
+  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; ++i) {
     channel_factory_->unregister_channel(write_channels_[i]);
   }
   channel_factory_->Unref();
@@ -87,7 +87,7 @@ ZnsWALManager<N>::~ZnsWALManager() {
 }
 
 template <std::size_t N>
-bool ZnsWALManager<N>::WALAvailable() {
+bool TropoWALManager<N>::WALAvailable() {
   // not allowed to happen
   if (wal_head_ == wal_tail_) {
     assert(false);
@@ -101,7 +101,7 @@ bool ZnsWALManager<N>::WALAvailable() {
 }
 
 template <std::size_t N>
-Status ZnsWALManager<N>::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
+Status TropoWALManager<N>::NewWAL(port::Mutex* mutex_, TropoWAL** wal) {
   mutex_->AssertHeld();
   if (!WALAvailable()) {
     return Status::Busy();
@@ -112,7 +112,7 @@ Status ZnsWALManager<N>::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
   current_wal_ = wals_[wal_head_];
   if (!current_wal_->Empty()) {
     assert(false);
-    TROPODB_ERROR("ERROR: WAL: New WAL is not empty\n");
+    TROPO_LOG_ERROR("ERROR: WAL: New WAL is not empty\n");
   }
   wal_head_++;
   if (wal_head_ == N) {
@@ -123,7 +123,7 @@ Status ZnsWALManager<N>::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
 }
 
 template <std::size_t N>
-ZNSWAL* ZnsWALManager<N>::GetCurrentWAL(port::Mutex* mutex_) {
+TropoWAL* TropoWALManager<N>::GetCurrentWAL(port::Mutex* mutex_) {
   mutex_->AssertHeld();
   if (current_wal_ != nullptr) {
     return current_wal_;
@@ -139,7 +139,7 @@ ZNSWAL* ZnsWALManager<N>::GetCurrentWAL(port::Mutex* mutex_) {
 }
 
 template <std::size_t N>
-Status ZnsWALManager<N>::ResetOldWALs(port::Mutex* mutex_) {
+Status TropoWALManager<N>::ResetOldWALs(port::Mutex* mutex_) {
   mutex_->AssertHeld();
   if (wal_tail_ > wal_head_) {
     while ((wal_tail_ < N && wal_head_ > 0) || (wal_tail_ < N - 1)) {
@@ -165,7 +165,7 @@ Status ZnsWALManager<N>::ResetOldWALs(port::Mutex* mutex_) {
 }
 
 template <std::size_t N>
-Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
+Status TropoWALManager<N>::Recover(TropoMemtable* mem, SequenceNumber* seq) {
   Status s = Status::OK();
   // Recover WAL pointers
   for (auto i = wals_.begin(); i != wals_.end(); i++) {
@@ -216,17 +216,17 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
 }
 
 template <std::size_t N>
-std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
-  std::vector<ZNSDiagnostics> diags;
+std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
+  std::vector<TropoDiagnostics> diags;
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
-  ZNSDiagnostics diag;
+  TropoDiagnostics diag;
   diag.name_ = "WALS";
   diag.append_operations_counter_ = 0;
   diag.bytes_written_ = 0;
   diag.bytes_read_ = 0;
   diag.read_operations_counter_ = 0;
   diag.zones_erased_counter_ = 0;
-  for (size_t i = 0; i < ZnsConfig::wal_concurrency; i++) {
+  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; i++) {
     diag.append_operations_counter_ +=
         write_channels_[i]->GetAppendOperationsCounter();
     diag.bytes_written_ += write_channels_[i]->GetBytesWritten();
@@ -243,7 +243,7 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
   }
 
   for (size_t i = 0; i < N; i++) {
-    ZNSDiagnostics waldiag = wals_[i]->GetDiagnostics();
+    TropoDiagnostics waldiag = wals_[i]->GetDiagnostics();
     diag.bytes_read_ += waldiag.bytes_read_;
     diag.read_operations_counter_ += waldiag.read_operations_counter_;
     diag.zones_erased_counter_ += waldiag.zones_erased_counter_;
@@ -259,7 +259,7 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
   diags.push_back(diag);
 #else
   for (size_t i = 0; i < N; i++) {
-    ZNSDiagnostics diag = wals_[i]->GetDiagnostics();
+    TropoDiagnostics diag = wals_[i]->GetDiagnostics();
     diag.name_ = "WAL" + std::to_string(i);
     diags.push_back(diag);
   }
@@ -268,7 +268,7 @@ std::vector<ZNSDiagnostics> ZnsWALManager<N>::IODiagnostics() {
 }
 
 template <std::size_t N>
-std::vector<std::pair<std::string, const TimingCounter>> ZnsWALManager<N>::GetAdditionalWALStatistics() {
+std::vector<std::pair<std::string, const TimingCounter>> TropoWALManager<N>::GetAdditionalWALStatistics() {
   TimingCounter storage_append_perf_counter;
   TimingCounter total_append_perf_counter;
   TimingCounter replay_perf_counter;

@@ -11,13 +11,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
+TropoL0SSTable::TropoL0SSTable(SZD::SZDChannelFactory* channel_factory,
                            const SZD::DeviceInfo& info,
                            const uint64_t min_zone_nr,
                            const uint64_t max_zone_nr)
-    : ZnsSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
+    : TropoSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-           ZnsConfig::number_of_concurrent_L0_readers),
+           TropoDBConfig::number_of_concurrent_L0_readers),
 #ifdef USE_COMMITTER
       committer_(&log_, info, true),
 #endif
@@ -26,20 +26,20 @@ L0ZnsSSTable::L0ZnsSSTable(SZD::SZDChannelFactory* channel_factory,
       zone_size_(info.zone_size),
       cv_(&mutex_) {
   // unset
-  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
+  for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
     read_queue_[i] = 0;
   }
 }
 
-L0ZnsSSTable::~L0ZnsSSTable() = default;
+TropoL0SSTable::~TropoL0SSTable() = default;
 
-Status L0ZnsSSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
+Status TropoL0SSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
 
-SSTableBuilder* L0ZnsSSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new SSTableBuilder(this, meta, ZnsConfig::use_sstable_encoding);
+TropoSSTableBuilder* TropoL0SSTable::NewBuilder(SSZoneMetaData* meta) {
+  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_sstable_encoding);
 }
 
-bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
+bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
 #ifdef USE_COMMITTER
   return committer_.SpaceEnough(slice);
 #else
@@ -47,12 +47,12 @@ bool L0ZnsSSTable::EnoughSpaceAvailable(const Slice& slice) const {
 #endif
 }
 
-uint64_t L0ZnsSSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
+uint64_t TropoL0SSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
 
-Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status TropoL0SSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    TROPODB_ERROR("ERROR: L0 SSTable: Out of space\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: Out of space\n");
     return Status::IOError("Not enough space available for L0");
   }
 #ifdef USE_COMMITTER
@@ -67,17 +67,17 @@ Status L0ZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
 #endif
 }
 
-Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
+Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
                                    std::vector<SSZoneMetaData>& metas,
                                    uint8_t parallel_number) {
   Status s = Status::OK();
   SSZoneMetaData meta;
   meta.L0.log_number = parallel_number;
-  SSTableBuilder* builder = NewBuilder(&meta);
+  TropoSSTableBuilder* builder = NewBuilder(&meta);
   InternalIterator* iter = mem->NewIterator();
   iter->SeekToFirst();
   if (!iter->Valid()) {
-    TROPODB_ERROR("ERROR: L0 SSTable: No valid iterator\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: No valid iterator\n");
     return Status::Corruption("No valid iterator in the memtable");
   }
   for (; iter->Valid(); iter->Next()) {
@@ -88,11 +88,11 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
     if ((builder->GetSize() + builder->EstimateSizeImpact(key, value) +
          lba_size_ - 1) /
             lba_size_ >=
-        (ZnsConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
+        (TropoDBConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
       builder->Finalise();
       s = builder->Flush();
       if (!s.ok()) {
-        TROPODB_ERROR("ERROR: L0 SSTable: Error flushing table\n");
+        TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
         break;
       }
       metas.push_back(meta);
@@ -111,18 +111,18 @@ Status L0ZnsSSTable::FlushMemTable(ZNSMemTable* mem,
 
 // TODO: this is better than locking around the entire read, but we have to
 // investigate the performance.
-uint8_t L0ZnsSSTable::request_read_queue() {
-  uint8_t picked_reader = ZnsConfig::number_of_concurrent_L0_readers;
+uint8_t TropoL0SSTable::request_read_queue() {
+  uint8_t picked_reader = TropoDBConfig::number_of_concurrent_L0_readers;
   mutex_.Lock();
-  for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
+  for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
     if (read_queue_[i] == 0) {
       picked_reader = i;
       break;
     }
   }
-  while (picked_reader >= ZnsConfig::number_of_concurrent_L0_readers) {
+  while (picked_reader >= TropoDBConfig::number_of_concurrent_L0_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < ZnsConfig::number_of_concurrent_L0_readers; i++) {
+    for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -134,27 +134,27 @@ uint8_t L0ZnsSSTable::request_read_queue() {
   return picked_reader;
 }
 
-void L0ZnsSSTable::release_read_queue(uint8_t reader) {
+void TropoL0SSTable::release_read_queue(uint8_t reader) {
   mutex_.Lock();
-  assert(reader < ZnsConfig::number_of_concurrent_L0_readers &&
+  assert(reader < TropoDBConfig::number_of_concurrent_L0_readers &&
          read_queue_[reader] != 0);
   read_queue_[reader] = 0;
   cv_.SignalAll();
   mutex_.Unlock();
 }
 
-Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
+Status TropoL0SSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   Status s = Status::OK();
   if (meta.L0.lba > max_zone_head_ || meta.L0.lba < min_zone_head_ ||
       meta.lba_count > max_zone_head_ - min_zone_head_) {
-    TROPODB_ERROR("ERROR: L0 SSTable: Invalid metadata\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: Invalid metadata\n");
     return Status::Corruption("Invalid metadata");
   }
   sstable->clear();
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
 #ifdef USE_COMMITTER
-  ZnsCommitReader reader;
+  TropoCommitReader reader;
   Slice record;
   std::string* raw_data = new std::string();
   bool succeeded_once = false;
@@ -163,7 +163,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 
   if (!s.ok()) {
     release_read_queue(readernr);
-    TROPODB_ERROR("ERROR: L0 SSTable: Can not get reader\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: Can not get reader\n");
     return s;
   }
   while (committer_.SeekCommitReader(reader, &record)) {
@@ -191,7 +191,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   release_read_queue(readernr);
   *sstable = Slice(data, meta.lba_count * lba_size_);
   if (!s.ok()) {
-    TROPODB_ERROR(
+    TROPO_LOG_ERROR(
         "ERROR: L0 SSTable: failed reading L0 table %lu at location %lu %lu\n",
         meta.number, meta.L0.lba, meta.lba_count);
     exit(-1);
@@ -200,7 +200,7 @@ Status L0ZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
 #endif
 }
 
-Status L0ZnsSSTable::TryInvalidateSSZones(
+Status TropoL0SSTable::TryInvalidateSSZones(
     const std::vector<SSZoneMetaData*>& metas,
     std::vector<SSZoneMetaData*>& remaining_metas) {
   if (metas.size() == 0) {
@@ -229,7 +229,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     SSZoneMetaData* m = metas[i];
     // Get adjacents
     if (prev->number == m->number) {
-      TROPODB_ERROR(
+      TROPO_LOG_ERROR(
           "ERROR: L0 SSTable: Reset two SSTables with same numbers\n");
       return Status::Corruption("SSTables with same number detected");
       continue;
@@ -259,7 +259,7 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
     s = FromStatus(log_.ConsumeTail(log_.GetWriteTail(),
                                     log_.GetWriteTail() + blocks_to_delete));
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: L0 SSTable: Failed resetting tail\n");
+      TROPO_LOG_ERROR("ERROR: L0 SSTable: Failed resetting tail\n");
     }
   }
   i = upto;
@@ -271,49 +271,49 @@ Status L0ZnsSSTable::TryInvalidateSSZones(
   return s;
 }
 
-Status L0ZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
+Status TropoL0SSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
   return FromStatus(
       log_.ConsumeTail(meta.L0.lba, meta.L0.lba + meta.lba_count));
 }
 
-Iterator* L0ZnsSSTable::NewIterator(const SSZoneMetaData& meta,
+Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
                                     const Comparator* cmp) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: L0 SSTable: Failed reading L0\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: Failed reading L0\n");
     return nullptr;
   }
   char* data = (char*)sstable.data();
-  if (ZnsConfig::use_sstable_encoding) {
+  if (TropoDBConfig::use_sstable_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      TROPODB_ERROR("ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n",
+      TROPO_LOG_ERROR("ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n",
                     size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
     uint64_t count = DecodeFixed32(data);
     return new SSTableIterator(data, sstable.size(), (size_t)count,
-                               &ZNSEncoding::ParseNextNonEncoded, cmp);
+                               &TropoEncoding::ParseNextNonEncoded, cmp);
   }
 }
 
-Status L0ZnsSSTable::Get(const InternalKeyComparator& icmp,
+Status TropoL0SSTable::Get(const InternalKeyComparator& icmp,
                          const Slice& key_ptr, std::string* value_ptr,
                          const SSZoneMetaData& meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
-    TROPODB_ERROR("ERROR: L0 SSTable: Corrupt iterator\n");
+    TROPO_LOG_ERROR("ERROR: L0 SSTable: Corrupt iterator\n");
     return Status::Corruption();
   }
   it->Seek(key_ptr);
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      TROPODB_ERROR("ERROR: L0 SSTable: Corrupt key found\n");
+      TROPO_LOG_ERROR("ERROR: L0 SSTable: Corrupt key found\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;

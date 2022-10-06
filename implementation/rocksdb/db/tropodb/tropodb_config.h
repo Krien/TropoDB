@@ -26,8 +26,8 @@ namespace ROCKSDB_NAMESPACE {
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
-namespace ZnsConfig {
-constexpr static TropoDBLogLevel default_log_level = TropoDBLogLevel::TROPO_INFO_LEVEL;
+namespace TropoDBConfig {
+constexpr static TropoLogLevel default_log_level = TropoLogLevel::TROPO_INFO_LEVEL;
 // WAL options
 constexpr static uint8_t level_count =
     6; /**< Amount of LSM-tree levels L0 up to LN */
@@ -168,7 +168,7 @@ static_assert(max_lbas_compaction_l0 > 0);
 static_assert(max_channels > 0);
 static_assert(!use_sstable_encoding || max_sstable_encoding > 0);
 
-}  // namespace ZnsConfig
+}  // namespace TropoDBConfig
 }  // namespace ROCKSDB_NAMESPACE
 #endif
 #endif

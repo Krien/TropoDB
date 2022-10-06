@@ -16,34 +16,34 @@
 
 namespace ROCKSDB_NAMESPACE {
 template <std::size_t N>
-class ZnsWALManager : public RefCounter {
+class TropoWALManager : public RefCounter {
  public:
-  ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
+  TropoWALManager(SZD::SZDChannelFactory* channel_factory,
                 const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
                 const uint64_t max_zone_nr);
   // No copying or implicits
-  ZnsWALManager(const ZnsWALManager&) = delete;
-  ZnsWALManager& operator=(const ZnsWALManager&) = delete;
-  ~ZnsWALManager();
+  TropoWALManager(const TropoWALManager&) = delete;
+  TropoWALManager& operator=(const TropoWALManager&) = delete;
+  ~TropoWALManager();
 
   bool WALAvailable();
-  ZNSWAL* GetCurrentWAL(port::Mutex* mutex_);
-  Status NewWAL(port::Mutex* mutex_, ZNSWAL** wal);
+  TropoWAL* GetCurrentWAL(port::Mutex* mutex_);
+  Status NewWAL(port::Mutex* mutex_, TropoWAL** wal);
   Status ResetOldWALs(port::Mutex* mutex_);
-  Status Recover(ZNSMemTable* mem, SequenceNumber* seq);
+  Status Recover(TropoMemtable* mem, SequenceNumber* seq);
 
-  std::vector<ZNSDiagnostics> IODiagnostics();
+  std::vector<TropoDiagnostics> IODiagnostics();
   std::vector<std::pair<std::string, const TimingCounter>> GetAdditionalWALStatistics();
 
  private:
-  std::array<ZNSWAL*, N> wals_;
+  std::array<TropoWAL*, N> wals_;
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel** write_channels_;
 #endif
   size_t wal_head_;
   size_t wal_tail_;
-  ZNSWAL* current_wal_;
+  TropoWAL* current_wal_;
 };
 }  // namespace ROCKSDB_NAMESPACE
 #include "db/tropodb/persistence/tropodb_wal_manager.ipp"

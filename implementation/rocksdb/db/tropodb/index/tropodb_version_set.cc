@@ -16,10 +16,10 @@
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
-                             ZNSSSTableManager* znssstable,
-                             ZnsManifest* manifest, const uint64_t lba_size,
-                             uint64_t zone_cap, ZnsTableCache* table_cache,
+TropoVersionSet::TropoVersionSet(const InternalKeyComparator& icmp,
+                             TropoSSTableManager* znssstable,
+                             TropoManifest* manifest, const uint64_t lba_size,
+                             uint64_t zone_cap, TropoTableCache* table_cache,
                              Env* env)
     : dummy_versions_(this),
       current_(nullptr),
@@ -32,15 +32,15 @@ ZnsVersionSet::ZnsVersionSet(const InternalKeyComparator& icmp,
       logged_(false),
       table_cache_(table_cache),
       env_(env) {
-  AppendVersion(new ZnsVersion(this));
+  AppendVersion(new TropoVersion(this));
 };
 
-ZnsVersionSet::~ZnsVersionSet() {
+TropoVersionSet::~TropoVersionSet() {
   current_->Unref();
   assert(dummy_versions_.next_ == &dummy_versions_);
 }
 
-void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
+void TropoVersionSet::AppendVersion(TropoVersion* v) {
   assert(v->Getref() == 0);
   assert(v != current_);
   if (current_ != nullptr) {
@@ -58,12 +58,12 @@ void ZnsVersionSet::AppendVersion(ZnsVersion* v) {
   static uint64_t debug_number = 0;
   debug_number++;
   v->debug_nr_ = debug_number;
-  TROPODB_DEBUG("DEBUG: added version %lu \n", debug_number);
+  TROPO_LOG_DEBUG("DEBUG: added version %lu \n", debug_number);
 }
 
-void ZnsVersionSet::GetLiveZones(const uint8_t level,
+void TropoVersionSet::GetLiveZones(const uint8_t level,
                                  std::set<uint64_t>& live) {
-  for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
+  for (TropoVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
     v->Ref();
     const std::vector<SSZoneMetaData*>& metas = v->ss_[level];
@@ -75,11 +75,11 @@ void ZnsVersionSet::GetLiveZones(const uint8_t level,
 }
 
 // TODO: Do we still use this?
-void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
+void TropoVersionSet::GetSaveDeleteRange(const uint8_t level,
                                        std::pair<uint64_t, uint64_t>* range) {
   *range = std::make_pair<uint64_t, uint64_t>(0, 0);
   bool first = true;
-  for (ZnsVersion* v = dummy_versions_.next_; v != &dummy_versions_;
+  for (TropoVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
     // There can be a couple of cases:
     //  1. The version does not have a deleted range (0,0). skip
@@ -100,10 +100,10 @@ void ZnsVersionSet::GetSaveDeleteRange(const uint8_t level,
   }
 }
 
-Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
+Status TropoVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
                                              port::CondVar* cond) {
   Status s = Status::OK();
-  ZnsVersionEdit edit;
+  TropoVersionEdit edit;
 
   // Reclaim L0
   // Get all of the files that can be deleted as no reader uses it.
@@ -120,7 +120,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     }
   }
   // Sort on circular log order
-  TROPODB_DEBUG("DEBUG: Reclaim SSTablesL0: Safe to delete %lu \n", tmp.size());
+  TROPO_LOG_DEBUG("DEBUG: Reclaim SSTablesL0: Safe to delete %lu \n", tmp.size());
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
@@ -135,7 +135,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     current_->ss_d_[0] = new_deleted_ss_l0;
 
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: SSTable L0 reclaiming: Failed reclaiming L0\n");
+      TROPO_LOG_ERROR("ERROR: SSTable L0 reclaiming: Failed reclaiming L0\n");
       return s;
     }
   }
@@ -143,11 +143,11 @@ Status ZnsVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
   return s;
 }
 
-Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
+Status TropoVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
                                              port::CondVar* cond) {
   Status s = Status::OK();
-  ZnsVersionEdit edit;
-  for (uint8_t i = 1; i < ZnsConfig::level_count; i++) {
+  TropoVersionEdit edit;
+  for (uint8_t i = 1; i < TropoDBConfig::level_count; i++) {
     std::set<uint64_t> live_zones;
     std::vector<SSZoneMetaData*> new_deleted;
     std::vector<SSZoneMetaData*> to_delete;
@@ -166,7 +166,7 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
     for (auto del : to_delete) {
       s = znssstable_->DeleteLNTable(i, *del);
       if (!s.ok()) {
-        TROPODB_ERROR("ERROR: SSTable LN reclaimng: Failed reclaiming LN\n");
+        TROPO_LOG_ERROR("ERROR: SSTable LN reclaimng: Failed reclaiming LN\n");
         return s;
       }
     }
@@ -177,12 +177,12 @@ Status ZnsVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
   return s;
 }
 
-Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
-                                    ZnsVersion* version) {
-  ZnsVersionEdit edit;
+Status TropoVersionSet::WriteSnapshot(std::string* snapshot_dst,
+                                    TropoVersion* version) {
+  TropoVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stuff
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     const std::vector<SSZoneMetaData*>& ss = version->ss_[level];
     for (size_t i = 0; i < ss.size(); i++) {
       const SSZoneMetaData& m = *ss[i];
@@ -196,7 +196,7 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   // Deleted range
   edit.AddDeletedRange(version->ss_deleted_range_);
   // Deleted zones
-  for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
+  for (uint8_t level = 0; level < TropoDBConfig::level_count; level++) {
     for (auto del : version->ss_d_[level]) {
       edit.AddDeletedSSTable(level, *del);
     }
@@ -211,13 +211,13 @@ Status ZnsVersionSet::WriteSnapshot(std::string* snapshot_dst,
   return Status::OK();
 }
 
-Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
+Status TropoVersionSet::LogAndApply(TropoVersionEdit* edit) {
   Status s = Status::OK();
   // TODO: sanity checking...
   edit->SetLastSequence(last_sequence_);
 
   // TODO: improve... this is horrendous
-  ZnsVersion* v = new ZnsVersion(this);
+  TropoVersion* v = new TropoVersion(this);
   {
     Builder builder(this, current_);
     builder.Apply(edit);
@@ -232,20 +232,20 @@ Status ZnsVersionSet::LogAndApply(ZnsVersionEdit* edit) {
   return s;
 }
 
-void ZnsVersionSet::RecalculateScore() {
-  ZnsVersion* v = current_;
-  uint8_t best_level = ZnsConfig::level_count + 1;
+void TropoVersionSet::RecalculateScore() {
+  TropoVersion* v = current_;
+  uint8_t best_level = TropoDBConfig::level_count + 1;
   double best_score = -1;
   double score = 0;
   // TODO: This is probably a design flaw. This is uninformed and might cause
   // all sorts of holes and early compactions.
-  for (size_t i = 1; i < ZnsConfig::level_count - 1; i++) {
+  for (size_t i = 1; i < TropoDBConfig::level_count - 1; i++) {
     if (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) >
-        ZnsConfig::ss_compact_treshold[i]) {
+        TropoDBConfig::ss_compact_treshold[i]) {
       score =
           (static_cast<double>(znssstable_->GetBytesInLevel(current_->ss_[i])) /
-           ZnsConfig::ss_compact_treshold[i]) *
-          ZnsConfig::ss_compact_modifier[i];
+           TropoDBConfig::ss_compact_treshold[i]) *
+          TropoDBConfig::ss_compact_modifier[i];
     } else {
       score = 0;
     }
@@ -258,17 +258,17 @@ void ZnsVersionSet::RecalculateScore() {
   v->compaction_score_ = best_score;
 }
 
-Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
+Status TropoVersionSet::CommitVersion(TropoVersion* v, TropoSSTableManager* man) {
   Status s;
   // Setup version (for now CoW)
   std::string version_body;
   s = WriteSnapshot(&version_body, v);
   std::string version_data;
-  PutVarint32(&version_data, static_cast<uint32_t>(ZnsCommitTag::kEdit));
+  PutVarint32(&version_data, static_cast<uint32_t>(TropoCommitTag::kEdit));
   PutLengthPrefixedSlice(&version_data, version_body);
   // Padding
   std::string closer;
-  PutVarint32(&closer, static_cast<uint32_t>(ZnsCommitTag::kClosing));
+  PutVarint32(&closer, static_cast<uint32_t>(TropoCommitTag::kClosing));
   // Write
   Slice result = version_data.append(closer);
   uint64_t current_lba;
@@ -276,7 +276,7 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
   if (s.ok()) {
     s = manifest_->SetCurrent();
   } else {
-    TROPODB_ERROR("ERROR: Version set commit: Failed setting manifest\n");
+    TROPO_LOG_ERROR("ERROR: Version set commit: Failed setting manifest\n");
   }
   return s;
 }
@@ -284,7 +284,7 @@ Status ZnsVersionSet::CommitVersion(ZnsVersion* v, ZNSSSTableManager* man) {
 // Stores the minimal range that covers all entries in inputs in
 // *smallest, *largest.
 // REQUIRES: inputs is not empty
-void ZnsVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
+void TropoVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
                              InternalKey* smallest, InternalKey* largest) {
   assert(!inputs.empty());
   smallest->Clear();
@@ -305,7 +305,7 @@ void ZnsVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
   }
 }
 
-void ZnsVersionSet::GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
+void TropoVersionSet::GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
                               const std::vector<SSZoneMetaData*>& inputs2,
                               InternalKey* smallest, InternalKey* largest) {
   std::vector<SSZoneMetaData*> all = inputs1;
@@ -389,11 +389,11 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 // }
 
 // static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
-//   return 25 * (((ZnsConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+//   return 25 * (((TropoDBConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
 //                lba_size);
 // }
 
-void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
+void TropoVersionSet::SetupOtherInputs(TropoCompaction* c, uint64_t max_lba_c) {
   const uint8_t level = c->first_level_;
   InternalKey smallest, largest;
 
@@ -441,7 +441,7 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   //   }
   // }
 
-  if (level + 2 < ZnsConfig::level_count) {
+  if (level + 2 < TropoDBConfig::level_count) {
     current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
                                    &c->grandparents_);
   }
@@ -450,27 +450,27 @@ void ZnsVersionSet::SetupOtherInputs(ZnsCompaction* c, uint64_t max_lba_c) {
   c->edit_.SetCompactPointer(level, largest);
 }
 
-bool ZnsVersionSet::OnlyNeedDeletes(uint8_t level) {
+bool TropoVersionSet::OnlyNeedDeletes(uint8_t level) {
   bool only_need = current_->ss_[level].size() == 0 ||
                    (level > 0 && znssstable_->GetFractionFilled(level) > 0.85);
   if (only_need) {
-    TROPODB_DEBUG("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
+    TROPO_LOG_DEBUG("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
                   current_->ss_d_[level].size());
   }
   return only_need;
 }
 
-ZnsCompaction* ZnsVersionSet::PickCompaction(
+TropoCompaction* TropoVersionSet::PickCompaction(
     uint8_t level, const std::vector<SSZoneMetaData*>& busy) {
-  ZnsCompaction* c;
+  TropoCompaction* c;
 
-  c = new ZnsCompaction(this, level, env_);
+  c = new TropoCompaction(this, level, env_);
   c->busy_ = false;
 
   // We must make sure that the compaction will not be too big!
   uint64_t max_lba_c = znssstable_->SpaceRemainingLN();
-  max_lba_c = max_lba_c > ZnsConfig::max_lbas_compaction_l0
-                  ? ZnsConfig::max_lbas_compaction_l0
+  max_lba_c = max_lba_c > TropoDBConfig::max_lbas_compaction_l0
+                  ? TropoDBConfig::max_lbas_compaction_l0
                   : max_lba_c;
 
   // Always pick the tail on L0
@@ -478,7 +478,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   if (level == 0) {
     size_t l0_log_prio = 0;
     uint64_t space_rem = znssstable_->SpaceRemainingL0(l0_log_prio);
-    for (size_t i = 1; i < ZnsConfig::lower_concurrency; i++) {
+    for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
       if (znssstable_->SpaceRemainingL0(i) < space_rem) {
         l0_log_prio = i;
         space_rem = znssstable_->SpaceRemainingL0(i);
@@ -508,7 +508,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
       }
     }
     if (!number_picked) {
-      TROPODB_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
+      TROPO_LOG_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
       return c;
     } else {
       c->targets_[0].push_back(current_->ss_[level][index]);
@@ -567,7 +567,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
         max_lba_c -= current_->ss_[level][0]->lba_count;
       } else {
         // This should not happen
-        TROPODB_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
+        TROPO_LOG_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
         return c;
       }
     }
@@ -606,7 +606,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   }
 
   SetupOtherInputs(c, max_lba_c);
-  TROPODB_INFO(
+  TROPO_LOG_INFO(
       "INFO: Pick Compaction: from %u, with size %lu/%lu(%lud) %lu/%lu(%lud \n",
       level, c->targets_[0].size(), current_->ss_[level].size(),
       current_->ss_d_[level].size(), c->targets_[1].size(),
@@ -614,7 +614,7 @@ ZnsCompaction* ZnsVersionSet::PickCompaction(
   return c;
 }
 
-Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
+Status TropoVersionSet::RemoveObsoleteZones(TropoVersionEdit* edit) {
   Status s = Status::OK();
   for (const auto& deleted : edit->deleted_ss_) {
     table_cache_->Evict(deleted.second);
@@ -622,54 +622,54 @@ Status ZnsVersionSet::RemoveObsoleteZones(ZnsVersionEdit* edit) {
   return s;
 }
 
-Status ZnsVersionSet::DecodeFrom(const Slice& src, ZnsVersionEdit* edit) {
+Status TropoVersionSet::DecodeFrom(const Slice& src, TropoVersionEdit* edit) {
   Status s = Status::OK();
   Slice input = Slice(src);
   uint32_t tag;
   Slice sub_input;
-  ZnsCommitTag committag;
+  TropoCommitTag committag;
   bool force = false;
   while (!force && s.ok() && GetVarint32(&input, &tag)) {
-    committag = static_cast<ZnsCommitTag>(tag);
+    committag = static_cast<TropoCommitTag>(tag);
     switch (committag) {
-      case ZnsCommitTag::kEdit:
+      case TropoCommitTag::kEdit:
         if (GetLengthPrefixedSlice(&input, &sub_input)) {
           s = edit->DecodeFrom(sub_input);
         } else {
-          TROPODB_ERROR("ERROR: VersionSet: Decode corrupt edit data");
+          TROPO_LOG_ERROR("ERROR: VersionSet: Decode corrupt edit data");
           s = Status::Corruption("VersionSet", "edit data");
         }
         break;
-      case ZnsCommitTag::kSSManager:
+      case TropoCommitTag::kSSManager:
         // No longer supported
         return Status::Corruption();
         break;
-      case ZnsCommitTag::kClosing:
+      case TropoCommitTag::kClosing:
         force = true;
         break;
       default:
-        TROPODB_ERROR("ERROR: VersionSet: Decode unknown tag");
+        TROPO_LOG_ERROR("ERROR: VersionSet: Decode unknown tag");
         s = Status::Corruption("VersionSet", "unknown or unsupported tag");
         break;
     }
   }
   if (s.ok() && !input.empty() && !force) {
-    TROPODB_ERROR("ERROR: VersionSet: Decode invalid tag");
+    TROPO_LOG_ERROR("ERROR: VersionSet: Decode invalid tag");
     s = Status::Corruption("VersionSet", "invalid tag");
   }
   return s;
 }
 
-Status ZnsVersionSet::Recover() {
+Status TropoVersionSet::Recover() {
   Status s;
   uint64_t start_manifest, end_manifest;
   std::string manifest_data;
-  ZnsVersionEdit edit;
+  TropoVersionEdit edit;
   s = manifest_->Recover();
   if (s.ok()) {
     s = manifest_->ReadManifest(&manifest_data);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: VersionSet: Could not read manifest");
+      TROPO_LOG_ERROR("ERROR: VersionSet: Could not read manifest");
       printf("error reading manifest \n");
       return s;
     }
@@ -678,7 +678,7 @@ Status ZnsVersionSet::Recover() {
   if (s.ok()) {
     s = DecodeFrom(manifest_data, &edit);
     if (!s.ok()) {
-      TROPODB_ERROR("ERROR: VersionSet: Corrupt manifest");
+      TROPO_LOG_ERROR("ERROR: VersionSet: Corrupt manifest");
       return s;
     }
   }
@@ -694,7 +694,7 @@ Status ZnsVersionSet::Recover() {
   if (s.ok()) {
     s = LogAndApply(&edit);
   } else {
-    TROPODB_ERROR("ERROR: VersionSet: Corrupt LN peristency data");
+    TROPO_LOG_ERROR("ERROR: VersionSet: Corrupt LN peristency data");
   }
 
   if (edit.has_last_sequence_) {
@@ -705,13 +705,13 @@ Status ZnsVersionSet::Recover() {
   }
 
   if (!s.ok()) {
-    TROPODB_ERROR("ERROR: VersionSet: Could not set current");
+    TROPO_LOG_ERROR("ERROR: VersionSet: Could not set current");
     return s;
   }
 
   // Setup numbers, temporary hack...
   if (ss_number_ == 0) {
-    for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
+    for (uint8_t i = 0; i < TropoDBConfig::level_count; i++) {
       std::vector<SSZoneMetaData*>& m = current_->ss_[i];
       for (size_t j = 0; j < m.size(); j++) {
         uint64_t cur_ss_number = ss_number_;
@@ -736,9 +736,9 @@ Status ZnsVersionSet::Recover() {
   return Status::OK();
 }
 
-std::string ZnsVersionSet::DebugString() {
+std::string TropoVersionSet::DebugString() {
   std::ostringstream result;
-  for (uint8_t i = 0; i < ZnsConfig::level_count; i++) {
+  for (uint8_t i = 0; i < TropoDBConfig::level_count; i++) {
     std::vector<SSZoneMetaData*>& m = current_->ss_[i];
     result << "\tLevel " << i << ": " << m.size() + " tables \n";
   }

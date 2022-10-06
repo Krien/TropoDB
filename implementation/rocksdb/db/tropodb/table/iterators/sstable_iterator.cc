@@ -16,8 +16,8 @@ SSTableIterator::SSTableIterator(char* data, const size_t data_size,
       nextf_(nextf),
       index_(count + 1),
       walker_(data_ + kv_pairs_offset_),
-      current_val_(ZnsConfig::deadbeef),
-      current_key_(ZnsConfig::deadbeef),
+      current_val_(TropoDBConfig::deadbeef),
+      current_key_(TropoDBConfig::deadbeef),
       restart_index_(0) {}
 
 SSTableIterator::~SSTableIterator() { free(data_); };
@@ -32,7 +32,7 @@ void SSTableIterator::Seek(const Slice& target) {
 
   if (Valid()) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPODB_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
+      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
                     count_);
     }
     current_key_compare =
@@ -53,7 +53,7 @@ void SSTableIterator::Seek(const Slice& target) {
     SeekToRestartPoint(mid);
     ParseNextKey();
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPODB_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
+      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
                     count_);
     }
     if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
@@ -66,7 +66,7 @@ void SSTableIterator::Seek(const Slice& target) {
   ParseNextKey();
   while (Valid()) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPODB_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
+      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
                     count_);
     }
     if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) == 0) {

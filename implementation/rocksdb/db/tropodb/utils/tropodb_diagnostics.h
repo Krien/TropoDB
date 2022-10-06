@@ -34,7 +34,7 @@ struct TimingCounter {
 };
 
 // NOT thread-safe
-struct ZNSDiagnostics {
+struct TropoDiagnostics {
   std::string name_;
   uint64_t bytes_written_;
   uint64_t append_operations_counter_;

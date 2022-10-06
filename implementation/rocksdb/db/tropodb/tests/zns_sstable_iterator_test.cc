@@ -44,7 +44,7 @@ TEST_F(SSTableTest, ITER) {
   SetupDev(&dev, begin, end, false);
   ZnsDevice::DeviceInfo info = (*dev.device_manager)->info;
   ValidateMeta(&dev, begin, end);
-  ZNSMemTable* mem = new ZNSMemTable(options, icmp);
+  TropoMemtable* mem = new TropoMemtable(options, icmp);
   SSZoneMetaData meta;
   // write 1000 pairs (enough to cause multiple lbas for 4kb lbasize)
   mem->Ref();
@@ -99,7 +99,7 @@ TEST_F(SSTableTest, ITER) {
   mem->Unref();
 
   // merge iterators
-  mem = new ZNSMemTable(options, icmp);
+  mem = new TropoMemtable(options, icmp);
   mem->Ref();
   batch = WriteBatch();
   for (int i = 0; i < 1000; i += 2) {
@@ -109,7 +109,7 @@ TEST_F(SSTableTest, ITER) {
   SSZoneMetaData meta_m1;
   dev.ss_manager->FlushMemTable(mem, &meta_m1);
   mem->Unref();
-  mem = new ZNSMemTable(options, icmp);
+  mem = new TropoMemtable(options, icmp);
   mem->Ref();
   batch = WriteBatch();
   for (int i = 1; i < 1000; i += 2) {

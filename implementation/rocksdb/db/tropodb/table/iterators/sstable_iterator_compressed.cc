@@ -108,7 +108,7 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
     uint64_t mid = (left + right + 1) / 2;
     uint64_t region_offset = GetRestartPoint(mid);
     uint32_t shared, non_shared, value_length;
-    const char* key_ptr = ZNSEncoding::DecodeEncodedEntry(
+    const char* key_ptr = TropoEncoding::DecodeEncodedEntry(
         data_ + region_offset, data_ + data_size_, &shared, &non_shared,
         &value_length);
     if (key_ptr == nullptr || (shared != 0)) {
@@ -157,7 +157,7 @@ void SSTableIteratorCompressed::Seek(const Slice& target) {
 }
 
 void SSTableIteratorCompressed::CorruptionError() {
-  TROPODB_ERROR(
+  TROPO_LOG_ERROR(
       "ERROR: SSTableIteratorCompressed: Corrupt entry in SSTable block "
       "%lu/%lu \n",
       current_, data_size_);
@@ -181,7 +181,7 @@ bool SSTableIteratorCompressed::ParseNextKey() {
 
   // Decode next entry
   uint32_t shared, non_shared, value_length;
-  p = ZNSEncoding::DecodeEncodedEntry(p, limit, &shared, &non_shared,
+  p = TropoEncoding::DecodeEncodedEntry(p, limit, &shared, &non_shared,
                                       &value_length);
   if (p == nullptr || key_.size() < shared) {
     CorruptionError();

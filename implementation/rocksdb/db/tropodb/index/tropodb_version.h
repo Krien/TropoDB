@@ -19,14 +19,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 // Prevent issues with cycles
-class ZnsVersionEdit;
-class ZnsVersion;
-class ZnsVersionSet;
-class ZnsCompaction;
+class TropoVersionEdit;
+class TropoVersion;
+class TropoVersionSet;
+class TropoCompaction;
 
-enum class ZnsCommitTag : uint32_t { kEdit = 1, kSSManager = 2, kClosing = 3 };
+enum class TropoCommitTag : uint32_t { kEdit = 1, kSSManager = 2, kClosing = 3 };
 
-enum class ZnsVersionTag : uint32_t {
+enum class TropoVersionTag : uint32_t {
   kComparator = 1,
   kLogNumber = 2,
   kNextSSTableNumber = 3,
@@ -43,7 +43,7 @@ enum class ZnsVersionTag : uint32_t {
 /**
  * @brief Readonly index structure that allows reading SSTables from ZNS.
  */
-class ZnsVersion : public RefCounter {
+class TropoVersion : public RefCounter {
  public:
   void Clear();
   Status Get(const ReadOptions& options, const LookupKey& key,
@@ -56,26 +56,26 @@ class ZnsVersion : public RefCounter {
   inline uint8_t CompactionLevel() const { return compaction_level_; }
 
  private:
-  friend class ZnsVersionSet;
-  friend class ZnsCompaction;
+  friend class TropoVersionSet;
+  friend class TropoCompaction;
 
-  // Managed by friend classes (ZnsVersionSet)
-  ZnsVersion();
-  explicit ZnsVersion(ZnsVersionSet* vset);
-  ~ZnsVersion();
+  // Managed by friend classes (TropoVersionSet)
+  TropoVersion();
+  explicit TropoVersion(TropoVersionSet* vset);
+  ~TropoVersion();
 
   // FIXME: Do not use this function! It is broken and will not be maintained
   void AddIterators(const ReadOptions& options, std::vector<Iterator*>* iters);
 
   // Version specific
-  std::array<std::vector<SSZoneMetaData*>, ZnsConfig::level_count> ss_;
-  std::array<std::vector<SSZoneMetaData*>, ZnsConfig::level_count> ss_d_;
+  std::array<std::vector<SSZoneMetaData*>, TropoDBConfig::level_count> ss_;
+  std::array<std::vector<SSZoneMetaData*>, TropoDBConfig::level_count> ss_d_;
   std::pair<uint64_t, uint64_t> ss_deleted_range_;
   // Parent
-  ZnsVersionSet* vset_;
+  TropoVersionSet* vset_;
   // Linked list
-  ZnsVersion* next_;
-  ZnsVersion* prev_;
+  TropoVersion* next_;
+  TropoVersion* prev_;
   // Compaction
   double compaction_score_;
   uint8_t compaction_level_;

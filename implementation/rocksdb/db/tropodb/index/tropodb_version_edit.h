@@ -23,10 +23,10 @@ typedef std::pair<uint64_t, uint64_t> DeletedZoneRange;
  * @brief Prepares the changes to the index structure to allow for CoW behaviour
  * for the index.
  */
-class ZnsVersionEdit {
+class TropoVersionEdit {
  public:
-  ZnsVersionEdit();
-  ~ZnsVersionEdit() = default;
+  TropoVersionEdit();
+  ~TropoVersionEdit() = default;
   void Clear();
 
   // SSTables
@@ -70,8 +70,8 @@ class ZnsVersionEdit {
   }
 
  private:
-  friend class ZnsVersionSet;
-  friend class ZnsCompaction;
+  friend class TropoVersionSet;
+  friend class TropoCompaction;
 
   std::vector<std::pair<uint8_t, SSZoneMetaData>> new_ss_;
   DeletedZoneSet deleted_ss_;
