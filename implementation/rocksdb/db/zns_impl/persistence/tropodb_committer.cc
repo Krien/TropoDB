@@ -1,4 +1,4 @@
-#include "db/zns_impl/persistence/zns_committer.h"
+#include "db/zns_impl/persistence/tropodb_committer.h"
 
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/tropodb_config.h"

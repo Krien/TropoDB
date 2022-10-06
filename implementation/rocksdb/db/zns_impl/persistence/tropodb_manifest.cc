@@ -1,4 +1,4 @@
-#include "db/zns_impl/persistence/zns_manifest.h"
+#include "db/zns_impl/persistence/tropodb_manifest.h"
 
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/utils/tropodb_logger.h"

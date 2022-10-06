@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "db/zns_impl/persistence/zns_wal.h"
+#include "db/zns_impl/persistence/tropodb_wal.h"
 
 #include <vector>
 
@@ -10,7 +10,7 @@
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/tropodb_memtable.h"
-#include "db/zns_impl/persistence/zns_committer.h"
+#include "db/zns_impl/persistence/tropodb_committer.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"

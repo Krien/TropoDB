@@ -5,7 +5,7 @@
 
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/memtable/tropodb_memtable.h"
-#include "db/zns_impl/persistence/zns_committer.h"
+#include "db/zns_impl/persistence/tropodb_committer.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"

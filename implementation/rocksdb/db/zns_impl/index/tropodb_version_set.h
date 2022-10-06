@@ -11,7 +11,7 @@
 #include "db/zns_impl/index/tropodb_version.h"
 #include "db/zns_impl/index/tropodb_version_edit.h"
 #include "db/zns_impl/io/szd_port.h"
-#include "db/zns_impl/persistence/zns_manifest.h"
+#include "db/zns_impl/persistence/tropodb_manifest.h"
 #include "db/zns_impl/ref_counter.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_table_cache.h"

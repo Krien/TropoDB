@@ -1112,9 +1112,9 @@ endif()
 set(TROPODB_SOURCES
   db/zns_impl/io/szd_port.cc
   db/zns_impl/memtable/tropodb_memtable.cc
-  db/zns_impl/persistence/zns_committer.cc
-  db/zns_impl/persistence/zns_wal.cc
-  db/zns_impl/persistence/zns_manifest.cc
+  db/zns_impl/persistence/tropodb_committer.cc
+  db/zns_impl/persistence/tropodb_wal.cc
+  db/zns_impl/persistence/tropodb_manifest.cc
   db/zns_impl/table/zns_sstable_builder.cc
   db/zns_impl/table/zns_sstable_reader.cc
   db/zns_impl/table/l0_zns_sstable.cc

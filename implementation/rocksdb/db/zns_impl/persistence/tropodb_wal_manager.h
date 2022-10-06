@@ -6,8 +6,8 @@
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/tropodb_memtable.h"
-#include "db/zns_impl/persistence/zns_committer.h"
-#include "db/zns_impl/persistence/zns_wal.h"
+#include "db/zns_impl/persistence/tropodb_committer.h"
+#include "db/zns_impl/persistence/tropodb_wal.h"
 #include "db/zns_impl/ref_counter.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
@@ -46,6 +46,6 @@ class ZnsWALManager : public RefCounter {
   ZNSWAL* current_wal_;
 };
 }  // namespace ROCKSDB_NAMESPACE
-#include "db/zns_impl/persistence/zns_wal_manager.ipp"
+#include "db/zns_impl/persistence/tropodb_wal_manager.ipp"
 #endif
 #endif
