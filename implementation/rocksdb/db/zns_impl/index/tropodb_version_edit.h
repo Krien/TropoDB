@@ -7,7 +7,7 @@
 #define ZNS_VERSION_EDIT_H
 
 #include "db/dbformat.h"
-#include "db/zns_impl/index/zns_version.h"
+#include "db/zns_impl/index/tropodb_version.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"

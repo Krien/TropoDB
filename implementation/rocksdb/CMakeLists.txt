@@ -1126,11 +1126,11 @@ set(TROPODB_SOURCES
   db/zns_impl/table/iterators/merging_iterator.cc
   db/zns_impl/table/iterators/db_iter.cc
   db/zns_impl/table/zns_sstable_manager.cc
-  db/zns_impl/index/zns_version.cc
-  db/zns_impl/index/zns_version_edit.cc
-  db/zns_impl/index/zns_version_set_builder.cc
-  db/zns_impl/index/zns_version_set.cc
-  db/zns_impl/index/zns_compaction.cc
+  db/zns_impl/index/tropodb_version.cc
+  db/zns_impl/index/tropodb_version_edit.cc
+  db/zns_impl/index/tropodb_version_set_builder.cc
+  db/zns_impl/index/tropodb_version_set.cc
+  db/zns_impl/index/tropodb_compaction.cc
   db/zns_impl/impl/tropodb_impl.cc
   db/zns_impl/impl/tropodb_impl_client.cc
   db/zns_impl/impl/tropodb_impl_background.cc

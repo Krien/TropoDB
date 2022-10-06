@@ -25,8 +25,8 @@
 #include <vector>
 
 #include "db/zns_impl/tropodb_config.h"
-#include "db/zns_impl/index/zns_version.h"
-#include "db/zns_impl/index/zns_version_set.h"
+#include "db/zns_impl/index/tropodb_version.h"
+#include "db/zns_impl/index/tropodb_version_set.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_manifest.h"

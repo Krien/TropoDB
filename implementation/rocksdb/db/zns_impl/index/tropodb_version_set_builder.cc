@@ -1,6 +1,6 @@
 #include "db/zns_impl/tropodb_config.h"
-#include "db/zns_impl/index/zns_version.h"
-#include "db/zns_impl/index/zns_version_set.h"
+#include "db/zns_impl/index/tropodb_version.h"
+#include "db/zns_impl/index/tropodb_version_set.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/rocksdb_namespace.h"

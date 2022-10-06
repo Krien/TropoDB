@@ -1,12 +1,12 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-#include "db/zns_impl/index/zns_version_set.h"
+#include "db/zns_impl/index/tropodb_version_set.h"
 
 #include "db/zns_impl/tropodb_config.h"
-#include "db/zns_impl/index/zns_compaction.h"
-#include "db/zns_impl/index/zns_version.h"
-#include "db/zns_impl/index/zns_version_edit.h"
+#include "db/zns_impl/index/tropodb_compaction.h"
+#include "db/zns_impl/index/tropodb_version.h"
+#include "db/zns_impl/index/tropodb_version_edit.h"
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
