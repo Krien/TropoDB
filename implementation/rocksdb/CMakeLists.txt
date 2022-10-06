@@ -1110,34 +1110,34 @@ else()
 endif()
 
 set(TROPODB_SOURCES
-  db/zns_impl/io/szd_port.cc
-  db/zns_impl/memtable/tropodb_memtable.cc
-  db/zns_impl/persistence/tropodb_committer.cc
-  db/zns_impl/persistence/tropodb_wal.cc
-  db/zns_impl/persistence/tropodb_manifest.cc
-  db/zns_impl/table/tropodb_sstable_builder.cc
-  db/zns_impl/table/tropodb_sstable_reader.cc
-  db/zns_impl/table/tropodb_l0_sstable.cc
-  db/zns_impl/table/tropodb_ln_sstable.cc
-  db/zns_impl/table/tropodb_table_cache.cc
-  db/zns_impl/table/tropodb_sstable_manager.cc
-  db/zns_impl/table/iterators/sstable_iterator.cc
-  db/zns_impl/table/iterators/sstable_iterator_compressed.cc
-  db/zns_impl/table/iterators/sstable_ln_iterator.cc
-  db/zns_impl/table/iterators/merging_iterator.cc
-  db/zns_impl/table/iterators/db_iter.cc
-  db/zns_impl/index/tropodb_version.cc
-  db/zns_impl/index/tropodb_version_edit.cc
-  db/zns_impl/index/tropodb_version_set_builder.cc
-  db/zns_impl/index/tropodb_version_set.cc
-  db/zns_impl/index/tropodb_compaction.cc
-  db/zns_impl/impl/tropodb_impl.cc
-  db/zns_impl/impl/tropodb_impl_client.cc
-  db/zns_impl/impl/tropodb_impl_background.cc
-  db/zns_impl/impl/tropodb_impl_diagnostics.cc
-  db/zns_impl/impl/tropodb_impl_not_supported.cc
-  db/zns_impl/utils/tropodb_diagnostics.cc
-  db/zns_impl/utils/tropodb_logger.cc
+  db/tropodb/io/szd_port.cc
+  db/tropodb/memtable/tropodb_memtable.cc
+  db/tropodb/persistence/tropodb_committer.cc
+  db/tropodb/persistence/tropodb_wal.cc
+  db/tropodb/persistence/tropodb_manifest.cc
+  db/tropodb/table/tropodb_sstable_builder.cc
+  db/tropodb/table/tropodb_sstable_reader.cc
+  db/tropodb/table/tropodb_l0_sstable.cc
+  db/tropodb/table/tropodb_ln_sstable.cc
+  db/tropodb/table/tropodb_table_cache.cc
+  db/tropodb/table/tropodb_sstable_manager.cc
+  db/tropodb/table/iterators/sstable_iterator.cc
+  db/tropodb/table/iterators/sstable_iterator_compressed.cc
+  db/tropodb/table/iterators/sstable_ln_iterator.cc
+  db/tropodb/table/iterators/merging_iterator.cc
+  db/tropodb/table/iterators/db_iter.cc
+  db/tropodb/index/tropodb_version.cc
+  db/tropodb/index/tropodb_version_edit.cc
+  db/tropodb/index/tropodb_version_set_builder.cc
+  db/tropodb/index/tropodb_version_set.cc
+  db/tropodb/index/tropodb_compaction.cc
+  db/tropodb/impl/tropodb_impl.cc
+  db/tropodb/impl/tropodb_impl_client.cc
+  db/tropodb/impl/tropodb_impl_background.cc
+  db/tropodb/impl/tropodb_impl_diagnostics.cc
+  db/tropodb/impl/tropodb_impl_not_supported.cc
+  db/tropodb/utils/tropodb_diagnostics.cc
+  db/tropodb/utils/tropodb_logger.cc
 )
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${TROPODB_SOURCES} ${BUILD_VERSION_CC})
@@ -1657,8 +1657,8 @@ if(TROPODB_PLUGIN)
     set(${test_name}_SOURCES ${test_source} PARENT_SCOPE)
   endfunction()
 
-  add_tropodb_test(zns_sstable_manager_test db/zns_impl/tests/zns_sstable_manager_test.cc)
-  add_tropodb_test(zns_sstable_iterator_test db/zns_impl/tests/zns_sstable_iterator_test.cc)
+  add_tropodb_test(zns_sstable_manager_test db/tropodb/tests/zns_sstable_manager_test.cc)
+  add_tropodb_test(zns_sstable_iterator_test db/tropodb/tests/zns_sstable_iterator_test.cc)
 
   foreach(test ${TROPODB_TESTS})
     add_executable(${test}

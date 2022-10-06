@@ -1,6 +1,6 @@
 #include "db/db_impl/db_impl.h"
 #ifdef TROPODB_PLUGIN_ENABLED
-#include "db/zns_impl/tropodb_impl.h"
+#include "db/tropodb/tropodb_impl.h"
 #endif
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
