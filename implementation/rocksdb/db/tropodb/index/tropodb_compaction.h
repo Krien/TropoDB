@@ -52,6 +52,12 @@ class TropoCompaction {
   void MarkCompactedTablesAsDead(TropoVersionEdit* edit);
   Status DoCompaction(TropoVersionEdit* edit);
 
+  // Diag
+  inline TimingCounter GetCompactionSetupPerfCounter() { return compaction_setup_perf_counter_; }
+  inline TimingCounter GetCompactionKMergePerfCounter() { return compaction_k_merge_perf_counter_; }
+  inline TimingCounter GetCompactionFlushPerfCounter() { return compaction_flush_perf_counter_; }
+  inline TimingCounter GetCompactionBreakdownPerfCounter() { return compaction_breakdown_perf_counter_; }
+
  private:
   friend class TropoVersionSet;
 
@@ -80,7 +86,12 @@ class TropoCompaction {
   std::vector<SSZoneMetaData*> grandparents_;
   bool busy_;
 
+  // diag
   SystemClock* const clock_;
+  TimingCounter compaction_setup_perf_counter_;
+  TimingCounter compaction_k_merge_perf_counter_;
+  TimingCounter compaction_flush_perf_counter_;
+  TimingCounter compaction_breakdown_perf_counter_;
 
   // Deferred
   Env* env_;

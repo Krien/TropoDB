@@ -306,6 +306,7 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
   SSZoneMetaData meta;
   TropoSSTableBuilder* builder;
 
+  uint64_t before = clock_->NowMicros();
   // Spawn deferred thread (if we have enabled it)
   if (TropoDBConfig::compaction_allow_deferring_writes) {
     deferred_.edit_ = edit;
@@ -333,6 +334,7 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
       return Status::Corruption("No valid merging iterator");
     }
   }
+  compaction_setup_perf_counter_.AddTiming(clock_->NowMicros() - before);
 
   // Iterate over SSTable iterator, merge and write
   ParsedInternalKey ikey;
@@ -343,6 +345,7 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
   const Comparator* ucmp = vset_->icmp_.user_comparator();
   {
     // K-way Merge-sort old SSTables and write new SSTables
+    before = clock_->NowMicros();
     for (; merger->Valid(); merger->Next()) {
       const Slice& key = merger->key();
       const Slice& value = merger->value();
@@ -384,6 +387,8 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
                 vset_->lba_size_ >=
             max_size) {
           // Flush
+          compaction_k_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+          before = clock_->NowMicros();
           if (TropoDBConfig::compaction_allow_deferring_writes) {
             s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
           } else {
@@ -393,6 +398,8 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
             TROPO_LOG_ERROR("ERROR: Compaction: Could not flush\n");
             break;
           }
+          compaction_flush_perf_counter_.AddTiming(clock_->NowMicros() - before);
+          before = clock_->NowMicros();
         }
         // Only now add key to SSTable
         s = builder->Apply(key, value);
@@ -401,6 +408,8 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
 
     // Now write the last remaining SSTable to storage
     if (s.ok() && builder->GetSize() > 0) {
+      compaction_k_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+      before = clock_->NowMicros();
       if (TropoDBConfig::compaction_allow_deferring_writes) {
         s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
       } else {
@@ -409,10 +418,12 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
       if (!s.ok()) {
         TROPO_LOG_ERROR("ERROR: Compaction: Could not flush last SSTable\n");
       }
+      compaction_flush_perf_counter_.AddTiming(clock_->NowMicros() - before);
     }
   }
 
   // Shutdown deffered thread
+  before = clock_->NowMicros();
   {
     if (TropoDBConfig::compaction_allow_deferring_writes) {
       deferred_.mutex_.Lock();
@@ -431,6 +442,7 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
 
   // Cleanup
   delete merger;
+  compaction_breakdown_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 }  // namespace ROCKSDB_NAMESPACE
