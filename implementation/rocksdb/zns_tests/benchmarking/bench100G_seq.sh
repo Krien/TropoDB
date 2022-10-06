@@ -17,7 +17,7 @@ ksize=512
 vsize=512
 benchmark=fillseq
 
-./db_bench --use_zns=true \
+./db_bench --use_tropodb=true \
 --db=$trid \
 --num=$num_of_kvpairs \
 --compression_type=None \

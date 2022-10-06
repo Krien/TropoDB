@@ -281,7 +281,7 @@ run_bench() {
         }
     ;;
     "znslsm")
-        ZNSLSM_ARGS="--use_zns=true --db=$OPT"
+        ZNSLSM_ARGS="--use_tropodb=true --db=$OPT"
         EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $ZNSLSM_ARGS"
         diag_func () {
             output_smartlog $DEV

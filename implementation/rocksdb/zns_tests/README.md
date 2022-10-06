@@ -4,10 +4,10 @@ Following the tests as described below should lead to similar results as visible
 
 # Configs
 The configs directory contains header files that contain valid configurations for TropoDB.
-These can be copied to `TropoDB/implementation/rocksdb/db/zns_impl/config.h` to get the configuration working within TropoDB.
+These can be copied to `TropoDB/implementation/rocksdb/db/tropodb/tropodb_config.h` to get the configuration working within TropoDB.
 Then after recompiling the project, it should run with the settings in the config, which should allow for reproducible tests.
-If at any point the orignal config needs to be returned, copy `TropoDB/implementation/rocksdb/db/zns_impl/default_config.h` to
-`TropoDB/implementation/rocksdb/db/zns_impl/config.h`.
+If at any point the orignal config needs to be returned, copy `TropoDB/implementation/rocksdb/db/tropodb/default_config.h` to
+`TropoDB/implementation/rocksdb/db/tropodb/tropodb_config.h`.
 
 # Benchmark.sh
 This is the main benchmarking script used to benchmark TropoDB and RocksDB with various file systems.
@@ -27,10 +27,10 @@ It uses a random workload.
 ## TropoDB
 For TropoDB the following is required to run a test (must be root):
 ```bash
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh setup znslsm <nvme_number> # No /dev/ in front!!!
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh setup tropodb <nvme_number> # No /dev/ in front!!!
 # Note the used trid in a variable, for example in $TRID
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh run <benchmark_name> znslsm $TRID $TRID
-sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh clean znslsm $TRID $TRID
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh run <benchmark_name> tropodb $TRID $TRID
+sudo LD_LIBRARY_PATH=<SPDK_DIR>/dpdk/build/lib ./benchmark.sh clean tropodb $TRID $TRID
 ```
 ## F2FS
 For F2FS the following is required to run a tesst (must be root):

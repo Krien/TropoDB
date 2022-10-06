@@ -12,7 +12,7 @@
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/periodic_work_scheduler.h"
-#include "db/zns_impl/db_impl_zns.h"
+#include "db/tropodb/tropodb_impl.h"
 #include "env/composite_env_wrapper.h"
 #include "file/filename.h"
 #include "file/read_write_util.h"

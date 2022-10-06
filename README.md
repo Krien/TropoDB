@@ -32,7 +32,7 @@ TropoDB is a master thesis project and under heavy development. Breaking changes
 The project exists out of two subprojects, both are available in `implementation`, but only one is functional. These are `db` and `rocksdb`. `db` was an alteration of the LevelDB API, which was dropped. `rocksdb` is an alteration of RocksDB. This alteration only supports CMake as the original Makefile is disabled/removed. Changes are maintained in:
 
 * `implementation/rocksdb/db_impl_switcher/*`: allows switching between conventional RocksDB and TropoDB.
-* `implementation/rocksdb/db/zns_impl/*`: all of the logic of TropoDB.
+* `implementation/rocksdb/db/tropodb/*`: all of the logic of TropoDB.
 * `implementation/rocksdb/znsdevice/*`: Legacy SZD implementation (now moved to separate repo)
 * `implementation/rocksdb/znstests/*`: test applications, tests (stale/need updates...), benchmarking scripts
 
@@ -63,7 +63,7 @@ For db_bench do:
 
 ```bash
 # add these two options
-db_bench --use_zns --db=<TRID> # with TRID the  PCIe address
+db_bench --use_tropodb --db=<TRID> # with TRID the  PCIe address
 ```
 
 From C++ code do:
@@ -71,7 +71,7 @@ From C++ code do:
 ```C++
 // We only showcase what is different for TropoDB, the rest is the same as for RocksDB.
 rocksdb::Options opts; // The RocksDB options for opening a database.
-opts.use_zns_impl = true;
+opts.use_tropodb_impl = true;
 // Set a ZNS uri, this is different from a file system uri and looks like:
 //  zns://<TRID> with TRID the PCIe_Address
 ```

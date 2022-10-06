@@ -76,10 +76,10 @@ if(WITH_WINDOWS_UTF8_FILENAMES)
   add_definitions(-DROCKSDB_WINDOWS_UTF8_FILENAMES)
 endif()
 
-option(ZNS_PLUGIN "allow the ZNS plugin" ON)
+option(TROPODB_PLUGIN "allow the TropoDB plugin" ON)
 
-if(ZNS_PLUGIN)
-  add_definitions(-DZNS_PLUGIN_ENABLED)
+if(TROPODB_PLUGIN)
+  add_definitions(-DTROPODB_PLUGIN_ENABLED)
 endif()
 
 if($ENV{CIRCLECI})
@@ -1001,16 +1001,13 @@ list(APPEND SOURCES
   utilities/transactions/lock/range/range_tree/lib/util/dbt.cc
   utilities/transactions/lock/range/range_tree/lib/util/memarena.cc)
 
-if(ZNS_PLUGIN)
-  set(ZNS_DEVICE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/SimpleZNSDevice")
-  add_subdirectory("${ZNS_DEVICE_DIRECTORY}")
-  link_directories("${SPDK_LIB_DIRS};${ZNS_DEVICE_DIRECTORY}/lib")
+if(TROPODB_PLUGIN)
+  set(SZD_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/SimpleZNSDevice")
+  add_subdirectory("${SZD_DIRECTORY}")
+  link_directories("${SPDK_LIB_DIRS};${SZD_DIRECTORY}/lib")
 endif()
 
-set(ROCKSDB_PLUGINS "zenfs")
-message(STATUS "ROCKSDB_PLUGINS: ${ROCKSDB_PLUGINS} ")
 set(PLUGIN_HEADER_DIR "")
-
 if(ROCKSDB_PLUGINS)
   string(REPLACE " " ";" PLUGINS ${ROCKSDB_PLUGINS})
 
@@ -1112,42 +1109,42 @@ else()
   set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
-set(ZNS_LSM_SOURCES
-  db/zns_impl/io/szd_port.cc
-  db/zns_impl/memtable/zns_memtable.cc
-  db/zns_impl/persistence/zns_committer.cc
-  db/zns_impl/persistence/zns_wal.cc
-  db/zns_impl/persistence/zns_manifest.cc
-  db/zns_impl/table/zns_sstable_builder.cc
-  db/zns_impl/table/zns_sstable_reader.cc
-  db/zns_impl/table/l0_zns_sstable.cc
-  db/zns_impl/table/ln_zns_sstable.cc
-  db/zns_impl/table/zns_table_cache.cc
-  db/zns_impl/table/iterators/sstable_iterator.cc
-  db/zns_impl/table/iterators/sstable_iterator_compressed.cc
-  db/zns_impl/table/iterators/sstable_ln_iterator.cc
-  db/zns_impl/table/iterators/merging_iterator.cc
-  db/zns_impl/table/iterators/db_iter.cc
-  db/zns_impl/table/zns_sstable_manager.cc
-  db/zns_impl/index/zns_version.cc
-  db/zns_impl/index/zns_version_edit.cc
-  db/zns_impl/index/zns_version_set_builder.cc
-  db/zns_impl/index/zns_version_set.cc
-  db/zns_impl/index/zns_compaction.cc
-  db/zns_impl/db_impl_zns.cc
-  db/zns_impl/db_impl_zns_client.cc
-  db/zns_impl/db_impl_zns_background.cc
-  db/zns_impl/db_impl_zns_diagnostics.cc
-  db/zns_impl/db_impl_zns_not_supported.cc
-  db/zns_impl/utils/tropodb_diagnostics.cc
-  db/zns_impl/utils/tropodb_logger.cc
+set(TROPODB_SOURCES
+  db/tropodb/io/szd_port.cc
+  db/tropodb/memtable/tropodb_memtable.cc
+  db/tropodb/persistence/tropodb_committer.cc
+  db/tropodb/persistence/tropodb_wal.cc
+  db/tropodb/persistence/tropodb_manifest.cc
+  db/tropodb/table/tropodb_sstable_builder.cc
+  db/tropodb/table/tropodb_sstable_reader.cc
+  db/tropodb/table/tropodb_l0_sstable.cc
+  db/tropodb/table/tropodb_ln_sstable.cc
+  db/tropodb/table/tropodb_table_cache.cc
+  db/tropodb/table/tropodb_sstable_manager.cc
+  db/tropodb/table/iterators/sstable_iterator.cc
+  db/tropodb/table/iterators/sstable_iterator_compressed.cc
+  db/tropodb/table/iterators/sstable_ln_iterator.cc
+  db/tropodb/table/iterators/merging_iterator.cc
+  db/tropodb/table/iterators/db_iter.cc
+  db/tropodb/index/tropodb_version.cc
+  db/tropodb/index/tropodb_version_edit.cc
+  db/tropodb/index/tropodb_version_set_builder.cc
+  db/tropodb/index/tropodb_version_set.cc
+  db/tropodb/index/tropodb_compaction.cc
+  db/tropodb/impl/tropodb_impl.cc
+  db/tropodb/impl/tropodb_impl_client.cc
+  db/tropodb/impl/tropodb_impl_background.cc
+  db/tropodb/impl/tropodb_impl_diagnostics.cc
+  db/tropodb/impl/tropodb_impl_not_supported.cc
+  db/tropodb/utils/tropodb_diagnostics.cc
+  db/tropodb/utils/tropodb_logger.cc
 )
 
-add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
+add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${TROPODB_SOURCES} ${BUILD_VERSION_CC})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
   ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
 
-if(ZNS_PLUGIN)
+if(TROPODB_PLUGIN)
   target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE szd_extended)
 endif()
 
@@ -1157,11 +1154,11 @@ if(ROCKSDB_BUILD_SHARED)
     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
   set_property(TARGET ${ROCKSDB_SHARED_OBJ_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-  if(ZNS_PLUGIN)
+  if(TROPODB_PLUGIN)
     target_link_libraries(${ROCKSDB_SHARED_OBJ_LIB} PRIVATE szd_extended)
-    add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})
+    add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${TROPODB_SOURCES} ${BUILD_VERSION_CC})
     target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE szd_extended)
-  else(ZNS_PLUGIN)
+  else(TROPODB_PLUGIN)
     add_library(${ROCKSDB_SHARED_LIB} SHARED $<TARGET_OBJECTS:${ROCKSDB_SHARED_OBJ_LIB}> ${BUILD_VERSION_CC})
   endif()
 
@@ -1242,9 +1239,9 @@ if(NOT WIN32 OR ROCKSDB_INSTALL_ON_WINDOWS)
     COMPATIBILITY SameMajorVersion
   )
 
-  if(ZNS_PLUGIN)
-    install(DIRECTORY "${ZNS_DEVICE_DIRECTORY}/szd/core/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-    install(DIRECTORY "${ZNS_DEVICE_DIRECTORY}/szd/cpp/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  if(TROPODB_PLUGIN)
+    install(DIRECTORY "${SZD_DIRECTORY}/szd/core/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(DIRECTORY "${SZD_DIRECTORY}/szd/cpp/include" COMPONENT devel DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(
       TARGETS szd_extended
       EXPORT RocksDBTargets
@@ -1543,7 +1540,7 @@ if(WITH_TESTS)
     )
     target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
 
-    if(ZNS_PLUGIN)
+    if(TROPODB_PLUGIN)
       target_link_libraries(${exename}${ARTIFACT_SUFFIX} szd_extended)
     endif()
 
@@ -1581,7 +1578,7 @@ if(WITH_BENCHMARK_TOOLS)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
 
-  if(ZNS_PLUGIN)
+  if(TROPODB_PLUGIN)
     # target_link_libraries(db_bench${ARTIFACT_SUFFIX} szd_extended)
   endif()
 
@@ -1641,7 +1638,7 @@ if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
 endif()
 
-if(ZNS_PLUGIN)
+if(TROPODB_PLUGIN)
   include_directories("${PROJECT_SOURCE_DIR}/zns_tests")
   add_executable(initialtest
     "zns_tests/initial_test.cc"
@@ -1655,18 +1652,18 @@ if(ZNS_PLUGIN)
   target_link_libraries(m5 ${ROCKSDB_LIB})
   set_property(TARGET m5 PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-  function(add_zns_test test_name test_source)
-    set(ZNS_TESTS ${ZNS_TESTS} ${test_name} PARENT_SCOPE)
+  function(add_tropodb_test test_name test_source)
+    set(TROPODB_TESTS ${TROPODB_TESTS} ${test_name} PARENT_SCOPE)
     set(${test_name}_SOURCES ${test_source} PARENT_SCOPE)
   endfunction()
 
-  add_zns_test(zns_sstable_manager_test db/zns_impl/tests/zns_sstable_manager_test.cc)
-  add_zns_test(zns_sstable_iterator_test db/zns_impl/tests/zns_sstable_iterator_test.cc)
+  add_tropodb_test(zns_sstable_manager_test db/tropodb/tests/zns_sstable_manager_test.cc)
+  add_tropodb_test(zns_sstable_iterator_test db/tropodb/tests/zns_sstable_iterator_test.cc)
 
-  foreach(test ${ZNS_TESTS})
+  foreach(test ${TROPODB_TESTS})
     add_executable(${test}
       ${${test}_SOURCES}
-      ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC}
+      ${TROPODB_SOURCES} ${BUILD_VERSION_CC}
     )
     target_link_libraries(${test} PRIVATE
       ${ROCKSDB_SHARED_OBJ_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS}
@@ -1684,7 +1681,7 @@ else(DEFINED ENV{CLANG_FORMAT_PATH})
 endif()
 
 set(FORMAT_PATHS "")
-foreach(PATH ${ZNS_LSM_SOURCES})
+foreach(PATH ${TROPODB_SOURCES})
   list(APPEND FORMAT_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${PATH}")
 endforeach()
 

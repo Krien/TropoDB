@@ -1,5 +1,5 @@
 #pragma once
-#ifdef ZNS_PLUGIN_ENABLED
+#ifdef TROPODB_PLUGIN_ENABLED
 #ifndef ZNS_CONFIG_H
 #define ZNS_CONFIG_H
 
@@ -24,7 +24,7 @@ namespace ROCKSDB_NAMESPACE {
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
-namespace ZnsConfig {
+namespace TropoDBConfig {
 // WAL options
 constexpr static uint8_t level_count =
     6; /**< Amount of LSM-tree levels L0 up to LN */
@@ -164,7 +164,7 @@ static_assert(max_lbas_compaction_l0 > 0);
 static_assert(max_channels > 0);
 static_assert(!use_sstable_encoding || max_sstable_encoding > 0);
 
-}  // namespace ZnsConfig
+}  // namespace TropoDBConfig
 }  // namespace ROCKSDB_NAMESPACE
 #endif
 #endif

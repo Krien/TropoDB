@@ -15,14 +15,14 @@ print_help() {
 # examples:
 #    sudo ./benchmark.sh setup f2fs /mnt/f2fs/ nvme6n1 nvme1n1
 #    sudo ./benchmark.sh clean f2fs /mnt/f2fs/ nvme6n1
-#    sudo ./benchmark.sh setup znslsm 0000:00:04.0
-#    sudo ./benchmark.sh clean znslsm 0000:00:04.0
+#    sudo ./benchmark.sh setup tropodb 0000:00:04.0
+#    sudo ./benchmark.sh clean tropodb 0000:00:04.0
 #    sudo ZENFS_DIR=./plugin/zenfs/util ./benchmark.sh setup zenfs nvme6n1
 #    sudo ZENFS_DIR=./plugin/zenfs/util ./benchmark.sh clean zenfs nvme6n1
 
 # sudo BLOCKCNT=~/zoned_bpftrace/block_count.bt ./benchmark.sh run long f2fs /mnt/f2fs/ nvme6n1
 # sudo BLOCKCNT=~/zoned_bpftrace/block_count.bt ./benchmark.sh run long zenfs nvme6n1 nvme6n1
-# sudo LD_LIBRARY_PATH="LD_LIBRARY_PATH:/home/user/spdk/dpdk/build/lib"./benchmark.sh run long znslsm 0000:00:04.0 0000:00:04.0
+# sudo LD_LIBRARY_PATH="LD_LIBRARY_PATH:/home/user/spdk/dpdk/build/lib"./benchmark.sh run long tropodb 0000:00:04.0 0000:00:04.0
 
 # Allow a BPF script during diagnostics
 #   BLOCKCNT=/.../.bt
@@ -47,9 +47,9 @@ case $1 in
         ./utils/zenfs_utils.sh create $*
         exit $?
     ;;
-    "znslsm")
+    "tropodb")
         shift
-        ./utils/znslsm_utils.sh create $*
+        ./utils/tropodb_utils.sh create $*
         exit $?
     ;;
     *)
@@ -464,9 +464,9 @@ run_bench() {
             output_smartlog $DEV
         }
     ;;
-    "znslsm")
-        ZNSLSM_ARGS="--use_zns=true --db=$OPT"
-        EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $ZNSLSM_ARGS"
+    "tropodb")
+        TROPODB_ARGS="--use_tropodb=true --db=$OPT"
+        EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $TROPODB_ARGS"
         diag_func () {
             echo "No smart-log support"
         }
@@ -514,9 +514,9 @@ case $1 in
         ./utils/zenfs_utils.sh destroy $*
         exit $?
     ;;
-    "znslsm")
+    "tropodb")
         shift
-        ./utils/znslsm_utils.sh destroy $*
+        ./utils/tropodb_utils.sh destroy $*
         exit $?
     ;;
     *)

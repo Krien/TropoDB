@@ -108,7 +108,7 @@ static void print_myrocks_context(struct MyRocksContext *ctx) {
 
 int open_zns_rocksdb(struct MyRocksContext *context, std::string db_path) {
   rocksdb::Status s;
-  context->options.use_zns_impl = true;
+  context->options.use_tropodb_impl = true;
   s = rocksdb::DB::Open(context->options, db_path, &context->db);
   if (!s.ok()) {
     return -1;
@@ -164,7 +164,7 @@ static int delete_rocksdb(struct MyRocksContext *context,
   cout << "Opening database at " << context->uri << " with uri " << uri_ext
        << " and the db_path as " << db_path << std::endl;
   if (uri_ext.compare("zns") == 0) {
-    context->options.use_zns_impl = true;
+    context->options.use_tropodb_impl = true;
     s = rocksdb::DestroyDB(db_path, context->options);
     return s.ok() ? 0 : -1;
   }
