@@ -1135,9 +1135,12 @@ set(ZNS_LSM_SOURCES
   db/zns_impl/index/zns_version_set.cc
   db/zns_impl/index/zns_compaction.cc
   db/zns_impl/db_impl_zns.cc
+  db/zns_impl/db_impl_zns_client.cc
   db/zns_impl/db_impl_zns_background.cc
   db/zns_impl/db_impl_zns_diagnostics.cc
   db/zns_impl/db_impl_zns_not_supported.cc
+  db/zns_impl/utils/tropodb_diagnostics.cc
+  db/zns_impl/utils/tropodb_logger.cc
 )
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${ZNS_LSM_SOURCES} ${BUILD_VERSION_CC})

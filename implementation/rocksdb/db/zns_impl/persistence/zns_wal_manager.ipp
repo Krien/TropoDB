@@ -13,6 +13,7 @@
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/persistence/zns_wal.h"
 #include "db/zns_impl/persistence/zns_wal_manager.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -63,20 +64,10 @@ ZnsWALManager<N>::ZnsWALManager(SZD::SZDChannelFactory* channel_factory,
                    ZnsConfig::wal_concurrency / N, nullptr
 #endif
         );
-#ifndef WAL_MANAGER_MANAGES_CHANNELS
-    std::cout << std::left << "WAL" << std::setw(12) << i << std::right
-              << std::setw(25) << wal_walker << std::setw(25)
-              << wal_walker + wal_range << "\n";
-#endif
     newwal->Ref();
     wals_[i] = newwal;
     wal_walker += wal_range;
   }
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
-  std::cout << std::left << "WALS" << std::setw(11) << "" << std::right
-            << std::setw(25) << min_zone_nr << std::setw(25) << max_zone_nr
-            << "\n";
-#endif
 }
 
 template <std::size_t N>
@@ -121,7 +112,7 @@ Status ZnsWALManager<N>::NewWAL(port::Mutex* mutex_, ZNSWAL** wal) {
   current_wal_ = wals_[wal_head_];
   if (!current_wal_->Empty()) {
     assert(false);
-    printf("Fatal error, old WAL found\n");
+    TROPODB_ERROR("ERROR: WAL: New WAL is not empty\n");
   }
   wal_head_++;
   if (wal_head_ == N) {
@@ -185,32 +176,34 @@ Status ZnsWALManager<N>::Recover(ZNSMemTable* mem, SequenceNumber* seq) {
   bool first_non_empty = false;
   bool first_empty_after_non_empty = false;
   for (size_t i = 0; i < wals_.size(); i++) {
-    // potential tail or head
     if (!wals_[i]->Empty() && !first_non_empty) {
+      // potential tail or head
       first_non_empty = true;
       wal_head_ = i + 1;
       if (i > 0) {
         wal_tail_ = i;
       }
 
-    }  // a gap in the middle?
+    }
     else if (!wals_[i]->Empty() && first_empty_after_non_empty) {
+      // a gap in the middle?
       wal_tail_ = i;
       break;
 
-    }  // the head is moving one further
+    }
     else if (!wals_[i]->Empty() && first_non_empty) {
+      // the head is moving one further
       wal_head_ = i + 1;
-    }  // head can not move further
+    }  
     else if (wals_[i]->Empty() && !first_empty_after_non_empty &&
              first_non_empty) {
+      // head can not move further
       first_empty_after_non_empty = true;
     }
   }
   if (wal_head_ >= N) {
     wal_head_ = 0;
   }
-  // printf("WAL manager - HEAD: %ld TAIL: %ld\n", wal_head_, wal_tail_);
 
   // Replay from head to tail, to be sure replay all for now...
   size_t i = wal_head_ == 0 ? N - 1 : wal_head_ - 1;

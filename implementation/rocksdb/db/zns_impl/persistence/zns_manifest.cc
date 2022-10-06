@@ -1,6 +1,7 @@
 #include "db/zns_impl/persistence/zns_manifest.h"
 
 #include "db/zns_impl/io/szd_port.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "util/coding.h"
@@ -36,55 +37,48 @@ ZnsManifest::~ZnsManifest() { channel_factory_->Unref(); }
 
 Status ZnsManifest::NewManifest(const Slice& record) {
   if (!committer_.SpaceEnough(record)) {
-    printf("Not enough space in Manifest: needed %lu available %lu\n",
-           record.size() / lba_size_, log_.SpaceAvailable() / lba_size_);
+    TROPODB_ERROR(
+        "ERROR: Manifest: Not enough space: needed %lu available %lu\n",
+        record.size() / lba_size_, log_.SpaceAvailable() / lba_size_);
     return Status::NoSpace();
   }
-  // printf("Space available %lu %lu\n", log_.SpaceAvailable(), record.size());
   manifest_start_new_ = log_.GetWriteHead();
+  // Install new manifest
   Status s = committer_.SafeCommit(record, &manifest_blocks_new_);
-  // printf("MANIFEST BLOCKS %lu \n", manifest_blocks_new_);
   return s;
 }
 
 Status ZnsManifest::SetCurrent() {
   assert(current > min_zone_head_ && current < max_zone_head_);
   Status s;
-  // Reclaim old space
+
+  // Try to reclaim old space
   uint64_t delete_blocks_ = (deleted_range_blocks_ / zone_cap_) * zone_cap_;
-  // printf("DELETING IN MAN %lu %lu %lu \n", delete_blocks_,
-  //        deleted_range_blocks_, zone_cap_);
   if (delete_blocks_ != 0) {
     s = FromStatus(log_.ConsumeTail(deleted_range_begin_,
                                     deleted_range_begin_ + delete_blocks_));
     if (!s.ok()) {
-      printf("log eagain %lu %lu %lu\n", log_.GetWriteTail(),
-             deleted_range_begin_, delete_blocks_);
+      TROPODB_ERROR("ERROR: Manifest: Error consuming tail %lu %lu %lu\n",
+                    log_.GetWriteTail(), deleted_range_begin_, delete_blocks_);
     }
-
     deleted_range_blocks_ -= delete_blocks_;
-    // printf("Space available after delete %lu %lu %lu\n",
-    // log_.SpaceAvailable(),
-    //        deleted_range_blocks_, delete_blocks_);
   }
 
   deleted_range_begin_ = log_.GetWriteTail();
   // +1 because of previous current
   deleted_range_blocks_ += manifest_blocks_ + 1;
 
-  // then install on storage
+  // Serialise current
   std::string current_name = current_preamble;
   PutFixed64(&current_name, manifest_start_new_);
   PutFixed64(&current_name, manifest_blocks_new_);
   PutFixed64(&current_name, deleted_range_begin_);
   PutFixed64(&current_name, deleted_range_blocks_);
-  // printf("Set new current %lu %lu %lu %lu %lu %lu\n", manifest_start_new_,
-  //        manifest_blocks_new_, deleted_range_begin_, deleted_range_blocks_,
-  //        log_.SpaceAvailable() / lba_size_, (max_zone_head_ -
-  //        min_zone_head_));
+
+  // Then commit/install on storage
   s = committer_.SafeCommit(Slice(current_name));
   if (!s.ok()) {
-    printf("error setting current\n");
+    TROPODB_ERROR("ERROR: Manifest: Failed setting current\n");
     return s;
   }
 
@@ -101,16 +95,19 @@ Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
                                     ZnsCommitReader& reader) {
   Slice potential;
   committer_.GetCommitReader(0, slba, slba + 1, &reader);
+  // Prevent reaeding invalid blocks
   if (!committer_.SeekCommitReader(reader, &potential)) {
     return Status::Corruption("CURRENT", "Invalid block");
   }
-  // prevent memory errors on half reads
+  // Prevent memory errors on half reads
   if (potential.size() < current_preamble_size) {
     return Status::Corruption("CURRENT", "Header too small");
   }
+  // Prevent reading broken headers
   if (memcmp(potential.data(), current_preamble, current_preamble_size) != 0) {
     return Status::Corruption("CURRENT", "Broken header");
   }
+  // Verify header data
   const char* current_text_header = potential.data() + current_preamble_size;
   Slice current_text_header_slice(current_text_header,
                                   sizeof(uint64_t) * 4 + 1);
@@ -120,8 +117,7 @@ Status ZnsManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
         GetFixed64(&current_text_header_slice, end_manifest_delete))) {
     return Status::Corruption("CURRENT", "Corrupt pointers");
   }
-  // printf("Gotten current %lu %lu %lu %lu \n", *start_manifest, *end_manifest,
-  //        *start_manifest_delete, *end_manifest_delete);
+  // Verify locations of manifest (according to the header)
   if (*start_manifest < min_zone_head_ || *start_manifest > max_zone_head_ ||
       *end_manifest > (max_zone_head_ - min_zone_head_)) {
     return Status::Corruption("CURRENT", "Invalid pointers");
@@ -133,6 +129,7 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
                                   uint64_t* end_manifest,
                                   uint64_t* start_manifest_delete,
                                   uint64_t* end_manifest_delete) {
+  // No manifest to get
   if (log_.Empty()) {
     *start_manifest = *end_manifest = 0;
     return Status::NotFound("No current when empty");
@@ -163,23 +160,33 @@ Status ZnsManifest::TryGetCurrent(uint64_t* start_manifest,
 Status ZnsManifest::Recover() {
   Status s = Status::OK();
   s = RecoverLog();
-  // printf("HEAD %lu TAIL %lu \n", log_.GetWriteHead(), log_.GetWriteTail());
   if (!s.ok()) {
+    TROPODB_ERROR("ERROR: Manifest: Failed to recover\n");
     return s;
   }
   s = TryGetCurrent(&manifest_start_, &manifest_blocks_, &deleted_range_begin_,
                     &deleted_range_blocks_);
-  if (!s.ok()) return s;
-  // printf(
-  //     "Manifest start %lu Manifest end %lu deleted range begin %lu end %lu
-  //     \n", manifest_start_, manifest_blocks_, deleted_range_begin_,
-  //     deleted_range_blocks_);
+  if (!s.ok()) {
+    TROPODB_ERROR("ERROR: Manifest: Failed to get current\n");
+    return s;
+  }
+  return s;
+}
+
+Status ZnsManifest::Reset() {
+  Status s = FromStatus(log_.ResetAll());
+  deleted_range_begin_ = min_zone_head_;
+  deleted_range_blocks_ = 0;
+  if (!s.ok()) {
+    TROPODB_ERROR("ERROR: Manifest: Failed to reset\n");
+  }
   return s;
 }
 
 Status ZnsManifest::ValidateManifestPointers() const {
   const uint64_t write_head_ = log_.GetWriteHead();
   const uint64_t zone_tail_ = log_.GetWriteTail();
+  // Out of bounds
   if (write_head_ > zone_tail_) {
     if (manifest_start_ > write_head_ ||
         manifest_start_ + manifest_blocks_ > write_head_ ||
@@ -198,12 +205,14 @@ Status ZnsManifest::ValidateManifestPointers() const {
 }
 
 Status ZnsManifest::ReadManifest(std::string* manifest) {
-  printf("read manifest\n");
+  TROPODB_INFO("INFO: Recovery: Reading manifest\n");
   Status s = ValidateManifestPointers();
   if (!s.ok()) {
+    TROPODB_ERROR("ERROR: Manifest: Invalid pointers\n");
     return s;
   }
   if (manifest_blocks_ == 0) {
+    TROPODB_ERROR("ERROR: Manifest: No blocks?\n");
     return Status::IOError();
   }
 
@@ -213,6 +222,7 @@ Status ZnsManifest::ReadManifest(std::string* manifest) {
   s = committer_.GetCommitReader(0, manifest_start_,
                                  manifest_start_ + manifest_blocks_, &reader);
   if (!s.ok()) {
+    TROPODB_ERROR("ERROR: Manifest: Could not get a reader\n");
     return s;
   }
   while (committer_.SeekCommitReader(reader, &record)) {

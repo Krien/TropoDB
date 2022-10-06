@@ -8,6 +8,7 @@
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 #include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -28,7 +29,7 @@ ZnsVersion::~ZnsVersion() {
   // Remove from linked list
   prev_->next_ = next_;
   next_->prev_ = prev_;
-  // Drop refs
+  // Drop all refs
   for (uint8_t level = 0; level < ZnsConfig::level_count; level++) {
     for (size_t i = 0; i < ss_[level].size(); i++) {
       SSZoneMetaData* m = ss_[level][i];
@@ -39,130 +40,112 @@ ZnsVersion::~ZnsVersion() {
       }
     }
   }
-  // printf("Removed version %lu\n", debug_nr_);
+  TROPODB_DEBUG("DEBUG: Removed version structure %lu\n", debug_nr_);
 }
 
+// TODO: Remove?
 void ZnsVersion::Clear() {}
 
 Status ZnsVersion::Get(const ReadOptions& options, const LookupKey& lkey,
                        std::string* value) {
-  Status s;
-  EntryStatus status;
+  Status call_status;
+  EntryStatus entry_status;
   const Comparator* ucmp = vset_->icmp_.user_comparator();
   ZNSSSTableManager* znssstable = vset_->znssstable_;
+  znssstable->Ref();
   Slice key = lkey.user_key();
   Slice internal_key = lkey.internal_key();
-  znssstable->Ref();
 
-  // int in_range = -1;
-
-  // L0 (no sorting of L0 yet, because it is an append-only log. Earlier zones
-  // are guaranteed to be older). So start from end to begin.
-  std::vector<SSZoneMetaData*> tmp;
-  tmp.reserve(ss_[0].size());
-  for (size_t i = ss_[0].size(); i != 0; --i) {
-    SSZoneMetaData* z = ss_[0][i - 1];
-    if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
-        ucmp->Compare(key, z->largest.user_key()) <= 0) {
-      tmp.push_back(z);
-    }
-  }
-  if (!tmp.empty()) {
-    // in_range = 0;
-    std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
-      if (a->L0.number > b->L0.number) {
-        return true;
-      } else if (a->L0.number < b->L0.number) {
-        return false;
-      } else {
-        return a->number > b->number;
+  // Look in L0
+  {
+    // For some reason SSTables are not always sorted correctly.
+    // Solve by finding all SSTables in range and then sorting them on recency.
+    // TODO: ensure it is already in order elsewhere
+    std::vector<SSZoneMetaData*> tmp;
+    tmp.reserve(ss_[0].size());
+    for (size_t i = ss_[0].size(); i != 0; --i) {
+      SSZoneMetaData* z = ss_[0][i - 1];
+      if (ucmp->Compare(key, z->smallest.user_key()) >= 0 &&
+          ucmp->Compare(key, z->largest.user_key()) <= 0) {
+        tmp.push_back(z);
       }
-    });
-    for (uint32_t i = 0; i < tmp.size(); i++) {
-      s = vset_->table_cache_->Get(options, *tmp[i], 0, internal_key, value,
-                                   &status);
-      if (s.ok()) {
-        if (status == EntryStatus::notfound) {
-          continue;
+    }
+    if (!tmp.empty()) {
+      std::sort(tmp.begin(), tmp.end(),
+                [](SSZoneMetaData* a, SSZoneMetaData* b) {
+                  if (a->L0.number > b->L0.number) {
+                    return true;
+                  } else if (a->L0.number < b->L0.number) {
+                    return false;
+                  } else {
+                    return a->number > b->number;
+                  }
+                });
+      // Look for entry in sorted entries
+      for (uint32_t i = 0; i < tmp.size(); i++) {
+        // Look for value in L0 SSTable (table will get cached)
+        call_status = vset_->table_cache_->Get(
+            options, *tmp[i], 0, internal_key, value, &entry_status);
+        if (call_status.ok()) {
+          // Not in this SSTable, move on
+          if (entry_status == EntryStatus::notfound) {
+            continue;
+          }
+          // Entry found, clean and return
+          znssstable->Unref();
+          return entry_status == EntryStatus::found
+                     ? call_status
+                     : Status::NotFound("Entry deleted");
         }
-        znssstable->Unref();
-        return status == EntryStatus::found ? s
-                                            : Status::NotFound("Entry deleted");
       }
     }
   }
 
-  // Other levels
-  for (uint8_t level = 1; level < ZnsConfig::level_count; ++level) {
-    size_t num_ss = ss_[level].size();
-    if (num_ss == 0) continue;
-    uint32_t index = ZNSSSTableManager::FindSSTableIndex(
-        vset_->icmp_.user_comparator(), ss_[level], internal_key);
-    if (index >= num_ss) {
-      continue;
-    }
-    const SSZoneMetaData& m = *ss_[level][index];
-    if (ucmp->Compare(key, m.smallest.user_key()) >= 0 &&
-        ucmp->Compare(key, m.largest.user_key()) <= 0) {
-      // in_range = level;
-      // printf("Get from LN %u %lu \n", level, m.number);
-      s = vset_->table_cache_->Get(options, m, level, internal_key, value,
-                                   &status);
-      // s = znssstable->Get(level, vset_->icmp_, internal_key, value, m,
-      // &status);
-      if (s.ok()) {
-        if (status == EntryStatus::notfound) {
-          continue;
+  // Look in LN
+  {
+    for (uint8_t level = 1; level < ZnsConfig::level_count; ++level) {
+      size_t sstable_nrs = ss_[level].size();
+      // level is empty
+      if (sstable_nrs == 0) continue;
+
+      // In LN only ONE table can overlap for each level, find this table
+      uint32_t index = ZNSSSTableManager::FindSSTableIndex(
+          vset_->icmp_.user_comparator(), ss_[level], internal_key);
+      // No SSTable in range
+      if (index >= sstable_nrs) {
+        continue;
+      }
+
+      // Look if entry is in this SSTable (table will get cached)
+      const SSZoneMetaData& m = *ss_[level][index];
+      if (ucmp->Compare(key, m.smallest.user_key()) >= 0 &&
+          ucmp->Compare(key, m.largest.user_key()) <= 0) {
+        call_status = vset_->table_cache_->Get(options, m, level, internal_key,
+                                               value, &entry_status);
+        if (call_status.ok()) {
+          // Key is not in this SSTable, move on
+          if (entry_status == EntryStatus::notfound) {
+            continue;
+          }
+          // Entry found, clean and return
+          znssstable->Unref();
+          return entry_status == EntryStatus::found
+                     ? call_status
+                     : Status::NotFound("Entry deleted");
         }
-        znssstable->Unref();
-        return status == EntryStatus::found ? s
-                                            : Status::NotFound("Entry deleted");
       }
     }
   }
-  // printf("not found, but was in range %d\n", in_range);
+
+  // Entry has not been found
   znssstable->Unref();
   return Status::NotFound("No matching table");
 }
 
 Iterator* ZnsVersion::GetLNIterator(void* arg, const Slice& file_value,
                                     const Comparator* cmp) {
-  ZNSSSTableManager* zns = reinterpret_cast<ZNSSSTableManager*>(arg);
-  SSZoneMetaData meta;
-  meta.LN.lba_regions = DecodeFixed8(file_value.data());
-  for (size_t i = 0; i < meta.LN.lba_regions; i++) {
-    meta.LN.lbas[i] = DecodeFixed64(file_value.data() + 1 + 16 * i);
-    meta.LN.lba_region_sizes[i] = DecodeFixed64(file_value.data() + 9 + 16 * i);
-  }
-  uint64_t lba_count =
-      DecodeFixed64(file_value.data() + 1 + 16 * meta.LN.lba_regions);
-  uint8_t level =
-      DecodeFixed8(file_value.data() + 9 + 16 * meta.LN.lba_regions);
-  meta.lba_count = lba_count;
-  Iterator* iterator = zns->NewIterator(level, std::move(meta), cmp);
-  return iterator;
-}
-
-void ZnsVersion::AddIterators(const ReadOptions& options,
-                              std::vector<Iterator*>* iters) {
-  // Merge all level zero files together since they may overlap
-  for (size_t i = 0; i < ss_[0].size(); i++) {
-    iters->push_back(vset_->znssstable_->NewIterator(
-        0, *ss_[0][i], vset_->icmp_.user_comparator()));
-  }
-
-  // For levels > 0, we can use a concatenating iterator that sequentially
-  // walks through the non-overlapping files in the level, opening them
-  // lazily.
-  for (int level = 1; level < ZnsConfig::level_count; level++) {
-    if (!ss_[level].empty()) {
-      iters->push_back(
-          new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),
-                                            &ss_[level], level),
-                         &GetLNIterator, vset_->znssstable_,
-                         vset_->icmp_.user_comparator(), nullptr));
-    }
-  }
+  return reinterpret_cast<ZNSSSTableManager*>(arg)->GetLNIterator(file_value,
+                                                                  cmp);
 }
 
 void ZnsVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
@@ -181,28 +164,53 @@ void ZnsVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
   const Comparator* user_cmp = vset_->icmp_.user_comparator();
   for (size_t i = 0; i < ss_[level].size();) {
     SSZoneMetaData* m = ss_[level][i++];
-    const Slice file_start = m->smallest.user_key();
-    const Slice file_limit = m->largest.user_key();
-    if (begin != nullptr && user_cmp->Compare(file_limit, user_begin) < 0) {
-      // "f" is completely before specified range; skip it
-    } else if (end != nullptr && user_cmp->Compare(file_start, user_end) > 0) {
-      // "f" is completely after specified range; skip it
+    const Slice sstable_start = m->smallest.user_key();
+    const Slice sstable_limit = m->largest.user_key();
+    if (begin != nullptr && user_cmp->Compare(sstable_limit, user_begin) < 0) {
+      // "m" is completely before specified range; skip it
+    } else if (end != nullptr &&
+               user_cmp->Compare(sstable_start, user_end) > 0) {
+      // "m" is completely after specified range; skip it
     } else {
       inputs->push_back(m);
       if (level == 0) {
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
-        if (begin != nullptr && user_cmp->Compare(file_start, user_begin) < 0) {
-          user_begin = file_start;
+        if (begin != nullptr &&
+            user_cmp->Compare(sstable_start, user_begin) < 0) {
+          user_begin = sstable_start;
           inputs->clear();
           i = 0;
         } else if (end != nullptr &&
-                   user_cmp->Compare(file_limit, user_end) > 0) {
-          user_end = file_limit;
+                   user_cmp->Compare(sstable_limit, user_end) > 0) {
+          user_end = sstable_limit;
           inputs->clear();
           i = 0;
         }
       }
+    }
+  }
+}
+
+// FIXME: Do not use this function! It is broken and will not be maintained
+void ZnsVersion::AddIterators(const ReadOptions& options,
+                              std::vector<Iterator*>* iters) {
+  // Merge all level zero files together since they may overlap
+  for (size_t i = 0; i < ss_[0].size(); i++) {
+    iters->push_back(vset_->znssstable_->NewIterator(
+        0, *ss_[0][i], vset_->icmp_.user_comparator()));
+  }
+
+  // For levels > 0, we can use a concatenating iterator that sequentially
+  // walks through the non-overlapping files in the level, opening them
+  // lazily.
+  for (int level = 1; level < ZnsConfig::level_count; level++) {
+    if (!ss_[level].empty()) {
+      iters->push_back(
+          new LNIterator(new LNZoneIterator(vset_->icmp_.user_comparator(),
+                                            &ss_[level], level),
+                         &GetLNIterator, vset_->znssstable_,
+                         vset_->icmp_.user_comparator(), nullptr));
     }
   }
 }

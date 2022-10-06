@@ -3,12 +3,16 @@
 #include "db/write_batch_internal.h"
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/io/szd_port.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
 #include "rocksdb/write_batch.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+
+// TODO: This file requires a refactor, test and general cleanup.
+// There are errors/possible corruptions in this code.
 
 namespace ROCKSDB_NAMESPACE {
 static void InitTypeCrc(
@@ -132,10 +136,12 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
 #endif
             )))
            .ok()) {
+    TROPODB_ERROR("Error: Commit: Failed resizing buffer\n");
     return s;
   }
   char* fragment;
   if (!(s = FromStatus(write_buffer_.GetBuffer((void**)&fragment))).ok()) {
+    TROPODB_ERROR("Error: Commit: Failed getting buffer\n");
     return s;
   }
 
@@ -191,7 +197,7 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
       *lbas += lbas_iter;
     }
     if (!s.ok()) {
-      printf("Fatal append error\n");
+      TROPODB_ERROR("Error: Commit: Fatal append error\n");
       return s;
     }
 #endif
@@ -200,23 +206,28 @@ Status ZnsCommitter::Commit(const Slice& data, uint64_t* lbas) {
     begin = false;
   } while (s.ok() && left > 0);
 #ifdef DIRECT_COMMIT
-  // printf("SIZE %lu \n", data.size());
   s = FromStatus(
       log_->Append(write_buffer_, 0, size_needed, &lbas_iter, false));
   if (lbas != nullptr) {
     *lbas += lbas_iter;
   }
+  if (!s.ok()) {
+    TROPODB_ERROR("Error: Commit: Fatal append error\n");
+  }
 #endif
 
   if (!keep_buffer_) {
     s = FromStatus(write_buffer_.FreeBuffer());
+    if (!s.ok()) {
+      TROPODB_ERROR("Error: Commit: Failed freeing buffer\n");
+    }
   }
   return s;
-}  // namespace ROCKSDB_NAMESPACE
+}
 
 Status ZnsCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
   if (!SpaceEnough(data)) {
-    printf("No space left\n");
+    TROPODB_ERROR("ERROR: Committer: No space left for Committer\n");
     return Status::IOError("No space left");
   }
   return Commit(data, lbas);
@@ -234,6 +245,7 @@ Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
   reader->scratch = ZnsConfig::deadbeef;
   if (!FromStatus(read_buffer_[reader->reader_nr]->ReallocBuffer(lba_size_))
            .ok()) {
+    TROPODB_ERROR("Error: Commit: Buffer memory limit\n");
     return Status::MemoryLimit();
   }
 
@@ -243,7 +255,7 @@ Status ZnsCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
 bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
   // buffering issue
   if (read_buffer_[reader.reader_nr]->GetBufferSize() == 0) {
-    printf("FATAL, be sure to first get a commit\n");
+    TROPODB_ERROR("ERROR: Commit: try to seek an undefined commit\n");
     return false;
   }
   if (reader.commit_ptr >= reader.commit_end) {
@@ -262,7 +274,6 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
     // first read header (prevents reading too much)
     log_->Read(reader.commit_ptr, *(&read_buffer_[reader.reader_nr]), 0,
                lba_size_, true, reader.reader_nr);
-    // printf("Reading with reader %u \n", reader.reader_nr);
     // parse header
     const char* header;
     read_buffer_[reader.reader_nr]->GetBuffer((void**)&header);
@@ -291,8 +302,8 @@ bool ZnsCommitter::SeekCommitReader(ZnsCommitReader& reader, Slice* record) {
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
-               reader.commit_end);
+        TROPODB_ERROR("ERROR: Seek commit: Corrupt crc %u %u %lu %lu\n", length,
+                      d, reader.commit_ptr, reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
     }
@@ -381,14 +392,13 @@ bool ZnsCommitter::SeekCommitReaderString(ZnsCommitReaderString& reader,
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        printf("Corrupt crc %u %u %lu %lu\n", length, d, reader.commit_ptr,
-               reader.commit_end);
+        TROPODB_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
+                      reader.commit_ptr, reader.commit_end);
         type = ZnsRecordType::kInvalid;
       }
     }
     reader.commit_ptr +=
         ((length + kZnsHeaderSize + lba_size_ - 1) / lba_size_) * lba_size_;
-    // printf("Commit ptr %lu %lu \n", reader.commit_ptr, reader.commit_end);
     switch (type) {
       case ZnsRecordType::kFullType:
         reader.scratch.assign(header + kZnsHeaderSize, length);

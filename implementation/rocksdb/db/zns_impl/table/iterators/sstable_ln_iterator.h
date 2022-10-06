@@ -26,6 +26,7 @@ class LNZoneIterator : public Iterator {
   LNZoneIterator(const Comparator* cmp,
                  const std::vector<SSZoneMetaData*>* slist,
                  const uint8_t level);
+  static std::pair<SSZoneMetaData, uint8_t> DecodeLNIterator(const Slice& file_value);
   ~LNZoneIterator();
   bool Valid() const override { return index_ < slist_->size(); }
   Slice key() const override {

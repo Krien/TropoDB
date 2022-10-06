@@ -27,13 +27,15 @@ class ZnsVersionEdit {
  public:
   ZnsVersionEdit();
   ~ZnsVersionEdit() = default;
-
   void Clear();
+
+  // SSTables
   void AddSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   void RemoveSSDefinition(const uint8_t level, const SSZoneMetaData& meta);
   void RemoveSSDefinitionOnlyMeta(const uint8_t level,
                                   const SSZoneMetaData& meta);
-  // Used for Manifest logic
+
+  // Used for persistency logic
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
 

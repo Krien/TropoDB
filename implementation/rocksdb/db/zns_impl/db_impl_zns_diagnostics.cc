@@ -6,7 +6,6 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
-#include <iostream>
 #include <numeric>
 #include <set>
 #include <string>
@@ -14,40 +13,44 @@
 
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/db_impl_zns.h"
-#include "db/zns_impl/diagnostics.h"
+#include "db/zns_impl/utils/tropodb_diagnostics.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 static void PrintPerfCounterHeader() {
+  std::ostringstream out;
   std::string table_line(113, '-');
-  std::cout << table_line << "\n";
-  std::cout << std::left << std::setw(20) << "| name" << std::setw(15)
-            << "| total (ops)" << std::setw(15) << "| sum (micros)"
-            << std::setw(15) << "| min (micros)" << std::setw(15)
-            << "| max (micros)" << std::setw(15) << "| avg (micros)"
-            << std::setw(15) << "| StdDev (micros)"
-            << "|\n";
-  std::cout << table_line << "\n";
+  out << table_line << "\n";
+  out << std::left << std::setw(20) << "| name" << std::setw(15)
+      << "| total (ops)" << std::setw(15) << "| sum (micros)" << std::setw(15)
+      << "| min (micros)" << std::setw(15) << "| max (micros)" << std::setw(15)
+      << "| avg (micros)" << std::setw(15) << "| StdDev (micros)"
+      << "|\n";
+  out << table_line << "\n";
+  TROPODB_PERF("%s", out.str().data());
 }
 
 static void PrintPerfCounterRow(std::string name,
                                 const TimingCounter& counter) {
+  std::ostringstream out;
   name = "| " + name;
-  std::cout << std::left << std::setw(20) << name << std::fixed
-            << std::setprecision(0) << std::left << "|" << std::right
-            << std::setw(14) << counter.GetNum() << std::left << "|"
-            << std::right << std::setw(14) << counter.GetSum() << std::left
-            << "|" << std::right << std::setw(14) << counter.GetMin()
-            << std::left << "|" << std::right << std::setw(14)
-            << counter.GetMax() << std::fixed << std::setprecision(2)
-            << std::left << "|" << std::right << std::setw(14)
-            << counter.GetAvg() << std::left << "|" << std::right
-            << std::setw(14) << counter.GetStandardDeviation() << "  |\n";
+  out << std::left << std::setw(20) << name << std::fixed
+      << std::setprecision(0) << std::left << "|" << std::right << std::setw(14)
+      << counter.GetNum() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetSum() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetMin() << std::left << "|" << std::right << std::setw(14)
+      << counter.GetMax() << std::fixed << std::setprecision(2) << std::left
+      << "|" << std::right << std::setw(14) << counter.GetAvg() << std::left
+      << "|" << std::right << std::setw(14) << counter.GetStandardDeviation()
+      << "  |\n";
+  TROPODB_PERF("%s", out.str().data());
 }
 
 static void PrintPerfCounterTail() {
+  std::ostringstream out;
   std::string table_line(113, '-');
-  std::cout << table_line << "\n";
+  out << table_line << "\n";
+  TROPODB_PERF("%s", out.str().data());
 }
 
 static void PrintCounterTable(
@@ -60,21 +63,23 @@ static void PrintCounterTable(
 }
 
 void DBImplZNS::PrintCompactionStats() {
-  std::cout << "==== Background operation ====\n";
-  std::cout << "Flush count:\n\t" << flush_total_counter_.GetNum() << "\n";
-  std::cout << "Compaction count:\n";
+  TROPODB_PERF("==== Background operation ====\n");
+  std::ostringstream out;
+  out << "Flush count:\n\t" << flush_total_counter_.GetNum() << "\n";
+  out << "Compaction count:\n";
   for (uint8_t level = 0; level < ZnsConfig::level_count - 1; level++) {
-    std::cout << "\tCompaction to " << (level + 1) << ":" << compactions_[level]
-              << "\n";
+    out << "\tCompaction to " << (level + 1) << ":" << compactions_[level]
+        << "\n";
   }
+  TROPODB_PERF("%s", out.str().data());
 
-  std::cout << "Flushes latency breakdown:\n";
+  TROPODB_PERF("Flushes latency breakdown:\n");
   PrintCounterTable({{"Total", flush_total_counter_},
                      {"Writing L0", flush_flush_memtable_counter_},
                      {"Updating Version", flush_update_version_counter_},
                      {"Resetting WALs", flush_reset_wal_counter_}});
 
-  std::cout << "L0 compaction latency breakdown:\n";
+  TROPODB_PERF("L0 compaction latency breakdown:\n");
   PrintCounterTable({{"Total", compaction_compaction_L0_total_},
                      {"Picking SSTables", compaction_pick_compaction_},
                      {"Writing LN", compaction_compaction_},
@@ -82,7 +87,7 @@ void DBImplZNS::PrintCompactionStats() {
                      {"Updating version", compaction_version_edit_},
                      {"Resetting L0", compaction_reset_L0_counter_}});
 
-  std::cout << "LN compaction latency breakdown:\n";
+  TROPODB_PERF("LN compaction latency breakdown:\n");
   PrintCounterTable({{"Total", compaction_compaction_LN_total_},
                      {"Picking SSTables", compaction_pick_compaction_LN_},
                      {"Writing LN", compaction_compaction_LN_},
@@ -92,14 +97,16 @@ void DBImplZNS::PrintCompactionStats() {
 }
 
 void DBImplZNS::PrintSSTableStats() {
-  std::cout << "====  SSTable layout ====\n";
-  std::cout << versions_->DebugString();
+  TROPODB_PERF("====  SSTable layout ====\n");
+  TROPODB_PERF("%s", versions_->DebugString().data());
 }
 
 void DBImplZNS::PrintWALStats() {
-  std::cout << "====  WAL stats ====\n";
+  TROPODB_PERF("====  WAL stats ====\n");
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
-    std::cout << "====  WAL manager " << i << " ====\n";
+    std::ostringstream out;
+    out << "====  WAL manager " << i << " ====\n";
+    TROPODB_PERF("%s", out.str().data());
     std::vector<std::pair<std::string, const TimingCounter>> wal_stats =
         wal_man_[i]->GetAdditionalWALStatistics();
     std::vector<std::pair<std::string, const TimingCounter&>> wal_stats_ref;
@@ -111,12 +118,13 @@ void DBImplZNS::PrintWALStats() {
 }
 
 static void PrintIOColumn(const ZNSDiagnostics& diag) {
-  std::cout << std::left << std::setw(10) << diag.name_ << std::right
-            << std::setw(15) << diag.append_operations_counter_ << std::setw(25)
-            << diag.bytes_written_ << std::setw(15)
-            << diag.read_operations_counter_ << std::setw(25)
-            << diag.bytes_read_ << std::setw(16) << diag.zones_erased_counter_
-            << "\n";
+  std::ostringstream out;
+  out << std::left << std::setw(10) << diag.name_ << std::right << std::setw(15)
+      << diag.append_operations_counter_ << std::setw(25) << diag.bytes_written_
+      << std::setw(15) << diag.read_operations_counter_ << std::setw(25)
+      << diag.bytes_read_ << std::setw(16) << diag.zones_erased_counter_
+      << "\n";
+  TROPODB_PERF("%s", out.str().data());
 }
 
 static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
@@ -131,20 +139,21 @@ static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
 }
 
 void DBImplZNS::PrintIODistrStats() {
-  std::cout << "==== raw IO metrics ==== \n";
-  std::cout << std::left << std::setw(10) << "Metric " << std::right
-            << std::setw(15) << "Append (ops)" << std::setw(25)
-            << "Written (Bytes)" << std::setw(15) << "Read (ops)"
-            << std::setw(25) << "Read (Bytes)" << std::setw(16)
-            << "Reset (zones)"
-            << "\n";
-  std::cout << std::setfill('-') << std::setw(107) << "\n" << std::setfill(' ');
+  TROPODB_PERF("==== raw IO metrics ==== \n");
+  std::ostringstream out;
+  out << std::left << std::setw(10) << "Metric " << std::right << std::setw(15)
+      << "Append (ops)" << std::setw(25) << "Written (Bytes)" << std::setw(15)
+      << "Read (ops)" << std::setw(25) << "Read (Bytes)" << std::setw(16)
+      << "Reset (zones)"
+      << "\n";
+  out << std::setfill('-') << std::setw(107) << "\n" << std::setfill(' ');
   struct ZNSDiagnostics totaldiag = {.name_ = "Total",
                                      .bytes_written_ = 0,
                                      .append_operations_counter_ = 0,
                                      .bytes_read_ = 0,
                                      .read_operations_counter_ = 0,
                                      .zones_erased_counter_ = 0};
+  TROPODB_PERF("%s", out.str().data());
   std::ostringstream hotzones_reset;
   std::ostringstream hotzones_append;
   hotzones_reset << "[";
@@ -187,12 +196,14 @@ void DBImplZNS::PrintIODistrStats() {
     }
   }
   PrintIOColumn(totaldiag);
-  std::cout << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
+  out.clear();
+  out << std::setfill('_') << std::setw(107) << "\n" << std::setfill(' ');
   if (print_io_heat_stats_) {
-    std::cout << "=== Hot zones as a raw list === \n";
-    std::cout << hotzones_reset.str() << "]\n";
-    std::cout << hotzones_append.str() << "]\n";
+    out << "=== Hot zones as a raw list === \n";
+    out << hotzones_reset.str() << "]\n";
+    out << hotzones_append.str() << "]\n";
   }
+  TROPODB_PERF("%s", out.str().data());
 }
 
 void DBImplZNS::PrintStats() {

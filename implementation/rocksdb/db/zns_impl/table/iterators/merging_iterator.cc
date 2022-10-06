@@ -5,6 +5,7 @@
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 
 #include "db/zns_impl/table/iterators/iterator_wrapper.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/iterator.h"
 
@@ -179,7 +180,7 @@ void MergingIterator::FindLargest() {
   }
   current_ = largest;
 }
-}  // namespace
+}  // anonymous namespace
 
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
                              int n) {

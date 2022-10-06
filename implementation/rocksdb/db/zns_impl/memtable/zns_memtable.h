@@ -23,7 +23,7 @@ class ZNSMemTable : public RefCounter {
            Status* s, SequenceNumber* seq = nullptr);
   bool ShouldScheduleFlush();
   InternalIterator* NewIterator();
-  // not thread safe, I think.
+  // not thread safe
   inline uint64_t GetInternalSize() {
     return this->mem_->GetMemTable()->get_data_size();
   }

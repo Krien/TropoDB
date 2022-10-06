@@ -75,6 +75,7 @@ class ZnsCommitter {
   bool SeekCommitReaderString(ZnsCommitReaderString& reader, Slice* record);
   bool CloseCommitString(ZnsCommitReaderString& reader);
 
+  //TODO: Remove?
   // Clears buffer if it is filled.
   void ClearBuffer() {
     // buffer_.FreeBuffer();

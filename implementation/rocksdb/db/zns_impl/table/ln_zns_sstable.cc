@@ -7,6 +7,7 @@
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_builder.h"
 #include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -52,8 +53,9 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
                                   uint8_t writer) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
-    printf("out of space LN %lu %lu \n", content.size() / lba_size_,
-           log_.SpaceAvailable() / lba_size_);
+    TROPODB_ERROR("ERROR: LN SSTable: out of space LN %lu %lu \n",
+                  content.size() / lba_size_,
+                  log_.SpaceAvailable() / lba_size_);
     return Status::IOError("Not enough space available for LN");
   }
 
@@ -61,7 +63,7 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
   if (!FromStatus(
            log_.Append(content.data(), content.size(), ptrs, false, writer))
            .ok()) {
-    printf("Error appending to fragmented log\n");
+    TROPODB_ERROR("ERROR: LN SSTable: Failed appending to fragmented log\n");
     return Status::IOError("Error during appending\n");
   }
   meta->lba_count = 0;
@@ -75,9 +77,6 @@ Status LNZnsSSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta,
     meta->LN.lba_regions++;
   }
   // meta->lba_count += (content.size() + lba_size_ - 1) / lba_size_;
-  // printf("Added %lu of %u regions of %lu lbas, for size of %lu \n",
-  //        meta->number, meta->LN.lba_regions, meta->lba_count,
-  //        content.size());
   return Status::OK();
 }
 
@@ -106,8 +105,6 @@ uint8_t LNZnsSSTable::request_read_queue() {
     }
   }
   read_queue_[picked_reader] += 1;
-  // printf("Claimed reader %u %u\n", picked_reader,
-  // read_queue_[picked_reader]);
   mutex_.Unlock();
   return picked_reader;
 }
@@ -117,7 +114,6 @@ void LNZnsSSTable::release_read_queue(uint8_t reader) {
   assert(reader < ZnsConfig::number_of_concurrent_LN_readers &&
          read_queue_[reader] != 0);
   read_queue_[reader] = 0;
-  // printf("Released reader %u %u\n", reader, read_queue_[reader]);
   cv_.SignalAll();
   mutex_.Unlock();
 }
@@ -133,6 +129,7 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     uint64_t from = meta.LN.lbas[i];
     uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
+      TROPODB_ERROR("ERROR: LN SSTable: Invalid metadata\n");
       return Status::Corruption("Invalid metadata");
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
@@ -141,13 +138,12 @@ Status LNZnsSSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   char* buffer = new char[meta.lba_count * lba_size_];
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
-  // printf("Reading LN %lu \n", meta.LN.lbas[0]);
   s = FromStatus(
       log_.Read(ptrs, buffer, meta.lba_count * lba_size_, true, readernr));
   release_read_queue(readernr);
   // mutex_.Unlock();
   if (!s.ok()) {
-    printf("Error reading LN table\n");
+    TROPODB_ERROR("ERROR: LN SSTable: Failed reading\n");
     delete[] buffer;
     return s;
   }
@@ -161,8 +157,8 @@ Status LNZnsSSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
     uint64_t from = meta.LN.lbas[i];
     uint64_t blocks = meta.LN.lba_region_sizes[i];
     if (from > max_zone_head_ || from < min_zone_head_) {
-      printf("LN delete out of range\n");
-      return Status::Corruption("Invalid metadata");
+      TROPODB_ERROR("ERROR: LN SSTable: LN delete out of range\n");
+      return Status::Corruption("LN delete out of range");
     }
     ptrs.push_back(std::make_pair(from / zone_cap_, blocks / zone_cap_));
   }
@@ -182,7 +178,8 @@ Iterator* LNZnsSSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0) {
-      printf("SIZE %lu COUNT %lu \n", size, count);
+      TROPODB_ERROR("ERROR: LN SSTable: Corrupt table SIZE %lu COUNT %lu \n",
+                    size, count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -197,13 +194,14 @@ Status LNZnsSSTable::Get(const InternalKeyComparator& icmp,
                          const SSZoneMetaData& meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
+    TROPODB_ERROR("ERROR: LN SSTable: Corrupt iterator\n");
     return Status::Corruption();
   }
   it->Seek(key_ptr);
   if (it->Valid()) {
     ParsedInternalKey parsed_key;
     if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
-      printf("corrupt key in cache\n");
+      TROPODB_ERROR("ERROR: LN SSTable: Corrupt key found\n");
     }
     if (parsed_key.type == kTypeDeletion) {
       *status = EntryStatus::deleted;

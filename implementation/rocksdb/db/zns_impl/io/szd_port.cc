@@ -4,27 +4,28 @@
 
 namespace ROCKSDB_NAMESPACE {
 Status FromStatus(SZD::SZDStatus s) {
-  if (s == SZD::SZDStatus::Success) {
-    return Status::OK();
+  switch (s) {
+    case SZD::SZDStatus::Success:
+      return Status::OK();
+    case SZD::SZDStatus::InvalidArguments:
+      return Status::InvalidArgument();
+    case SZD::SZDStatus::IOError:
+      return Status::IOError();
+    default:
+      return Status::Corruption("Unknown error");
   }
-  if (s == SZD::SZDStatus::InvalidArguments) {
-    return Status::InvalidArgument();
-  }
-  if (s == SZD::SZDStatus::IOError) {
-    return Status::IOError();
-  }
-  return Status::Corruption("Unknown error");
 }
 
 Status FromStatusMsg(SZD::SZDStatusDetailed s) {
-  if (s.sc == SZD::SZDStatus::Success) {
-    return Status::OK();
-  } else if (s.sc == SZD::SZDStatus::InvalidArguments) {
-    return Status::InvalidArgument(s.msg);
-  } else if (s.sc == SZD::SZDStatus::IOError) {
-    return Status::IOError(s.msg);
-  } else {
-    return Status::Corruption(s.msg);
+  switch (s.sc) {
+    case SZD::SZDStatus::Success:
+      return Status::OK();
+    case SZD::SZDStatus::InvalidArguments:
+      return Status::InvalidArgument(s.msg);
+    case SZD::SZDStatus::IOError:
+      return Status::IOError(s.msg);
+    default:
+      return Status::Corruption(s.msg);
   }
 }
 

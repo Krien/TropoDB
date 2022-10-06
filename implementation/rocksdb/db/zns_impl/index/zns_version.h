@@ -34,7 +34,7 @@ enum class ZnsVersionTag : uint32_t {
   kCompactPointer = 5,
   kDeletedSSTable = 6,
   kNewSSTable = 7,
-
+  /* what = 8,*/
   kPrevLogNumber = 9,
   kDeletedRange = 0xa,
   kFragmentedData = 0xb
@@ -48,22 +48,24 @@ class ZnsVersion : public RefCounter {
   void Clear();
   Status Get(const ReadOptions& options, const LookupKey& key,
              std::string* value);
-
   void GetOverlappingInputs(uint8_t level, const InternalKey* begin,
                             const InternalKey* end,
                             std::vector<SSZoneMetaData*>* inputs);
   static Iterator* GetLNIterator(void* arg, const Slice& file_value,
                                  const Comparator* cmp);
-  void AddIterators(const ReadOptions& options, std::vector<Iterator*>* iters);
   inline uint8_t CompactionLevel() const { return compaction_level_; }
 
  private:
   friend class ZnsVersionSet;
   friend class ZnsCompaction;
 
+  // Managed by friend classes (ZnsVersionSet)
   ZnsVersion();
   explicit ZnsVersion(ZnsVersionSet* vset);
   ~ZnsVersion();
+
+  // FIXME: Do not use this function! It is broken and will not be maintained
+  void AddIterators(const ReadOptions& options, std::vector<Iterator*>* iters);
 
   // Version specific
   std::array<std::vector<SSZoneMetaData*>, ZnsConfig::level_count> ss_;

@@ -2,6 +2,7 @@
 
 #include "db/zns_impl/config.h"
 #include "db/zns_impl/table/ln_zns_sstable.h"
+#include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -28,6 +29,7 @@ SSTableBuilder::~SSTableBuilder() {}
 
 uint64_t SSTableBuilder::EstimateSizeImpact(const Slice& key,
                                             const Slice& value) const {
+  // TODO: this is hardcoded, not maintainable.
   return key.size() + value.size() + 5 * sizeof(uint32_t);
 }
 

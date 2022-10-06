@@ -4,7 +4,7 @@
 #define ZNS_WAL_H
 
 #include "db/zns_impl/config.h"
-#include "db/zns_impl/diagnostics.h"
+#include "db/zns_impl/utils/tropodb_diagnostics.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
