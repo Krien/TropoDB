@@ -8,7 +8,7 @@
 
 #include "db/dbformat.h"
 #include "db/lookup_key.h"
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/zns_manifest.h"
 #include "db/zns_impl/ref_counter.h"

@@ -1131,11 +1131,11 @@ set(TROPODB_SOURCES
   db/zns_impl/index/zns_version_set_builder.cc
   db/zns_impl/index/zns_version_set.cc
   db/zns_impl/index/zns_compaction.cc
-  db/zns_impl/db_impl_zns.cc
-  db/zns_impl/db_impl_zns_client.cc
-  db/zns_impl/db_impl_zns_background.cc
-  db/zns_impl/db_impl_zns_diagnostics.cc
-  db/zns_impl/db_impl_zns_not_supported.cc
+  db/zns_impl/impl/tropodb_impl.cc
+  db/zns_impl/impl/tropodb_impl_client.cc
+  db/zns_impl/impl/tropodb_impl_background.cc
+  db/zns_impl/impl/tropodb_impl_diagnostics.cc
+  db/zns_impl/impl/tropodb_impl_not_supported.cc
   db/zns_impl/utils/tropodb_diagnostics.cc
   db/zns_impl/utils/tropodb_logger.cc
 )

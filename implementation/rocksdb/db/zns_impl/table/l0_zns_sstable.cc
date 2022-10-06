@@ -1,6 +1,6 @@
 #include "db/zns_impl/table/l0_zns_sstable.h"
 
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"

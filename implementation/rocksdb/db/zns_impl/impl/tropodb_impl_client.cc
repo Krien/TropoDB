@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "db/zns_impl/db_impl_zns.h"
+#include "db/zns_impl/tropodb_impl.h"
 
 namespace ROCKSDB_NAMESPACE {
 

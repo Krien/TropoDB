@@ -3,7 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/zns_impl/index/zns_version.h"
 
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"

@@ -1,4 +1,4 @@
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_set.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"

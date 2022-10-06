@@ -5,7 +5,7 @@
 
 #include <numeric>
 
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/index/zns_version.h"
 #include "db/zns_impl/index/zns_version_edit.h"
 #include "db/zns_impl/index/zns_version_set.h"

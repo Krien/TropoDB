@@ -3,7 +3,7 @@
 #ifndef L0_ZNS_SSTABLE_H
 #define L0_ZNS_SSTABLE_H
 
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/memtable/zns_memtable.h"
 #include "db/zns_impl/persistence/zns_committer.h"
 #include "db/zns_impl/table/zns_sstable.h"

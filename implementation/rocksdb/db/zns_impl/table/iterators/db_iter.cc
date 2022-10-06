@@ -5,7 +5,7 @@
 #include "db/zns_impl/table/iterators/db_iter.h"
 
 #include "db/dbformat.h"
-#include "db/zns_impl/db_impl_zns.h"
+#include "db/zns_impl/tropodb_impl.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/env.h"

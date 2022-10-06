@@ -1,7 +1,7 @@
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
 
 #include "db/dbformat.h"
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/table/zns_sstable.h"
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "db/zns_impl/table/zns_zonemetadata.h"

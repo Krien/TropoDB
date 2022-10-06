@@ -4,10 +4,10 @@ Following the tests as described below should lead to similar results as visible
 
 # Configs
 The configs directory contains header files that contain valid configurations for TropoDB.
-These can be copied to `TropoDB/implementation/rocksdb/db/zns_impl/config.h` to get the configuration working within TropoDB.
+These can be copied to `TropoDB/implementation/rocksdb/db/zns_impl/tropodb_config.h` to get the configuration working within TropoDB.
 Then after recompiling the project, it should run with the settings in the config, which should allow for reproducible tests.
 If at any point the orignal config needs to be returned, copy `TropoDB/implementation/rocksdb/db/zns_impl/default_config.h` to
-`TropoDB/implementation/rocksdb/db/zns_impl/config.h`.
+`TropoDB/implementation/rocksdb/db/zns_impl/tropodb_config.h`.
 
 # Benchmark.sh
 This is the main benchmarking script used to benchmark TropoDB and RocksDB with various file systems.

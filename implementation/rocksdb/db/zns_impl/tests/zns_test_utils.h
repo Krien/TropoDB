@@ -1,6 +1,6 @@
 #include "db/zns_impl/table/zns_sstable_manager.h"
 #include "test_util/testharness.h"
-#include "db/zns_impl/config.h"
+#include "db/zns_impl/tropodb_config.h"
 
 namespace ROCKSDB_NAMESPACE {
 struct Device {
