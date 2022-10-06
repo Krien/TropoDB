@@ -2,9 +2,9 @@
 
 #include "db/dbformat.h"
 #include "db/zns_impl/tropodb_config.h"
-#include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable_manager.h"
-#include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable_manager.h"
+#include "db/zns_impl/table/tropodb_zonemetadata.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 

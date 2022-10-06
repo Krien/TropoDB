@@ -1,6 +1,6 @@
-#include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/table/tropodb_sstable_reader.h"
 
-#include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
 
 namespace ROCKSDB_NAMESPACE {
 namespace ZNSEncoding {

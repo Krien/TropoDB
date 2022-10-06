@@ -1,6 +1,6 @@
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
 
-#include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/table/tropodb_sstable_reader.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 

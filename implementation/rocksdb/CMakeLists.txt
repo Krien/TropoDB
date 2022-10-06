@@ -1115,17 +1115,17 @@ set(TROPODB_SOURCES
   db/zns_impl/persistence/tropodb_committer.cc
   db/zns_impl/persistence/tropodb_wal.cc
   db/zns_impl/persistence/tropodb_manifest.cc
-  db/zns_impl/table/zns_sstable_builder.cc
-  db/zns_impl/table/zns_sstable_reader.cc
-  db/zns_impl/table/l0_zns_sstable.cc
-  db/zns_impl/table/ln_zns_sstable.cc
-  db/zns_impl/table/zns_table_cache.cc
+  db/zns_impl/table/tropodb_sstable_builder.cc
+  db/zns_impl/table/tropodb_sstable_reader.cc
+  db/zns_impl/table/tropodb_l0_sstable.cc
+  db/zns_impl/table/tropodb_ln_sstable.cc
+  db/zns_impl/table/tropodb_table_cache.cc
+  db/zns_impl/table/tropodb_sstable_manager.cc
   db/zns_impl/table/iterators/sstable_iterator.cc
   db/zns_impl/table/iterators/sstable_iterator_compressed.cc
   db/zns_impl/table/iterators/sstable_ln_iterator.cc
   db/zns_impl/table/iterators/merging_iterator.cc
   db/zns_impl/table/iterators/db_iter.cc
-  db/zns_impl/table/zns_sstable_manager.cc
   db/zns_impl/index/tropodb_version.cc
   db/zns_impl/index/tropodb_version_edit.cc
   db/zns_impl/index/tropodb_version_set_builder.cc

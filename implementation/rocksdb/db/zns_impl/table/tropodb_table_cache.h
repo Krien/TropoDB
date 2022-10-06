@@ -12,8 +12,8 @@
 #include <memory>
 
 #include "db/dbformat.h"
-#include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable_manager.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/status.h"

@@ -5,9 +5,9 @@
 
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/memtable/tropodb_memtable.h"
-#include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable_builder.h"
-#include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable_builder.h"
+#include "db/zns_impl/table/tropodb_zonemetadata.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"

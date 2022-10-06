@@ -1,12 +1,12 @@
-#include "db/zns_impl/table/l0_zns_sstable.h"
+#include "db/zns_impl/table/tropodb_l0_sstable.h"
 
 #include "db/zns_impl/tropodb_config.h"
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/table/iterators/sstable_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_iterator_compressed.h"
-#include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable_builder.h"
-#include "db/zns_impl/table/zns_sstable_reader.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable_builder.h"
+#include "db/zns_impl/table/tropodb_sstable_reader.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {

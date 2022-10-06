@@ -3,7 +3,7 @@
 #ifndef ZNS_SSTABLE_READER_H
 #define ZNS_SSTABLE_READER_H
 
-#include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {

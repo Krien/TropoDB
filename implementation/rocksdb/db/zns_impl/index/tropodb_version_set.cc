@@ -9,7 +9,7 @@
 #include "db/zns_impl/index/tropodb_version_edit.h"
 #include "db/zns_impl/table/iterators/merging_iterator.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
-#include "db/zns_impl/table/zns_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"

@@ -4,9 +4,9 @@
 //
 // Thread-safe (provides internal synchronization)
 
-#include "db/zns_impl/table/zns_table_cache.h"
+#include "db/zns_impl/table/tropodb_table_cache.h"
 
-#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/tropodb_sstable_manager.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "util/coding.h"
 

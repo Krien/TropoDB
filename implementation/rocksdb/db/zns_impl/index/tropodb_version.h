@@ -12,8 +12,8 @@
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/persistence/tropodb_manifest.h"
 #include "db/zns_impl/ref_counter.h"
-#include "db/zns_impl/table/zns_sstable_manager.h"
-#include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/table/tropodb_sstable_manager.h"
+#include "db/zns_impl/table/tropodb_zonemetadata.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 

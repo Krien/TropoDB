@@ -1,4 +1,4 @@
-#include "db/zns_impl/table/zns_sstable_manager.h"
+#include "db/zns_impl/table/tropodb_sstable_manager.h"
 
 #include <iomanip>
 #include <iostream>
@@ -7,10 +7,10 @@
 #include "db/zns_impl/io/szd_port.h"
 #include "db/zns_impl/memtable/tropodb_memtable.h"
 #include "db/zns_impl/table/iterators/sstable_ln_iterator.h"
-#include "db/zns_impl/table/l0_zns_sstable.h"
-#include "db/zns_impl/table/ln_zns_sstable.h"
-#include "db/zns_impl/table/zns_sstable.h"
-#include "db/zns_impl/table/zns_zonemetadata.h"
+#include "db/zns_impl/table/tropodb_l0_sstable.h"
+#include "db/zns_impl/table/tropodb_ln_sstable.h"
+#include "db/zns_impl/table/tropodb_sstable.h"
+#include "db/zns_impl/table/tropodb_zonemetadata.h"
 #include "db/zns_impl/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
