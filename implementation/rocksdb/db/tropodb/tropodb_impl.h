@@ -67,17 +67,17 @@ class WriteBufferManager;
 class ZnsTableCache;
 struct FlushData;
 
-class DBImplZNS : public DB {
+class TropoDBImpl : public DB {
  public:
-  DBImplZNS(const DBOptions& options, const std::string& dbname,
+  TropoDBImpl(const DBOptions& options, const std::string& dbname,
             const bool seq_per_batch = false, const bool batch_per_txn = true,
             bool read_only = false);
 
-  DBImplZNS(const DBImplZNS&) = delete;
-  DBImplZNS& operator=(const DBImplZNS&) = delete;
+  TropoDBImpl(const TropoDBImpl&) = delete;
+  TropoDBImpl& operator=(const TropoDBImpl&) = delete;
 
   void PrintStats();
-  ~DBImplZNS() override;
+  ~TropoDBImpl() override;
 
   static Status ValidateOptions(const DBOptions& db_options);
 
@@ -416,9 +416,9 @@ class DBImplZNS : public DB {
 };
 
 struct FlushData {
-  DBImplZNS* db_;
+  TropoDBImpl* db_;
   uint8_t parallel_number_;
-  FlushData(DBImplZNS* db, uint8_t parallel_number) : db_(db), parallel_number_(parallel_number){}
+  FlushData(TropoDBImpl* db, uint8_t parallel_number) : db_(db), parallel_number_(parallel_number){}
 };
 
 }  // namespace ROCKSDB_NAMESPACE

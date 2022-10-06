@@ -18,7 +18,7 @@ int main_test(int argc, char** argv) {
   rocksdb::Options options_;
   options_.create_if_missing = true;
   options_.compression = rocksdb::kNoCompression;
-  options_.use_zns_impl = true;
+  options_.use_tropodb_impl = true;
   rocksdb::DB* db_;
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
   std::vector<rocksdb::ColumnFamilyHandle*> handles;

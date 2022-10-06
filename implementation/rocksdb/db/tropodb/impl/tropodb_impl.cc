@@ -47,7 +47,7 @@ namespace ROCKSDB_NAMESPACE {
 // TODO: we do not use this? Remove?
 const int kNumNonTableCacheFiles = 10;
 
-DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
+TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
                      const bool seq_per_batch, const bool batch_per_txn,
                      bool read_only)
     : options_(options),
@@ -102,7 +102,7 @@ DBImplZNS::DBImplZNS(const DBOptions& options, const std::string& dbname,
                              ROCKSDB_NAMESPACE::Env::Priority::LOW);
 }
 
-DBImplZNS::~DBImplZNS() {
+TropoDBImpl::~TropoDBImpl() {
   TROPODB_INFO("INFO: Shutting down TropoDB\n");
   // Close all tasks
   {
@@ -150,18 +150,18 @@ DBImplZNS::~DBImplZNS() {
   TROPODB_INFO("INFO: Exiting\n");
 }
 
-Status DBImplZNS::ValidateOptions(const DBOptions& db_options) {
+Status TropoDBImpl::ValidateOptions(const DBOptions& db_options) {
   if (db_options.db_paths.size() > 1) {
     return Status::NotSupported("We do not support multiple db paths.");
   }
   // We do not support most other options, but rather we ignore them for now.
-  if (!db_options.use_zns_impl) {
+  if (!db_options.use_tropodb_impl) {
     return Status::NotSupported("ZNS must be enabled to use ZNS.");
   }
   return Status::OK();
 }
 
-Status DBImplZNS::OpenZNSDevice(const std::string dbname) {
+Status TropoDBImpl::OpenZNSDevice(const std::string dbname) {
   zns_device_ = new SZD::SZDDevice(dbname);
   Status s;
   s = FromStatus(zns_device_->Init());
@@ -181,7 +181,7 @@ Status DBImplZNS::OpenZNSDevice(const std::string dbname) {
   return Status::OK();
 }
 
-Status DBImplZNS::ResetZNSDevice() {
+Status TropoDBImpl::ResetZNSDevice() {
   Status s;
   channel_factory_->Ref();
   SZD::SZDChannel* channel;
@@ -200,7 +200,7 @@ Status DBImplZNS::ResetZNSDevice() {
   return s.ok() ? Status::OK() : Status::IOError("Error resetting device");
 }
 
-Status DBImplZNS::InitDB(const DBOptions& options,
+Status TropoDBImpl::InitDB(const DBOptions& options,
                          const size_t max_write_buffer_size) {
   assert(zns_device_ != nullptr);
   max_write_buffer_size_ = max_write_buffer_size;
@@ -290,7 +290,7 @@ Status DBImplZNS::InitDB(const DBOptions& options,
   return Status::OK();
 }
 
-void DBImplZNS::RecoverBackgroundFlow() {
+void TropoDBImpl::RecoverBackgroundFlow() {
   // Make WALs lively again
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     // We must force flush all WALs if there is not enough space.
@@ -317,7 +317,7 @@ void DBImplZNS::RecoverBackgroundFlow() {
   MaybeScheduleCompaction(false);
 }
 
-Status DBImplZNS::Recover() {
+Status TropoDBImpl::Recover() {
   TROPODB_INFO("INFO: recovering TropoDB\n");
   Status s;
 
@@ -352,7 +352,7 @@ Status DBImplZNS::Recover() {
   return s;
 }
 
-Status DBImplZNS::Open(
+Status TropoDBImpl::Open(
     const DBOptions& db_options, const std::string& name,
     const std::vector<ColumnFamilyDescriptor>& column_families,
     std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
@@ -374,7 +374,7 @@ Status DBImplZNS::Open(
   }
 
   // Open a SZD connection
-  DBImplZNS* impl = new DBImplZNS(db_options, name);
+  TropoDBImpl* impl = new TropoDBImpl(db_options, name);
   s = impl->OpenZNSDevice("TropoDB");
   if (!s.ok()) {
     return s;
@@ -399,7 +399,7 @@ Status DBImplZNS::Open(
   return s;
 }
 
-bool DBImplZNS::AnyFlushScheduled() {
+bool TropoDBImpl::AnyFlushScheduled() {
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     if (bg_flush_scheduled_[i]) {
       return true;
@@ -408,7 +408,7 @@ bool DBImplZNS::AnyFlushScheduled() {
   return false;
 }
 
-Status DBImplZNS::Close() {
+Status TropoDBImpl::Close() {
   // Wait till all jobs are done
   TROPODB_INFO("INFO: Closing: waiting for background jobs to finish\n");
   mutex_.Lock();
@@ -432,11 +432,11 @@ Status DBImplZNS::Close() {
   return Status::OK();
 }
 
-Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
+Status TropoDBImpl::DestroyDB(const std::string& dbname, const Options& options) {
   // Destroy "all files" from the DB. Since we do not use multitenancy, we
   // might as well reset the device.
   Status s;
-  DBImplZNS* impl = new DBImplZNS(options, dbname);
+  TropoDBImpl* impl = new TropoDBImpl(options, dbname);
   TROPODB_INFO("INFO: Attemtping to reset entire ZNS device\n");
   s = impl->OpenZNSDevice("TropoDB");
   if (!s.ok()) {
@@ -455,22 +455,22 @@ Status DBImplZNS::DestroyDB(const std::string& dbname, const Options& options) {
   return s;
 }
 
-int DBImplZNS::NumberLevels(ColumnFamilyHandle* column_family) {
+int TropoDBImpl::NumberLevels(ColumnFamilyHandle* column_family) {
   return ZnsConfig::level_count;
 }
 
-const std::string& DBImplZNS::GetName() const { return name_; }
+const std::string& TropoDBImpl::GetName() const { return name_; }
 
-Env* DBImplZNS::GetEnv() const { return env_; }
+Env* TropoDBImpl::GetEnv() const { return env_; }
 
-Options DBImplZNS::GetOptions(ColumnFamilyHandle* column_family) const {
+Options TropoDBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   Options options(options_, ColumnFamilyOptions());
   return options;
 }
 
-DBOptions DBImplZNS::GetDBOptions() const { return options_; };
+DBOptions TropoDBImpl::GetDBOptions() const { return options_; };
 
-SequenceNumber DBImplZNS::GetLatestSequenceNumber() const {
+SequenceNumber TropoDBImpl::GetLatestSequenceNumber() const {
   return versions_->LastSequence();
 }
 

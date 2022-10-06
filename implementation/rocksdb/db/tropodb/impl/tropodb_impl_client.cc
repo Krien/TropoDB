@@ -6,7 +6,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-struct DBImplZNS::Writer {
+struct TropoDBImpl::Writer {
   explicit Writer(port::Mutex* mu) : batch(nullptr), done(false), cv(mu) {}
   Status status;
   WriteBatch* batch;
@@ -16,20 +16,20 @@ struct DBImplZNS::Writer {
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
-Status DBImplZNS::Put(const WriteOptions& options, const Slice& key,
+Status TropoDBImpl::Put(const WriteOptions& options, const Slice& key,
                       const Slice& value) {
   WriteBatch batch;
   batch.Put(key, value);
   return Write(options, &batch);
 }
 
-Status DBImplZNS::Delete(const WriteOptions& opt, const Slice& key) {
+Status TropoDBImpl::Delete(const WriteOptions& opt, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);
   return Write(opt, &batch);
 }
 
-Status DBImplZNS::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
+Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
@@ -79,7 +79,7 @@ Status DBImplZNS::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       mem_[parallel_number] = new ZNSMemTable(options_, internal_comparator_,
                                               max_write_buffer_size_);
       mem_[parallel_number]->Ref();
-      env_->Schedule(&DBImplZNS::BGFlushWork, this, rocksdb::Env::HIGH);
+      env_->Schedule(&TropoDBImpl::BGFlushWork, this, rocksdb::Env::HIGH);
 #else
       // Switch to fresh memtable
       imm_[parallel_number] = mem_[parallel_number];
@@ -96,7 +96,7 @@ Status DBImplZNS::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
   return Status::OK();
 }
 
-WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer,
+WriteBatch* TropoDBImpl::BuildBatchGroup(Writer** last_writer,
                                        uint8_t parallel_number) {
   mutex_.AssertHeld();
   assert(!writers_[parallel_number].empty());
@@ -143,7 +143,7 @@ WriteBatch* DBImplZNS::BuildBatchGroup(Writer** last_writer,
   return result;
 }
 
-Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
+Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   Status s;
 
   Writer w(&mutex_);
@@ -234,7 +234,7 @@ Status DBImplZNS::Write(const WriteOptions& options, WriteBatch* updates) {
   return s;
 }
 
-Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
+Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
                       std::string* value) {
   MutexLock l(&mutex_);
   Status s;
@@ -300,7 +300,7 @@ Status DBImplZNS::Get(const ReadOptions& options, const Slice& key,
   return s;
 }
 
-Status DBImplZNS::Get(const ReadOptions& options,
+Status TropoDBImpl::Get(const ReadOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       PinnableSlice* value, std::string* timestamp) {
   std::string* val = new std::string;

@@ -25,7 +25,7 @@ namespace ROCKSDB_NAMESPACE {
 class ColumnFamilyHandle;
 class ColumnFamilyData;
 class DB;
-class DBImplZNS;
+class TropoDBImpl;
 class Env;
 class Slice;
 class SystemClock;

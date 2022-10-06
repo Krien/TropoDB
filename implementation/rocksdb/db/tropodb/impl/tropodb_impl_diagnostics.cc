@@ -62,7 +62,7 @@ static void PrintCounterTable(
   PrintPerfCounterTail();
 }
 
-void DBImplZNS::PrintCompactionStats() {
+void TropoDBImpl::PrintCompactionStats() {
   TROPODB_PERF("==== Background operation ====\n");
   std::ostringstream out;
   out << "Flush count:\n\t" << flush_total_counter_.GetNum() << "\n";
@@ -96,12 +96,12 @@ void DBImplZNS::PrintCompactionStats() {
                      {"Resetting LN", compaction_reset_LN_counter_}});
 }
 
-void DBImplZNS::PrintSSTableStats() {
+void TropoDBImpl::PrintSSTableStats() {
   TROPODB_PERF("====  SSTable layout ====\n");
   TROPODB_PERF("%s", versions_->DebugString().data());
 }
 
-void DBImplZNS::PrintWALStats() {
+void TropoDBImpl::PrintWALStats() {
   TROPODB_PERF("====  WAL stats ====\n");
   for (size_t i = 0; i < ZnsConfig::lower_concurrency; i++) {
     std::ostringstream out;
@@ -138,7 +138,7 @@ static void AddToJSONHotZoneStream(const ZNSDiagnostics& diag,
   }
 }
 
-void DBImplZNS::PrintIODistrStats() {
+void TropoDBImpl::PrintIODistrStats() {
   TROPODB_PERF("==== raw IO metrics ==== \n");
   std::ostringstream out;
   out << std::left << std::setw(10) << "Metric " << std::right << std::setw(15)
@@ -206,7 +206,7 @@ void DBImplZNS::PrintIODistrStats() {
   TROPODB_PERF("%s", out.str().data());
 }
 
-void DBImplZNS::PrintStats() {
+void TropoDBImpl::PrintStats() {
   if (print_compaction_stats_) {
     PrintCompactionStats();
   }

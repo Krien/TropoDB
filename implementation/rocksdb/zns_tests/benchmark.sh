@@ -465,7 +465,7 @@ run_bench() {
         }
     ;;
     "tropodb")
-        TROPODB_ARGS="--use_zns=true --db=$OPT"
+        TROPODB_ARGS="--use_tropodb=true --db=$OPT"
         EXTRA_DB_BENCH_ARGS="$EXTRA_DB_BENCH_ARGS $TROPODB_ARGS"
         diag_func () {
             echo "No smart-log support"

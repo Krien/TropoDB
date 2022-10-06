@@ -27,7 +27,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   std::vector<ColumnFamilyHandle*> handles;
   Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
 #ifdef TROPODB_PLUGIN_ENABLED
-  if (db_options.use_zns_impl) {
+  if (db_options.use_tropodb_impl) {
     return s;
   }
 #endif
@@ -37,7 +37,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
     } else {
       assert(handles.size() == 1);
     }
-    // i can delete the handle since DBImpl is always holding a reference to
+    // We can delete the handle since DBImpl is always holding a reference to
     // default column family
     if (db_options.persist_stats_to_disk && handles[1] != nullptr) {
       delete handles[1];
@@ -54,8 +54,8 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   const bool kBatchPerTxn = true;
   // if this is the way to fix the antipattern than so be it.
 #ifdef TROPODB_PLUGIN_ENABLED
-  if (db_options.use_zns_impl) {
-    return DBImplZNS::Open(db_options, dbname, column_families, handles, dbptr,
+  if (db_options.use_tropodb_impl) {
+    return TropoDBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                            !kSeqPerBatch, kBatchPerTxn);
   } else {
 #endif
@@ -72,8 +72,8 @@ FileSystem* DB::GetFileSystem() const {
 Status DestroyDB(const std::string& dbname, const Options& options,
                  const std::vector<ColumnFamilyDescriptor>& column_families) {
 #ifdef TROPODB_PLUGIN_ENABLED
-  if (options.use_zns_impl) {
-    return DBImplZNS::DestroyDB(dbname, options);
+  if (options.use_tropodb_impl) {
+    return TropoDBImpl::DestroyDB(dbname, options);
   }
 #endif
   ImmutableDBOptions soptions(SanitizeOptions(dbname, options));
@@ -207,8 +207,8 @@ Status DestroyDB(const std::string& dbname, const Options& options,
 Status DestroyDB(const std::string& dbname, const Options& options) {
   const std::vector<ColumnFamilyDescriptor> column_families;
 #ifdef TROPODB_PLUGIN_ENABLED
-  if (options.use_zns_impl) {
-    return DBImplZNS::DestroyDB(dbname, options);
+  if (options.use_tropodb_impl) {
+    return TropoDBImpl::DestroyDB(dbname, options);
   }
 #endif
   return DestroyDB(dbname, options, column_families);

@@ -7,34 +7,34 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-Iterator* DBImplZNS::NewIterator(const ReadOptions& options,
+Iterator* TropoDBImpl::NewIterator(const ReadOptions& options,
                                  ColumnFamilyHandle* column_family) {
   TROPODB_ERROR("Not implemented\n");
   return NULL;
 }
 
-Status DBImplZNS::Merge(const WriteOptions& options,
+Status TropoDBImpl::Merge(const WriteOptions& options,
                         ColumnFamilyHandle* column_family, const Slice& key,
                         const Slice& value) {
   TROPODB_ERROR("Not implemented\n");
   return Status::OK();
 }
 
-int DBImplZNS::MaxMemCompactionLevel(ColumnFamilyHandle* column_family) {
+int TropoDBImpl::MaxMemCompactionLevel(ColumnFamilyHandle* column_family) {
   TROPODB_INFO("Not implemented\n");
   return 0;
 }
 
-int DBImplZNS::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
+int TropoDBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
   TROPODB_INFO("Not implemented\n");
   return 0;
 }
 
-const Snapshot* DBImplZNS::GetSnapshot() { return nullptr; }
+const Snapshot* TropoDBImpl::GetSnapshot() { return nullptr; }
 
-void DBImplZNS::ReleaseSnapshot(const Snapshot* snapshot) {}
+void TropoDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {}
 
-Status DBImplZNS::GetMergeOperands(
+Status TropoDBImpl::GetMergeOperands(
     const ReadOptions& options, ColumnFamilyHandle* column_family,
     const Slice& key, PinnableSlice* merge_operands,
     GetMergeOperandsOptions* get_merge_operands_options,
@@ -43,7 +43,7 @@ Status DBImplZNS::GetMergeOperands(
   return Status::NotSupported();
 }
 
-std::vector<Status> DBImplZNS::MultiGet(
+std::vector<Status> TropoDBImpl::MultiGet(
     const ReadOptions& options,
     const std::vector<ColumnFamilyHandle*>& column_family,
     const std::vector<Slice>& keys, std::vector<std::string>* values) {
@@ -51,7 +51,7 @@ std::vector<Status> DBImplZNS::MultiGet(
   TROPODB_ERROR("Not implemented\n");
   return test;
 }
-std::vector<Status> DBImplZNS::MultiGet(
+std::vector<Status> TropoDBImpl::MultiGet(
     const ReadOptions& options,
     const std::vector<ColumnFamilyHandle*>& column_family,
     const std::vector<Slice>& keys, std::vector<std::string>* values,
@@ -61,105 +61,105 @@ std::vector<Status> DBImplZNS::MultiGet(
   return test;
 }
 
-Status DBImplZNS::SingleDelete(const WriteOptions& options,
+Status TropoDBImpl::SingleDelete(const WriteOptions& options,
                                ColumnFamilyHandle* column_family,
                                const Slice& key, const Slice& ts) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::SingleDelete(const WriteOptions& options,
+Status TropoDBImpl::SingleDelete(const WriteOptions& options,
                                ColumnFamilyHandle* column_family,
                                const Slice& key) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::Put(const WriteOptions& options,
+Status TropoDBImpl::Put(const WriteOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       const Slice& value) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
-Status DBImplZNS::Put(const WriteOptions& options,
+Status TropoDBImpl::Put(const WriteOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       const Slice& ts, const Slice& value) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
-Status DBImplZNS::Delete(const WriteOptions& options,
+Status TropoDBImpl::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
-Status DBImplZNS::Delete(const WriteOptions& options,
+Status TropoDBImpl::Delete(const WriteOptions& options,
                          ColumnFamilyHandle* column_family, const Slice& key,
                          const Slice& ts) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
-Status DBImplZNS::Get(const ReadOptions& options,
+Status TropoDBImpl::Get(const ReadOptions& options,
                       ColumnFamilyHandle* column_family, const Slice& key,
                       PinnableSlice* value) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
-Status DBImplZNS::NewIterators(
+Status TropoDBImpl::NewIterators(
     const ReadOptions& options,
     const std::vector<ColumnFamilyHandle*>& column_families,
     std::vector<Iterator*>* iterators) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-bool DBImplZNS::GetProperty(ColumnFamilyHandle* column_family,
+bool TropoDBImpl::GetProperty(ColumnFamilyHandle* column_family,
                             const Slice& property, std::string* value) {
   TROPODB_ERROR("Not implemented\n");
   return false;
 }
-bool DBImplZNS::GetMapProperty(ColumnFamilyHandle* column_family,
+bool TropoDBImpl::GetMapProperty(ColumnFamilyHandle* column_family,
                                const Slice& property,
                                std::map<std::string, std::string>* value) {
   TROPODB_ERROR("Not implemented\n");
   return false;
 }
-bool DBImplZNS::GetIntProperty(ColumnFamilyHandle* column_family,
+bool TropoDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
                                const Slice& property, uint64_t* value) {
   TROPODB_ERROR("Not implemented\n");
   return false;
 }
-bool DBImplZNS::GetAggregatedIntProperty(const Slice& property,
+bool TropoDBImpl::GetAggregatedIntProperty(const Slice& property,
                                          uint64_t* aggregated_value) {
   TROPODB_ERROR("Not implemented\n");
   return false;
 };
-Status DBImplZNS::GetApproximateSizes(const SizeApproximationOptions& options,
+Status TropoDBImpl::GetApproximateSizes(const SizeApproximationOptions& options,
                                       ColumnFamilyHandle* column_family,
                                       const Range* range, int n,
                                       uint64_t* sizes) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 };
-void DBImplZNS::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
+void TropoDBImpl::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
                                             const Range& range,
                                             uint64_t* const count,
                                             uint64_t* const size){};
-Status DBImplZNS::CompactRange(const CompactRangeOptions& options,
+Status TropoDBImpl::CompactRange(const CompactRangeOptions& options,
                                ColumnFamilyHandle* column_family,
                                const Slice* begin, const Slice* end) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 };
-Status DBImplZNS::SetDBOptions(
+Status TropoDBImpl::SetDBOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::CompactFiles(
+Status TropoDBImpl::CompactFiles(
     const CompactionOptions& compact_options, ColumnFamilyHandle* column_family,
     const std::vector<std::string>& input_file_names, const int output_level,
     const int output_path_id, std::vector<std::string>* const output_file_names,
@@ -167,108 +167,108 @@ Status DBImplZNS::CompactFiles(
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::PauseBackgroundWork() {
+Status TropoDBImpl::PauseBackgroundWork() {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::ContinueBackgroundWork() {
+Status TropoDBImpl::ContinueBackgroundWork() {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::EnableAutoCompaction(
+Status TropoDBImpl::EnableAutoCompaction(
     const std::vector<ColumnFamilyHandle*>& column_family_handles) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-void DBImplZNS::EnableManualCompaction() { TROPODB_ERROR("Not implemented\n"); }
-void DBImplZNS::DisableManualCompaction() {
+void TropoDBImpl::EnableManualCompaction() { TROPODB_ERROR("Not implemented\n"); }
+void TropoDBImpl::DisableManualCompaction() {
   TROPODB_ERROR("Not implemented\n");
 }
 
-Status DBImplZNS::Flush(const FlushOptions& options,
+Status TropoDBImpl::Flush(const FlushOptions& options,
                         ColumnFamilyHandle* column_family) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::Flush(
+Status TropoDBImpl::Flush(
     const FlushOptions& options,
     const std::vector<ColumnFamilyHandle*>& column_families) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::SyncWAL() {
+Status TropoDBImpl::SyncWAL() {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::DisableFileDeletions() {
+Status TropoDBImpl::DisableFileDeletions() {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
+Status TropoDBImpl::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
                                            std::string ts_low) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetFullHistoryTsLow(ColumnFamilyHandle* column_family,
+Status TropoDBImpl::GetFullHistoryTsLow(ColumnFamilyHandle* column_family,
                                       std::string* ts_low) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::EnableFileDeletions(bool force) {
+Status TropoDBImpl::EnableFileDeletions(bool force) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetLiveFiles(std::vector<std::string>&,
+Status TropoDBImpl::GetLiveFiles(std::vector<std::string>&,
                                uint64_t* manifest_file_size,
                                bool flush_memtable) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::GetSortedWalFiles(VectorLogPtr& files) {
+Status TropoDBImpl::GetSortedWalFiles(VectorLogPtr& files) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::GetCurrentWalFile(
+Status TropoDBImpl::GetCurrentWalFile(
     std::unique_ptr<LogFile>* current_log_file) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::GetCreationTimeOfOldestFile(uint64_t* creation_time) {
+Status TropoDBImpl::GetCreationTimeOfOldestFile(uint64_t* creation_time) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetUpdatesSince(
+Status TropoDBImpl::GetUpdatesSince(
     SequenceNumber seq_number, std::unique_ptr<TransactionLogIterator>* iter,
     const TransactionLogIterator::ReadOptions& read_options) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::DeleteFile(std::string name) {
+Status TropoDBImpl::DeleteFile(std::string name) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetLiveFilesChecksumInfo(FileChecksumList* checksum_list) {
+Status TropoDBImpl::GetLiveFilesChecksumInfo(FileChecksumList* checksum_list) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetLiveFilesStorageInfo(
+Status TropoDBImpl::GetLiveFilesStorageInfo(
     const LiveFilesStorageInfoOptions& opts,
     std::vector<LiveFileStorageInfo>* files) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::IngestExternalFile(
+Status TropoDBImpl::IngestExternalFile(
     ColumnFamilyHandle* column_family,
     const std::vector<std::string>& external_files,
     const IngestExternalFileOptions& ingestion_options) {
@@ -276,13 +276,13 @@ Status DBImplZNS::IngestExternalFile(
   return Status::NotSupported();
 }
 
-Status DBImplZNS::IngestExternalFiles(
+Status TropoDBImpl::IngestExternalFiles(
     const std::vector<IngestExternalFileArg>& args) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::CreateColumnFamilyWithImport(
+Status TropoDBImpl::CreateColumnFamilyWithImport(
     const ColumnFamilyOptions& options, const std::string& column_family_name,
     const ImportColumnFamilyOptions& import_options,
     const ExportImportFilesMetaData& metadata, ColumnFamilyHandle** handle) {
@@ -290,32 +290,32 @@ Status DBImplZNS::CreateColumnFamilyWithImport(
   return Status::NotSupported();
 }
 
-Status DBImplZNS::VerifyChecksum(const ReadOptions& /*read_options*/) {
+Status TropoDBImpl::VerifyChecksum(const ReadOptions& /*read_options*/) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetDbIdentity(std::string& identity) const {
+Status TropoDBImpl::GetDbIdentity(std::string& identity) const {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-Status DBImplZNS::GetDbSessionId(std::string& session_id) const {
+Status TropoDBImpl::GetDbSessionId(std::string& session_id) const {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
-ColumnFamilyHandle* DBImplZNS::DefaultColumnFamily() const {
+ColumnFamilyHandle* TropoDBImpl::DefaultColumnFamily() const {
   TROPODB_ERROR("Not implemented\n");
   return NULL;
 }
 
-Status DBImplZNS::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
+Status TropoDBImpl::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
                                            TablePropertiesCollection* props) {
   TROPODB_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-Status DBImplZNS::GetPropertiesOfTablesInRange(
+Status TropoDBImpl::GetPropertiesOfTablesInRange(
     ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
     TablePropertiesCollection* props) {
   TROPODB_ERROR("Not implemented\n");

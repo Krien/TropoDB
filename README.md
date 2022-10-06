@@ -63,7 +63,7 @@ For db_bench do:
 
 ```bash
 # add these two options
-db_bench --use_zns --db=<TRID> # with TRID the  PCIe address
+db_bench --use_tropodb --db=<TRID> # with TRID the  PCIe address
 ```
 
 From C++ code do:
@@ -71,7 +71,7 @@ From C++ code do:
 ```C++
 // We only showcase what is different for TropoDB, the rest is the same as for RocksDB.
 rocksdb::Options opts; // The RocksDB options for opening a database.
-opts.use_zns_impl = true;
+opts.use_tropodb_impl = true;
 // Set a ZNS uri, this is different from a file system uri and looks like:
 //  zns://<TRID> with TRID the PCIe_Address
 ```

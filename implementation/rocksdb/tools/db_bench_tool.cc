@@ -325,7 +325,7 @@ DEFINE_bool(use_uint64_comparator, false, "use Uint64 user comparator");
 DEFINE_int64(batch_size, 1, "Batch size");
 
 #ifdef TROPODB_PLUGIN_ENABLED
-DEFINE_bool(use_zns, false, "use zns device implementation");
+DEFINE_bool(use_tropodb, false, "use zns device implementation");
 #endif
 
 static bool ValidateKeySize(const char* /*flagname*/, int32_t /*value*/) {
@@ -2483,7 +2483,7 @@ class Benchmark {
   bool use_blob_db_;  // Stacked BlobDB
   std::vector<std::string> keys_;
 #ifdef TROPODB_PLUGIN_ENABLED
-  bool use_zns_;
+  bool use_tropodb_;
 #endif
   class ErrorHandlerListener : public EventListener {
    public:
@@ -2879,7 +2879,7 @@ class Benchmark {
         use_blob_db_(false),  // Stacked BlobDB
 #endif  // !ROCKSDB_LITE
 #ifdef TROPODB_PLUGIN_ENABLED
-        use_zns_(FLAGS_use_zns)
+        use_tropodb_(FLAGS_use_tropodb)
 #endif
 
   {
@@ -2924,14 +2924,14 @@ class Benchmark {
       }
 #endif  // !ROCKSDB_LITE
 #ifdef TROPODB_PLUGIN_ENABLED
-      options.use_zns_impl = FLAGS_use_zns;
+      options.use_tropodb_impl = FLAGS_use_tropodb;
 #endif
       DestroyDB(FLAGS_db, options);
-      if (!FLAGS_use_zns && !FLAGS_wal_dir.empty()) {
+      if (!FLAGS_use_tropodb && !FLAGS_wal_dir.empty()) {
         FLAGS_env->DeleteDir(FLAGS_wal_dir);
       }
 
-      if (!FLAGS_use_zns && FLAGS_num_multi_db > 1) {
+      if (!FLAGS_use_tropodb && FLAGS_num_multi_db > 1) {
         FLAGS_env->CreateDir(FLAGS_db);
         if (!FLAGS_wal_dir.empty()) {
           FLAGS_env->CreateDir(FLAGS_wal_dir);
@@ -3411,7 +3411,7 @@ class Benchmark {
           if (db_.db != nullptr) {
             db_.DeleteDBs();
 #ifdef TROPODB_PLUGIN_ENABLED
-            open_options_.use_zns_impl = FLAGS_use_zns;
+            open_options_.use_tropodb_impl = FLAGS_use_tropodb;
 #endif
             DestroyDB(FLAGS_db, open_options_);
           }
@@ -4268,7 +4268,7 @@ class Benchmark {
 #endif  // ROCKSDB_LITE
 
 #ifdef TROPODB_PLUGIN_ENABLED
-    options.use_zns_impl = FLAGS_use_zns;
+    options.use_tropodb_impl = FLAGS_use_tropodb;
 #endif
   }
 
@@ -4363,7 +4363,7 @@ class Benchmark {
     }
 
 #ifdef TROPODB_PLUGIN_ENABLED
-    options.use_zns_impl = FLAGS_use_zns;
+    options.use_tropodb_impl = FLAGS_use_tropodb;
 #endif
 
     if (FLAGS_num_multi_db <= 1) {

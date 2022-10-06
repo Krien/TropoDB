@@ -14,7 +14,7 @@ case $TARGET in
         DB_BENCH_ARGS="$DB_BENCH_ARGS $ZENFS_ARGS"
     ;;
     "tropodb")
-        TROPODB_ARGS="--use_zns=true --db=$OPT"
+        TROPODB_ARGS="--use_tropodb=true --db=$OPT"
         DB_BENCH_ARGS="$DB_BENCH_ARGS $TROPODB_ARGS"
     ;;
     *)
