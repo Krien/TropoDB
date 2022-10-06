@@ -93,7 +93,7 @@ default_perf() {
     START_SECONDS=$SECONDS
 
     echo "Starting benchmark $BENCHMARKS at $TARGET" > $TEST_OUT
-    ../db_bench $EXTRA_DB_BENCH_ARGS                \
+    ../build/db_bench $EXTRA_DB_BENCH_ARGS          \
         --num=$NUM                                  \
         --compression_type=None                     \
         --value_size=$VSIZE --key_size=$KSIZE       \
@@ -152,7 +152,7 @@ run_bench_quick_performance() {
                 bpftrace $COUNTBLK >> $TEST_BPF_OUT &
                 bpfpid=$!
         fi
-        ../db_bench $EXTRA_DB_BENCH_ARGS                \
+        ../build/db_bench $EXTRA_DB_BENCH_ARGS          \
             --num=$NUM                                  \
             --compression_type=none                     \
             --value_size=$VALUE_SIZE --key_size=16      \
@@ -196,7 +196,7 @@ run_bench_quick_performance() {
     
         START_SECONDS=$SECONDS
         NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
-        ../db_bench $EXTRA_DB_BENCH_ARGS                \
+        ../build/db_bench $EXTRA_DB_BENCH_ARGS          \
             --num=$NUM                                  \
             --compression_type=none                     \
             --value_size=$VALUE_SIZE --key_size=16      \
@@ -227,7 +227,7 @@ run_long_performance() {
     WB_SIZE=$(( 2 * 1024 * 1024 * 1024)) # Again ZenFS, 2GB???
 
     NUM=1000000000
-    #NUM=1000000 # < Please comment this line on production
+    # NUM=1000000 # < Please comment this line on production
     VALUE_SIZE=1000
 
 # fill
@@ -251,7 +251,7 @@ run_long_performance() {
 
     SECONDS=0
     START_SECONDS=$SECONDS
-    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    ../build/db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
@@ -280,7 +280,7 @@ run_long_performance() {
 
     SECONDS=0
     START_SECONDS=$SECONDS
-    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    ../build/db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
@@ -314,7 +314,7 @@ run_long_performance() {
 
     SECONDS=0
     START_SECONDS=$SECONDS
-    ../db_bench $DB_BENCH_PARAMS >> $TEST_OUT
+    ../build/db_bench $DB_BENCH_PARAMS >> $TEST_OUT
     echo ""
     diag_func >> $TEST_OUT
     echo "Test duration $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
@@ -344,7 +344,7 @@ run_bench_wal_test() {
             START_SECONDS=$SECONDS
             NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
             #NUM=1000000
-            ../db_bench $EXTRA_DB_BENCH_ARGS                \
+            ../buid/db_bench $EXTRA_DB_BENCH_ARGS           \
                 --num=$NUM                                  \
                 --compression_type=none                     \
                 --value_size=$VALUE_SIZE --key_size=16      \
@@ -386,7 +386,7 @@ run_bench_wal_recover_test() {
             START_SECONDS=$SECONDS
             NUM=$(( $WORKLOAD_SZ / $VALUE_SIZE ))
             #NUM=1000000
-            ../db_bench $EXTRA_DB_BENCH_ARGS                \
+            ../build/db_bench $EXTRA_DB_BENCH_ARGS          \
                 --num=$NUM                                  \
                 --compression_type=none                     \
                 --value_size=$VALUE_SIZE --key_size=16      \
@@ -402,7 +402,7 @@ run_bench_wal_recover_test() {
                 --use_existing_db=0 > /dev/null
              echo ""
             echo "Test duration for val size $VALUE_SIZE $(print_duration $(($SECONDS - $START_SECONDS)))" | tee -a $TEST_OUT
-         ../db_bench $EXTRA_DB_BENCH_ARGS                   \
+         ../build/db_bench $EXTRA_DB_BENCH_ARGS             \
                 --num=1                                     \
                 --compression_type=none                     \
                 --value_size=$VALUE_SIZE --key_size=16      \
@@ -426,11 +426,11 @@ run_bench() {
         echo ""
         echo "Not enough arguments given, please provide a target and benchmark..."
         echo "F2FS also requires the mounted path, Zenfs requires the device name"
-        echo "and lsmkv requires the trid."
+        echo "and TropoDB requires the trid."
         echo ""
         exit 1
     fi
-    if [[ ! -f ../db_bench ]] ; then
+    if [[ ! -f ../build/db_bench ]] ; then
         echo ""
         echo "db_bench not found, please recompile db_bench in the RocksDB directory"
         echo ""
