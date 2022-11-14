@@ -6,12 +6,12 @@
 
 #include <vector>
 
-#include "db/write_batch_internal.h"
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/memtable/tropodb_memtable.h"
 #include "db/tropodb/persistence/tropodb_committer.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "db/write_batch_internal.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
@@ -21,25 +21,19 @@
 
 namespace ROCKSDB_NAMESPACE {
 TropoWAL::TropoWAL(SZD::SZDChannelFactory* channel_factory,
-               const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
-               const uint64_t max_zone_nr, const uint8_t number_of_writers,
-               SZD::SZDChannel** borrowed_write_channel)
+                   const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
+                   const uint64_t max_zone_nr, const uint8_t number_of_writers,
+                   SZD::SZDChannel** borrowed_write_channel)
     : channel_factory_(channel_factory),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr,
-#ifdef WAL_UNORDERED
-           number_of_writers,
-#else
-           1,
-#endif
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr, number_of_writers,
            borrowed_write_channel),
       committer_(&log_, info, false),
       buffered_(TropoDBConfig::wal_allow_buffering),
       buffsize_(info.zasl),
       buff_(0),
       buff_pos_(0),
-#ifdef WAL_UNORDERED
+      unordered_(TropoDBConfig::wal_unordered),
       sequence_nr_(0),
-#endif
       clock_(SystemClock::Default().get()) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
@@ -111,21 +105,21 @@ Status TropoWAL::Append(const Slice& data, uint64_t seq) {
   Status s = Status::OK();
   size_t space_needed = SpaceNeeded(data);
   char* out;
-#ifdef WAL_UNORDERED
-  char buf[data.size() + 2 * sizeof(uint64_t)];
-  std::memcpy(buf + 2 * sizeof(uint64_t), data.data(), data.size());
-  EncodeFixed64(buf, data.size());
-  EncodeFixed64(buf + sizeof(uint64_t), sequence_nr_);
-  s = committer_.CommitToCharArray(
-      Slice(buf, data.size() + 2 * sizeof(uint64_t)), &out);
-  sequence_nr_++;
-#else
-  char buf[data.size() + sizeof(uint64_t)];
-  std::memcpy(buf + sizeof(uint64_t), data.data(), data.size());
-  EncodeFixed64(buf, data.size());
-  s = committer_.CommitToCharArray(Slice(buf, data.size() + sizeof(uint64_t)),
-                                   &out);
-#endif
+  if (unordered_) {
+    char buf[data.size() + 2 * sizeof(uint64_t)];
+    std::memcpy(buf + 2 * sizeof(uint64_t), data.data(), data.size());
+    EncodeFixed64(buf, data.size());
+    EncodeFixed64(buf + sizeof(uint64_t), sequence_nr_);
+    s = committer_.CommitToCharArray(
+        Slice(buf, data.size() + 2 * sizeof(uint64_t)), &out);
+    sequence_nr_++;
+  } else {
+    char buf[data.size() + sizeof(uint64_t)];
+    std::memcpy(buf + sizeof(uint64_t), data.data(), data.size());
+    EncodeFixed64(buf, data.size());
+    s = committer_.CommitToCharArray(Slice(buf, data.size() + sizeof(uint64_t)),
+                                     &out);
+  }
   if (!s.ok()) {
     return s;
   }
@@ -139,7 +133,6 @@ Status TropoWAL::Append(const Slice& data, uint64_t seq) {
   return s;
 }
 
-#ifdef WAL_UNORDERED
 Status TropoWAL::ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq) {
   TROPO_LOG_INFO("INFO: WAL: Replaying\n");
   Status s = Status::OK();
@@ -207,7 +200,6 @@ Status TropoWAL::ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq) {
   return s;
 }
 
-#else
 Status TropoWAL::ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq) {
   TROPO_LOG_INFO("INFO: WAL: Replaying WAL\n");
   Status s = Status::OK();
@@ -256,14 +248,11 @@ Status TropoWAL::ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq) {
   TROPO_LOG_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
   return s;
 }
-#endif
 
 Status TropoWAL::Reset() {
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.ResetAll());
-#ifdef WAL_UNORDERED
   sequence_nr_ = 0;
-#endif
   reset_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
@@ -283,11 +272,7 @@ Status TropoWAL::Replay(TropoMemtable* mem, SequenceNumber* seq) {
     return s;
   }
   uint64_t before = clock_->NowMicros();
-#ifdef WAL_UNORDERED
-  s = ReplayUnordered(mem, seq);
-#else
-  s = ReplayOrdered(mem, seq);
-#endif
+  s = unordered_ ? ReplayUnordered(mem, seq) : ReplayOrdered(mem, seq);
   replay_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }

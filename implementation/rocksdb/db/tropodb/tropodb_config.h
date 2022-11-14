@@ -14,8 +14,6 @@
 namespace ROCKSDB_NAMESPACE {
 
 // Features. In general do not touch. This is for experiments.
-#define WAL_UNORDERED  // Enables asynchronous I/O. If setting to 0, force
-                       // wal_iodepth to 1!
 #define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
 #define TROPICAL_DEBUG
 //#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch
@@ -36,6 +34,7 @@ constexpr bool wal_allow_buffering =
     true; /**< If writes are allowed to be buffered when written to the WAL.
              Increases performance at the cost of persistence.*/
 constexpr static size_t wal_count = 40; /**< Amount of WALs on one zone region*/
+constexpr static bool wal_unordered = true; /**< WAL appends can be reordered */
 constexpr static uint8_t wal_iodepth =
     4; /**< Determines the outstanding queue depth for each WAL. */
 constexpr static bool wal_preserve_dma =
@@ -131,9 +130,7 @@ static_assert(level_count > 1 &&
 static_assert(manifest_zones > 1);
 static_assert(zones_foreach_wal > 2);
 static_assert(wal_count > 2);
-#ifndef WAL_UNORDERED
-static_assert(wal_iodepth == 1);
-#endif
+static_assert(wal_unordered || wal_iodepth == 1, "WAL io_depth of more than 1 requires unordered writes");
 static_assert(L0_slow_down > 0);
 static_assert(number_of_concurrent_L0_readers > 0);
 static_assert(number_of_concurrent_LN_readers > 0);

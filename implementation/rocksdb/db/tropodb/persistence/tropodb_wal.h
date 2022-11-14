@@ -40,11 +40,8 @@ class TropoWAL : public RefCounter {
   // Ensure WAL in heap buffer/DMA buffer is persisted to storage
   Status Sync();
 // Replay all changes present in this WAL to the memtable
-#ifdef WAL_UNORDERED
   Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
-#else
   Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
-#endif
   Status Replay(TropoMemtable* mem, SequenceNumber* seq);
   // Closes the WAL gracefully (sync, free buffers)
   Status Close();
@@ -95,10 +92,9 @@ class TropoWAL : public RefCounter {
   const size_t buffsize_;
   char* buff_;
   size_t buff_pos_;
-#ifdef WAL_UNORDERED
+  // unordered
+  bool unordered_;
   uint32_t sequence_nr_;
-#endif
-
   // Timing
   SystemClock* const clock_;
   TimingCounter storage_append_perf_counter_;
