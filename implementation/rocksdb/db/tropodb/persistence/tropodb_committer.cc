@@ -119,23 +119,14 @@ Status TropoCommitter::CommitToCharArray(const Slice& in, char** out) {
 Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();
-#ifdef DIRECT_COMMIT
   size_t walker = 0;
-#endif
   size_t left = data.size();
 
   size_t fragcount = data.size() / lba_size_ + 1;
   size_t size_needed = fragcount * kTropoHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
 
-  if (!(s = FromStatus(write_buffer_.ReallocBuffer(
-#ifdef DIRECT_COMMIT
-            size_needed
-#else
-            lba_size_
-#endif
-            )))
-           .ok()) {
+  if (!(s = FromStatus(write_buffer_.ReallocBuffer(size_needed))).ok()) {
     TROPO_LOG_ERROR("Error: Commit: Failed resizing buffer\n");
     return s;
   }
@@ -168,9 +159,7 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
       type = TropoRecordType::kMiddleType;
     }
     size_t frag_begin_addr = 0;
-#ifdef DIRECT_COMMIT
     frag_begin_addr = walker;
-#endif
 
     memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
     memcpy(fragment + frag_begin_addr + kTropoHeaderSize, ptr,
@@ -187,26 +176,12 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
                                   fragment_length);
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment + frag_begin_addr, crc);
-#ifdef DIRECT_COMMIT
     walker += fragment_length + kTropoHeaderSize;
-#else
-    // Actual commit
-    s = FromStatus(log_->Append(write_buffer_, 0,
-                                fragment_length + kTropoHeaderSize, &lbas_iter,
-                                false));
-    if (lbas != nullptr) {
-      *lbas += lbas_iter;
-    }
-    if (!s.ok()) {
-      TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
-      return s;
-    }
-#endif
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-#ifdef DIRECT_COMMIT
+
   s = FromStatus(
       log_->Append(write_buffer_, 0, size_needed, &lbas_iter, false));
   if (lbas != nullptr) {
@@ -215,7 +190,6 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
   if (!s.ok()) {
     TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
   }
-#endif
 
   if (!keep_buffer_) {
     s = FromStatus(write_buffer_.FreeBuffer());

@@ -13,7 +13,6 @@
 namespace ROCKSDB_NAMESPACE {
 
 // Features. In general do not touch. This is for experiments.
-#define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
 // #define TROPICAL_DEBUG // allows TropoDB debug messages
 
 //#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch

@@ -13,10 +13,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// Features. In general do not touch. This is for experiments.
-#define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
+// Debug flag or perf related flags can be completely be removed from the binary if necesssary.
 #define TROPICAL_DEBUG
-//#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch
+
 
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
