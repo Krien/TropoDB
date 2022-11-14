@@ -42,10 +42,9 @@ TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
 
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
   // WalManager is the boss of the channels. Prevents stale channels.
-  write_channels_ = new SZD::SZDChannel*[TropoDBConfig::wal_concurrency];
+  write_channels_ = new SZD::SZDChannel*[1];
   channel_factory_->Ref();
-  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; ++i) {
-    channel_factory_->register_channel(&write_channels_[i], min_zone_nr,
+    channel_factory_->register_channel(&write_channels_[0], min_zone_nr,
                                        max_zone_nr, TropoDBConfig::wal_preserve_dma,
 #ifdef WAL_UNORDERED
                                        TropoDBConfig::wal_iodepth
@@ -53,15 +52,14 @@ TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
                                        1
 #endif
     );
-  }
 #endif
   for (size_t i = 0; i < N; ++i) {
     TropoWAL* newwal =
         new TropoWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
-                   TropoDBConfig::wal_concurrency, write_channels_
+                   1, write_channels_
 #else
-                   TropoDBConfig::wal_concurrency / N, nullptr
+                   1, nullptr
 #endif
         );
     newwal->Ref();
@@ -79,8 +77,8 @@ TropoWALManager<N>::~TropoWALManager() {
     }
   }
 #ifdef WAL_MANAGER_MANAGES_CHANNELS
-  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; ++i) {
-    channel_factory_->unregister_channel(write_channels_[i]);
+  for (size_t i = 0; i < 1; ++i) {
+    channel_factory_->unregister_channel(write_channels_[0]);
   }
   channel_factory_->Unref();
 #endif
@@ -226,21 +224,11 @@ std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
   diag.bytes_read_ = 0;
   diag.read_operations_counter_ = 0;
   diag.zones_erased_counter_ = 0;
-  for (size_t i = 0; i < TropoDBConfig::wal_concurrency; i++) {
+
     diag.append_operations_counter_ +=
-        write_channels_[i]->GetAppendOperationsCounter();
-    diag.bytes_written_ += write_channels_[i]->GetBytesWritten();
-    if (i == 0) {
-      diag.append_operations_ = write_channels_[i]->GetAppendOperations();
-    } else {
-      std::vector<uint64_t> tmp = write_channels_[i]->GetAppendOperations();
-      std::vector<uint64_t> tmp2 = std::vector<uint64_t>(tmp.size(), 0);
-      std::transform(diag.append_operations_.begin(),
-                     diag.append_operations_.end(), tmp.begin(), tmp2.begin(),
-                     std::plus<uint64_t>());
-      diag.append_operations_ = tmp2;
-    }
-  }
+        write_channels_[0]->GetAppendOperationsCounter();
+    diag.bytes_written_ += write_channels_[0]->GetBytesWritten();
+    diag.append_operations_ = write_channels_[0]->GetAppendOperations();
 
   for (size_t i = 0; i < N; i++) {
     TropoDiagnostics waldiag = wals_[i]->GetDiagnostics();

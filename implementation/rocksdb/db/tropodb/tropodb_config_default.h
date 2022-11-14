@@ -43,9 +43,6 @@ constexpr static uint8_t wal_iodepth =
 constexpr static bool wal_preserve_dma =
     true; /**< Some DMA memory is claimed for WALs, even WALs are not busy.
              Prevents reallocations. */
-constexpr static size_t wal_concurrency =
-    1; /**< Legacy, do not touch. Determines concurrenct qpairs for WAL which is
-          no longer supported*/
 
 // L0 and LN options
 constexpr static size_t L0_zones =
