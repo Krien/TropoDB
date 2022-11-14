@@ -8,19 +8,21 @@
 
 #include <limits>
 
-#include "rocksdb/rocksdb_namespace.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-// Debug flag or perf related flags can be completely be removed from the binary if necesssary.
+// Debug flag or perf related flags can be completely be removed from the binary
+// if necesssary.
 #define TROPICAL_DEBUG
 
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
 namespace TropoDBConfig {
-constexpr static TropoLogLevel default_log_level = TropoLogLevel::TROPO_INFO_LEVEL;
+constexpr static TropoLogLevel default_log_level =
+    TropoLogLevel::TROPO_INFO_LEVEL;
 // WAL options
 constexpr static uint8_t level_count =
     6; /**< Amount of LSM-tree levels L0 up to LN */
@@ -42,7 +44,7 @@ constexpr static bool wal_preserve_dma =
 // L0 and LN options
 constexpr static size_t L0_zones =
     100; /**< amount of zones to reserve for each L0 circular log */
-constexpr static uint8_t lower_concurrency  =
+constexpr static uint8_t lower_concurrency =
     1; /**< Number of L0 circular logs. Increases parallelism. */
 constexpr static size_t wal_manager_zone_count = wal_count / lower_concurrency;
 constexpr static int L0_slow_down =
@@ -71,19 +73,20 @@ constexpr static double ss_compact_treshold_force[level_count]{
                     space issues. E.g. L0 may not be filled more than 85%.*/
 constexpr static double ss_compact_modifier[level_count]{
     64, 32, 16, 8,
-    4, 1}; /**< Modifier for each compaction treshold. When size reaches above
-             the compaction treshold, certain compactions might be more
-             important than others. For example, setting a high modifier for 2
-             causes compactions in 2 to be done first. 0 and 1 are ignored as
-             they are handled in a separate thread */
+    4,  1}; /**< Modifier for each compaction treshold. When size reaches above
+              the compaction treshold, certain compactions might be more
+              important than others. For example, setting a high modifier for 2
+              causes compactions in 2 to be done first. 0 and 1 are ignored as
+              they are handled in a separate thread */
 constexpr static uint64_t max_bytes_sstable_l0 =
     1024U * 1024U * 512; /**< Maximum size of SSTables in L0. Determines the
                 amount of tables generated on a flush. Rounded to round number
                 of lbas by TropoDB. */
-constexpr static uint64_t max_bytes_sstable_ = (uint64_t)(
-    1073741824. * 2. * 0.95); /**< Maximum size of SSTables in LN. LN tables
-                                 reserve entire zones, therefore, please set
-                                 to a multitude of approximately n zones */
+constexpr static uint64_t max_bytes_sstable_ =
+    (uint64_t)(1073741824. * 2. *
+               0.95); /**< Maximum size of SSTables in LN. LN tables
+                         reserve entire zones, therefore, please set
+                         to a multitude of approximately n zones */
 constexpr static uint64_t max_lbas_compaction_l0 = 2097152 * 12; /**< Maximum
 amount of LBAS that can be considered for L0 to LN compaction. Prevents OOM.*/
 
@@ -101,7 +104,9 @@ constexpr static bool compaction_allow_deferring_writes =
 constexpr static uint8_t compaction_maximum_deferred_writes =
     6; /**< How many SSTables can be deferred at most. Be careful, setting
 this too high can cause OOM.*/
-constexpr static uint64_t compaction_max_grandparents_overlapping_tables = 10; /**< Maximum number of tables that are allowed to overlap with grandparent */
+constexpr static uint64_t compaction_max_grandparents_overlapping_tables =
+    10; /**< Maximum number of tables that are allowed to overlap with
+           grandparent */
 
 // Containerisation
 constexpr static uint64_t min_zone = 0; /**< Minimum zone to use for database.*/
@@ -128,7 +133,8 @@ static_assert(level_count > 1 &&
 static_assert(manifest_zones > 1);
 static_assert(zones_foreach_wal > 2);
 static_assert(wal_count > 2);
-static_assert(wal_unordered || wal_iodepth == 1, "WAL io_depth of more than 1 requires unordered writes");
+static_assert(wal_unordered || wal_iodepth == 1,
+              "WAL io_depth of more than 1 requires unordered writes");
 static_assert(L0_slow_down > 0);
 static_assert(number_of_concurrent_L0_readers > 0);
 static_assert(number_of_concurrent_LN_readers > 0);
@@ -154,7 +160,10 @@ static_assert((!compaction_allow_deferring_writes &&
 static_assert(max_lbas_compaction_l0 > 0);
 static_assert(max_channels > 0);
 static_assert(!use_sstable_encoding || max_sstable_encoding > 0);
-
+#ifndef TROPICAL_DEBUG
+static_assert(default_log_level > TropoLogLevel::TROPO_DEBUG_LEVEL,
+              "Debug level can not be set to debug when debug is disabled");
+#endif
 }  // namespace TropoDBConfig
 }  // namespace ROCKSDB_NAMESPACE
 #endif

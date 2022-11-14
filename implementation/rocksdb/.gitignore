@@ -95,4 +95,4 @@ fuzz/crash-*
 
 cmake-build-*
 
-tropodb_config.h
+*/tropodb_config.h
