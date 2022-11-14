@@ -37,10 +37,8 @@ class TropoWALManager : public RefCounter {
 
  private:
   std::array<TropoWAL*, N> wals_;
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDChannel** write_channels_;
-#endif
   size_t wal_head_;
   size_t wal_tail_;
   TropoWAL* current_wal_;

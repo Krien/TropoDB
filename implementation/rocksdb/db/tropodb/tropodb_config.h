@@ -17,8 +17,6 @@ namespace ROCKSDB_NAMESPACE {
 #define WAL_UNORDERED  // Enables asynchronous I/O. If setting to 0, force
                        // wal_iodepth to 1!
 #define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
-#define WAL_MANAGER_MANAGES_CHANNELS  // Do not unset, this will break almost
-                                      // WAL features.
 #define TROPICAL_DEBUG
 //#define USE_COMMITTER // Use ZNScommiter for L0. Legacy. do not touch
 

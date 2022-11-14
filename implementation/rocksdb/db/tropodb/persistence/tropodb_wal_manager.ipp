@@ -6,14 +6,14 @@
 #include <iomanip>
 #include <iostream>
 
-#include "db/write_batch_internal.h"
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/memtable/tropodb_memtable.h"
 #include "db/tropodb/persistence/tropodb_committer.h"
 #include "db/tropodb/persistence/tropodb_wal.h"
 #include "db/tropodb/persistence/tropodb_wal_manager.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "db/write_batch_internal.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -25,13 +25,10 @@
 namespace ROCKSDB_NAMESPACE {
 template <std::size_t N>
 TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
-                                const SZD::DeviceInfo& info,
-                                const uint64_t min_zone_nr,
-                                const uint64_t max_zone_nr)
-    :
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
-      channel_factory_(channel_factory),
-#endif
+                                    const SZD::DeviceInfo& info,
+                                    const uint64_t min_zone_nr,
+                                    const uint64_t max_zone_nr)
+    : channel_factory_(channel_factory),
       wal_head_(0),
       wal_tail_(N - 1),
       current_wal_(nullptr) {
@@ -40,28 +37,21 @@ TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
   assert(wal_range % info.zone_cap_ == 0);
   uint64_t wal_walker = min_zone_nr;
 
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
   // WalManager is the boss of the channels. Prevents stale channels.
   write_channels_ = new SZD::SZDChannel*[1];
   channel_factory_->Ref();
-    channel_factory_->register_channel(&write_channels_[0], min_zone_nr,
-                                       max_zone_nr, TropoDBConfig::wal_preserve_dma,
+  channel_factory_->register_channel(&write_channels_[0], min_zone_nr,
+                                     max_zone_nr,
+                                     TropoDBConfig::wal_preserve_dma,
 #ifdef WAL_UNORDERED
-                                       TropoDBConfig::wal_iodepth
+                                     TropoDBConfig::wal_iodepth
 #else
-                                       1
+                                     1
 #endif
-    );
-#endif
+  );
   for (size_t i = 0; i < N; ++i) {
-    TropoWAL* newwal =
-        new TropoWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
-                   1, write_channels_
-#else
-                   1, nullptr
-#endif
-        );
+    TropoWAL* newwal = new TropoWAL(channel_factory, info, wal_walker,
+                                    wal_walker + wal_range, 1, write_channels_);
     newwal->Ref();
     wals_[i] = newwal;
     wal_walker += wal_range;
@@ -76,12 +66,10 @@ TropoWALManager<N>::~TropoWALManager() {
       (*i)->Unref();
     }
   }
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
   for (size_t i = 0; i < 1; ++i) {
     channel_factory_->unregister_channel(write_channels_[0]);
   }
   channel_factory_->Unref();
-#endif
 }
 
 template <std::size_t N>
@@ -182,19 +170,16 @@ Status TropoWALManager<N>::Recover(TropoMemtable* mem, SequenceNumber* seq) {
         wal_tail_ = i;
       }
 
-    }
-    else if (!wals_[i]->Empty() && first_empty_after_non_empty) {
+    } else if (!wals_[i]->Empty() && first_empty_after_non_empty) {
       // a gap in the middle?
       wal_tail_ = i;
       break;
 
-    }
-    else if (!wals_[i]->Empty() && first_non_empty) {
+    } else if (!wals_[i]->Empty() && first_non_empty) {
       // the head is moving one further
       wal_head_ = i + 1;
-    }  
-    else if (wals_[i]->Empty() && !first_empty_after_non_empty &&
-             first_non_empty) {
+    } else if (wals_[i]->Empty() && !first_empty_after_non_empty &&
+               first_non_empty) {
       // head can not move further
       first_empty_after_non_empty = true;
     }
@@ -216,7 +201,6 @@ Status TropoWALManager<N>::Recover(TropoMemtable* mem, SequenceNumber* seq) {
 template <std::size_t N>
 std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
   std::vector<TropoDiagnostics> diags;
-#ifdef WAL_MANAGER_MANAGES_CHANNELS
   TropoDiagnostics diag;
   diag.name_ = "WALS";
   diag.append_operations_counter_ = 0;
@@ -225,10 +209,10 @@ std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
   diag.read_operations_counter_ = 0;
   diag.zones_erased_counter_ = 0;
 
-    diag.append_operations_counter_ +=
-        write_channels_[0]->GetAppendOperationsCounter();
-    diag.bytes_written_ += write_channels_[0]->GetBytesWritten();
-    diag.append_operations_ = write_channels_[0]->GetAppendOperations();
+  diag.append_operations_counter_ +=
+      write_channels_[0]->GetAppendOperationsCounter();
+  diag.bytes_written_ += write_channels_[0]->GetBytesWritten();
+  diag.append_operations_ = write_channels_[0]->GetAppendOperations();
 
   for (size_t i = 0; i < N; i++) {
     TropoDiagnostics waldiag = wals_[i]->GetDiagnostics();
@@ -245,18 +229,12 @@ std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
     }
   }
   diags.push_back(diag);
-#else
-  for (size_t i = 0; i < N; i++) {
-    TropoDiagnostics diag = wals_[i]->GetDiagnostics();
-    diag.name_ = "WAL" + std::to_string(i);
-    diags.push_back(diag);
-  }
-#endif
   return diags;
 }
 
 template <std::size_t N>
-std::vector<std::pair<std::string, const TimingCounter>> TropoWALManager<N>::GetAdditionalWALStatistics() {
+std::vector<std::pair<std::string, const TimingCounter>>
+TropoWALManager<N>::GetAdditionalWALStatistics() {
   TimingCounter storage_append_perf_counter;
   TimingCounter total_append_perf_counter;
   TimingCounter replay_perf_counter;
@@ -272,13 +250,11 @@ std::vector<std::pair<std::string, const TimingCounter>> TropoWALManager<N>::Get
     reset_perf_counter += wals_[i]->GetResetPerfCounter();
   }
 
-  return {
-    {"WAL Appends", total_append_perf_counter}
-    ,{"SZD Appends", storage_append_perf_counter}
-    ,{"Replays", replay_perf_counter}
-    ,{"Resets", reset_perf_counter}
-    ,{"Recovery", recovery_perf_counter}
-  };
+  return {{"WAL Appends", total_append_perf_counter},
+          {"SZD Appends", storage_append_perf_counter},
+          {"Replays", replay_perf_counter},
+          {"Resets", reset_perf_counter},
+          {"Recovery", recovery_perf_counter}};
 }
 
 }  // namespace ROCKSDB_NAMESPACE
