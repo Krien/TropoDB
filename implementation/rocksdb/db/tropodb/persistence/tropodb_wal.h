@@ -22,31 +22,27 @@ class TropoWAL : public RefCounter {
  public:
   TropoWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_nr, const uint64_t max_zone_nr,
-         const uint8_t number_of_writers,
-         SZD::SZDChannel** borrowed_write_channel = nullptr);
+         const bool use_buffer_, const bool allow_unordered_,
+         SZD::SZDChannel* borrowed_write_channel = nullptr);
   // No copying or implicits
   TropoWAL(const TropoWAL&) = delete;
   TropoWAL& operator=(const TropoWAL&) = delete;
   ~TropoWAL();
 
-  // Sync buffer from heap to I/O
-  Status DataSync();
-  // Append data to buffer or I/O if it is full
-  Status BufferedAppend(const Slice& data);
-  // Append data to storage (does not guarantee persistence)
-  Status DirectAppend(const Slice& data);
   // Append data to WAL
   Status Append(const Slice& data, uint64_t seq);
+  // Sync buffer from heap to I/O
+  Status DataSync();
   // Ensure WAL in heap buffer/DMA buffer is persisted to storage
   Status Sync();
 // Replay all changes present in this WAL to the memtable
-  Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
-  Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
   Status Replay(TropoMemtable* mem, SequenceNumber* seq);
   // Closes the WAL gracefully (sync, free buffers)
   Status Close();
   Status Reset();
   Status Recover();
+
+  // status
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline size_t SpaceNeeded(const size_t size) {
@@ -83,6 +79,13 @@ class TropoWAL : public RefCounter {
   inline TimingCounter GetResetPerfCounter() { return reset_perf_counter_; }
 
  private:
+  // Append data to buffer or I/O if it is full
+  Status BufferedAppend(const Slice& data);
+  // Append data to storage (does not guarantee persistence)
+  Status DirectAppend(const Slice& data);
+  Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
+  Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
+
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;

@@ -22,17 +22,18 @@
 namespace ROCKSDB_NAMESPACE {
 TropoWAL::TropoWAL(SZD::SZDChannelFactory* channel_factory,
                    const SZD::DeviceInfo& info, const uint64_t min_zone_nr,
-                   const uint64_t max_zone_nr, const uint8_t number_of_writers,
-                   SZD::SZDChannel** borrowed_write_channel)
+                   const uint64_t max_zone_nr, const bool use_buffer_,
+                   const bool allow_unordered_,
+                   SZD::SZDChannel* borrowed_write_channel)
     : channel_factory_(channel_factory),
-      log_(channel_factory_, info, min_zone_nr, max_zone_nr, number_of_writers,
+      log_(channel_factory_, info, min_zone_nr, max_zone_nr,
            borrowed_write_channel),
       committer_(&log_, info, false),
-      buffered_(TropoDBConfig::wal_allow_buffering),
+      buffered_(use_buffer_),
       buffsize_(info.zasl),
       buff_(0),
       buff_pos_(0),
-      unordered_(TropoDBConfig::wal_unordered),
+      unordered_(allow_unordered_),
       sequence_nr_(0),
       clock_(SystemClock::Default().get()) {
   assert(channel_factory_ != nullptr);
