@@ -43,10 +43,15 @@ git submodule update --init --recursive # Retrieve SZD, SPDK and DPDK
 cd  implementation/rocksdb
 pushd .
 cd third-party/SimpleZNSDevice/dependencies/spdk
-# Follow SPDK install instructions and built SPDK
+# Follow SPDK install instructions and built SPDK (e.g. cat INSTALL.md)
 popd
-# Follow RocksDB install instructions for the tool you need
+mkdir -p build && cd build
+# if the next line fails, follow the RocksDB install guide, you might miss gflags or another dependency
+cmake -DCMAKE_BUILD_TYPE=Release .. 
+make reset_tropodb_config
+make db_bench install
 ```
+If you currently want to play around with the configurations, you need to alter `db/tropodb/tropodb_config.h` and rebuilt the project. This might change in the future.
 
 ## How to use
 

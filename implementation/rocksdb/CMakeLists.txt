@@ -1003,8 +1003,13 @@ list(APPEND SOURCES
 
 if(TROPODB_PLUGIN)
   set(SZD_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third-party/SimpleZNSDevice")
-  add_subdirectory("${SZD_DIRECTORY}")
-  link_directories("${SPDK_LIB_DIRS};${SZD_DIRECTORY}/lib")
+  add_subdirectory("${SZD_DIRECTORY}")  
+  add_custom_target(
+    reset_tropodb_config
+    COMMAND ${CMAKE_COMMAND} -E copy
+      "${CMAKE_SOURCE_DIR}/db/tropodb/tropodb_config_default.h"
+      "${CMAKE_SOURCE_DIR}/db/tropodb/tropodb_config.h"
+  )
 endif()
 
 set(PLUGIN_HEADER_DIR "")
