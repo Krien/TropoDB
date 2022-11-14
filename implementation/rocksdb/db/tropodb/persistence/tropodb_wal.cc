@@ -32,63 +32,53 @@ TropoWAL::TropoWAL(SZD::SZDChannelFactory* channel_factory,
            1,
 #endif
            borrowed_write_channel),
-      committer_(&log_, info, false)
-#ifdef WAL_BUFFERED
-      ,
+      committer_(&log_, info, false),
       buffered_(TropoDBConfig::wal_allow_buffering),
       buffsize_(info.zasl),
-      buf_(0),
-      pos_(0)
-#endif
+      buff_(0),
+      buff_pos_(0),
 #ifdef WAL_UNORDERED
-      ,
-      sequence_nr_(0)
+      sequence_nr_(0),
 #endif
-      ,
       clock_(SystemClock::Default().get()) {
   assert(channel_factory_ != nullptr);
   channel_factory_->Ref();
-#ifdef WAL_BUFFERED
   if (buffered_) {
-    buf_ = new char[buffsize_];
+    buff_ = new char[buffsize_];
   }
-#endif
 }
 
 TropoWAL::~TropoWAL() {
   Sync();
-  channel_factory_->Unref();
-#ifdef WAL_BUFFERED
   if (buffered_) {
-    delete[] buf_;
+    delete[] buff_;
   }
-#endif
+  channel_factory_->Unref();
 }
 
-#ifdef WAL_BUFFERED
 Status TropoWAL::BufferedAppend(const Slice& data) {
   Status s = Status::OK();
-  size_t sizeleft = buffsize_ - pos_;
+  size_t sizeleft = buffsize_ - buff_pos_;
   size_t sizeneeded = data.size();
   if (sizeneeded < sizeleft) {
-    memcpy(buf_ + pos_, data.data(), sizeneeded);
-    pos_ += sizeneeded;
+    memcpy(buff_ + buff_pos_, data.data(), sizeneeded);
+    buff_pos_ += sizeneeded;
   } else {
-    if (pos_ != 0) {
-      char buf_copy_[pos_];
-      memcpy(buf_copy_, buf_, pos_);
-      s = DirectAppend(Slice(buf_copy_, pos_));
-      pos_ = 0;
+    if (buff_pos_ != 0) {
+      char buff_copy_[buff_pos_];
+      memcpy(buff_copy_, buff_, buff_pos_);
+      s = DirectAppend(Slice(buff_copy_, buff_pos_));
+      buff_pos_ = 0;
     }
     if (!s.ok()) {
       return s;
     }
-    sizeleft = buffsize_ - pos_;
+    sizeleft = buffsize_ - buff_pos_;
     if (sizeneeded < sizeleft) {
       s = DirectAppend(data);
     } else {
-      memcpy(buf_ + pos_, data.data(), sizeneeded);
-      pos_ += sizeneeded;
+      memcpy(buff_ + buff_pos_, data.data(), sizeneeded);
+      buff_pos_ += sizeneeded;
     }
   }
   return s;
@@ -96,13 +86,17 @@ Status TropoWAL::BufferedAppend(const Slice& data) {
 
 Status TropoWAL::DataSync() {
   Status s = Status::OK();
-  if (pos_ != 0) {
-    s = DirectAppend(Slice(buf_, pos_));
-    pos_ = 0;
+  if (buff_pos_ != 0) {
+    s = DirectAppend(Slice(buff_, buff_pos_));
+    buff_pos_ = 0;
   }
   return s;
 }
-#endif
+
+Status TropoWAL::Sync() {
+  DataSync();
+  return FromStatus(log_.Sync());
+}
 
 Status TropoWAL::DirectAppend(const Slice& data) {
   uint64_t before = clock_->NowMicros();
@@ -135,25 +129,14 @@ Status TropoWAL::Append(const Slice& data, uint64_t seq) {
   if (!s.ok()) {
     return s;
   }
-#ifdef WAL_BUFFERED
   if (buffered_) {
     s = BufferedAppend(Slice(out, space_needed));
   } else {
-#endif
     s = DirectAppend(Slice(out, space_needed));
-#ifdef WAL_BUFFERED
   }
-#endif
   delete[] out;
   total_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
-}
-
-Status TropoWAL::Sync() {
-#ifdef WAL_BUFFERED
-  DataSync();
-#endif
-  return FromStatus(log_.Sync());
 }
 
 #ifdef WAL_UNORDERED

@@ -14,7 +14,6 @@
 namespace ROCKSDB_NAMESPACE {
 
 // Features. In general do not touch. This is for experiments.
-#define WAL_BUFFERED   // Enables WAL buffering to be compiled
 #define WAL_UNORDERED  // Enables asynchronous I/O. If setting to 0, force
                        // wal_iodepth to 1!
 #define DIRECT_COMMIT  // Commits are either done block by block or in ZASL.
@@ -35,11 +34,9 @@ constexpr static size_t manifest_zones =
     4; /**< Amount of zones to reserve for metadata*/
 constexpr static size_t zones_foreach_wal =
     4; /**< Amount of zones for each WAL*/
-#ifdef WAL_BUFFERED
 constexpr bool wal_allow_buffering =
     true; /**< If writes are allowed to be buffered when written to the WAL.
              Increases performance at the cost of persistence.*/
-#endif
 constexpr static size_t wal_count = 40; /**< Amount of WALs on one zone region*/
 constexpr static uint8_t wal_iodepth =
     4; /**< Determines the outstanding queue depth for each WAL. */

@@ -29,12 +29,10 @@ class TropoWAL : public RefCounter {
   TropoWAL& operator=(const TropoWAL&) = delete;
   ~TropoWAL();
 
-#ifdef WAL_BUFFERED
   // Sync buffer from heap to I/O
   Status DataSync();
   // Append data to buffer or I/O if it is full
   Status BufferedAppend(const Slice& data);
-#endif
   // Append data to storage (does not guarantee persistence)
   Status DirectAppend(const Slice& data);
   // Append data to WAL
@@ -55,11 +53,7 @@ class TropoWAL : public RefCounter {
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline size_t SpaceNeeded(const size_t size) {
-#ifdef WAL_BUFFERED
     return committer_.SpaceNeeded(size + pos_ + 2 * sizeof(uint64_t));
-#else
-    return committer_.SpaceNeeded(size + 2 * sizeof(uint64_t));
-#endif
   }
   inline size_t SpaceNeeded(const Slice& data) {
     return committer_.SpaceNeeded(data.size());
@@ -96,13 +90,11 @@ class TropoWAL : public RefCounter {
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;
   TropoCommitter committer_;
-#ifdef WAL_BUFFERED
   // buffer
   bool buffered_;
   const size_t buffsize_;
-  char* buf_;
-  size_t pos_;
-#endif
+  char* buff_;
+  size_t buff_pos_;
 #ifdef WAL_UNORDERED
   uint32_t sequence_nr_;
 #endif
