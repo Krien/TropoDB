@@ -117,7 +117,6 @@ Status TropoWAL::Sync() {
   return s;
 }
 
-
 Status TropoWAL::Append(const Slice& data, uint64_t seq, bool sync) {
   uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
@@ -142,16 +141,15 @@ Status TropoWAL::Append(const Slice& data, uint64_t seq, bool sync) {
     return s;
   }
   prepare_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
-  
+
   if (sync) {
     s = DirectAppend(Slice(out, space_needed));
-  }
-  else if (buffered_) {
+  } else if (buffered_) {
     s = BufferedAppend(Slice(out, space_needed));
   } else {
     s = SubmitAppend(Slice(out, space_needed));
   }
-  
+
   delete[] out;
   total_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;

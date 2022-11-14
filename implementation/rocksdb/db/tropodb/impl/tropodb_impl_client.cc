@@ -146,6 +146,7 @@ WriteBatch* TropoDBImpl::BuildBatchGroup(Writer** last_writer,
 }
 
 Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+  uint64_t before = clock_->NowMicros();
   Status s;
 
   Writer w(&mutex_);
@@ -188,16 +189,22 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       wal_[striped_index]->Ref();
       mutex_.Unlock();
       // WAL
-      if (!options.sync) {
-        // Async WAL write
-        s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1, /*sync*/ false);
-      } else {
+      uint64_t before_wal = clock_->NowMicros();
+      if (options.sync) {
         // Synchronous WAL write
         s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1, /*sync*/ true);
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1,
+            /*sync*/ true);
+
+      } else {
+        // Async WAL write
+        s = wal_[striped_index]->Append(
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1,
+            /*sync*/ false);
       }
+      put_wal_.AddTiming(clock_->NowMicros() - before_wal);
       // write to memtable
+      uint64_t before_mem = clock_->NowMicros();
       assert(mem_[striped_index] != nullptr);
       if (s.ok()) {
         s = mem_[striped_index]->Write(options, write_batch);
@@ -207,6 +214,7 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       } else {
         TROPO_LOG_ERROR("ERROR: WAL append error\n");
       }
+      put_mem_.AddTiming(clock_->NowMicros() - before_mem);
       mutex_.Lock();
       wal_[striped_index]->Unref();
     }
@@ -232,6 +240,7 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     writers_[striped_index].front()->cv.Signal();
   }
 
+  put_total_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 

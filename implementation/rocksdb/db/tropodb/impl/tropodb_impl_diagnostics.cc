@@ -112,6 +112,9 @@ void TropoDBImpl::PrintSSTableStats() {
 
 void TropoDBImpl::PrintWALStats() {
   TROPO_LOG_PERF("====  WAL stats ====\n");
+  PrintCounterTable({{"Put total", put_total_},
+                     {"Put WAL", put_wal_},
+                     {"Put mem", put_mem_}});
   for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     std::ostringstream out;
     out << "====  WAL manager " << i << " ====\n";

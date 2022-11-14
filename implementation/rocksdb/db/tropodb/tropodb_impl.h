@@ -399,6 +399,9 @@ class TropoDBImpl : public DB {
   TimingCounter flush_reset_wal_counter_;
   // Diag compaction
   std::array<uint64_t, TropoDBConfig::level_count - 1> compactions_;
+  TimingCounter put_total_;
+  TimingCounter put_wal_;
+  TimingCounter put_mem_;
   TimingCounter compaction_compaction_L0_total_;
   TimingCounter compaction_reset_L0_counter_;
   TimingCounter compaction_pick_compaction_;
