@@ -79,6 +79,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
                                               max_write_buffer_size_);
       mem_[parallel_number]->Ref();
+      FlushData* dat = new FlushData(this, parallel_number);
       env_->Schedule(&TropoDBImpl::BGFlushWork, this, rocksdb::Env::HIGH);
 #else
       // Switch to fresh memtable
