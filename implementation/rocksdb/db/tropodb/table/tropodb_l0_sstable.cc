@@ -1,20 +1,20 @@
 #include "db/tropodb/table/tropodb_l0_sstable.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/table/iterators/sstable_iterator.h"
 #include "db/tropodb/table/iterators/sstable_iterator_compressed.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_sstable_builder.h"
 #include "db/tropodb/table/tropodb_sstable_reader.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 TropoL0SSTable::TropoL0SSTable(SZD::SZDChannelFactory* channel_factory,
-                           const SZD::DeviceInfo& info,
-                           const uint64_t min_zone_nr,
-                           const uint64_t max_zone_nr)
+                               const SZD::DeviceInfo& info,
+                               const uint64_t min_zone_nr,
+                               const uint64_t max_zone_nr)
     : TropoSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
            TropoDBConfig::number_of_concurrent_L0_readers),
@@ -36,7 +36,8 @@ TropoL0SSTable::~TropoL0SSTable() = default;
 Status TropoL0SSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
 
 TropoSSTableBuilder* TropoL0SSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_sstable_encoding);
+  return new TropoSSTableBuilder(this, meta,
+                                 TropoDBConfig::use_sstable_encoding);
 }
 
 bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
@@ -47,9 +48,12 @@ bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
 #endif
 }
 
-uint64_t TropoL0SSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
+uint64_t TropoL0SSTable::SpaceAvailable() const {
+  return log_.SpaceAvailable();
+}
 
-Status TropoL0SSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status TropoL0SSTable::WriteSSTable(const Slice& content,
+                                    SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     TROPO_LOG_ERROR("ERROR: L0 SSTable: Out of space\n");
@@ -68,8 +72,8 @@ Status TropoL0SSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) 
 }
 
 Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
-                                   std::vector<SSZoneMetaData>& metas,
-                                   uint8_t parallel_number) {
+                                     std::vector<SSZoneMetaData>& metas,
+                                     uint8_t parallel_number) {
   Status s = Status::OK();
   SSZoneMetaData meta;
   meta.L0.log_number = parallel_number;
@@ -122,7 +126,8 @@ uint8_t TropoL0SSTable::request_read_queue() {
   }
   while (picked_reader >= TropoDBConfig::number_of_concurrent_L0_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
+    for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers;
+         i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -277,7 +282,7 @@ Status TropoL0SSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
 }
 
 Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
-                                    const Comparator* cmp) {
+                                      const Comparator* cmp) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);
@@ -290,8 +295,9 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      TROPO_LOG_ERROR("ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n",
-                    size, count);
+      TROPO_LOG_ERROR(
+          "ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n", size,
+          count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -302,8 +308,8 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
 }
 
 Status TropoL0SSTable::Get(const InternalKeyComparator& icmp,
-                         const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta, EntryStatus* status) {
+                           const Slice& key_ptr, std::string* value_ptr,
+                           const SSZoneMetaData& meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
     TROPO_LOG_ERROR("ERROR: L0 SSTable: Corrupt iterator\n");

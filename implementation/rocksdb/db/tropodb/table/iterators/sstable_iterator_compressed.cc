@@ -182,7 +182,7 @@ bool SSTableIteratorCompressed::ParseNextKey() {
   // Decode next entry
   uint32_t shared, non_shared, value_length;
   p = TropoEncoding::DecodeEncodedEntry(p, limit, &shared, &non_shared,
-                                      &value_length);
+                                        &value_length);
   if (p == nullptr || key_.size() < shared) {
     CorruptionError();
     return false;

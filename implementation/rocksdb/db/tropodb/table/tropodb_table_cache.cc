@@ -33,8 +33,9 @@ static void DeleteEntry(const Slice& key, void* value) {
 // }
 
 TropoTableCache::TropoTableCache(const Options& options,
-                             const InternalKeyComparator& icmp,
-                             const size_t entries, TropoSSTableManager* ssmanager)
+                                 const InternalKeyComparator& icmp,
+                                 const size_t entries,
+                                 TropoSSTableManager* ssmanager)
     : icmp_(icmp), options_(options), ssmanager_(ssmanager) {
   LRUCacheOptions opts;
   opts.capacity = entries;
@@ -44,7 +45,8 @@ TropoTableCache::TropoTableCache(const Options& options,
 TropoTableCache::~TropoTableCache() { cache_.reset(); }
 
 Status TropoTableCache::FindSSZone(const SSZoneMetaData& meta,
-                                 const uint8_t level, Cache::Handle** handle) {
+                                   const uint8_t level,
+                                   Cache::Handle** handle) {
   Status s;
   char buf[sizeof(meta.number)];
   EncodeFixed64(buf, meta.number);
@@ -61,9 +63,9 @@ Status TropoTableCache::FindSSZone(const SSZoneMetaData& meta,
 }
 
 Iterator* TropoTableCache::NewIterator(const ReadOptions& options,
-                                     const SSZoneMetaData& meta,
-                                     const uint8_t level,
-                                     TropoSSTable** tableptr) {
+                                       const SSZoneMetaData& meta,
+                                       const uint8_t level,
+                                       TropoSSTable** tableptr) {
   if (tableptr != nullptr) {
     *tableptr = nullptr;
   }
@@ -81,9 +83,9 @@ Iterator* TropoTableCache::NewIterator(const ReadOptions& options,
 }
 
 Status TropoTableCache::Get(const ReadOptions& options,
-                          const SSZoneMetaData& meta, const uint8_t level,
-                          const Slice& key, std::string* value,
-                          EntryStatus* status) {
+                            const SSZoneMetaData& meta, const uint8_t level,
+                            const Slice& key, std::string* value,
+                            EntryStatus* status) {
   Cache::Handle* handle = nullptr;
   Status s = FindSSZone(meta, level, &handle);
   if (s.ok()) {
@@ -97,7 +99,8 @@ Status TropoTableCache::Get(const ReadOptions& options,
       if (!ParseInternalKey(it->key(), &parsed_key, false).ok()) {
         *status = EntryStatus::notfound;
         TROPO_LOG_ERROR(
-            "ERROR: SSTable cache: corrupt key in table cache, for level %u and table %lu, str %s\n",
+            "ERROR: SSTable cache: corrupt key in table cache, for level %u "
+            "and table %lu, str %s\n",
             level, meta.number, it->key().ToString().data());
       } else if (parsed_key.type == kTypeDeletion) {
         *status = EntryStatus::deleted;

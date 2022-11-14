@@ -3,9 +3,9 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/tropodb/index/tropodb_version_edit.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/table/tropodb_zonemetadata.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/rocksdb_namespace.h"
 #include "util/coding.h"
@@ -31,7 +31,7 @@ void TropoVersionEdit::Clear() {
 }
 
 void TropoVersionEdit::AddSSDefinition(const uint8_t level,
-                                     const SSZoneMetaData& meta) {
+                                       const SSZoneMetaData& meta) {
   SSZoneMetaData f;
   f.number = meta.number;
   if (level == 0) {
@@ -50,18 +50,18 @@ void TropoVersionEdit::AddSSDefinition(const uint8_t level,
   f.smallest = meta.smallest;
   f.largest = meta.largest;
   TROPO_LOG_DEBUG("DEBUG: Adding SSTable %lu %lu %lu \n", f.number, f.L0.lba,
-                f.lba_count);
+                  f.lba_count);
   new_ss_.push_back(std::make_pair(level, f));
 }
 
 void TropoVersionEdit::RemoveSSDefinition(const uint8_t level,
-                                        const SSZoneMetaData& meta) {
+                                          const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
   deleted_ss_pers_.push_back(std::make_pair(level, meta));
 }
 
 void TropoVersionEdit::RemoveSSDefinitionOnlyMeta(const uint8_t level,
-                                                const SSZoneMetaData& meta) {
+                                                  const SSZoneMetaData& meta) {
   deleted_ss_.insert(std::make_pair(level, meta.number));
 }
 
@@ -86,7 +86,8 @@ void TropoVersionEdit::EncodeTo(std::string* dst) const {
   }
 
   if (has_next_ss_number) {
-    PutVarint32(dst, static_cast<uint32_t>(TropoVersionTag::kNextSSTableNumber));
+    PutVarint32(dst,
+                static_cast<uint32_t>(TropoVersionTag::kNextSSTableNumber));
     PutVarint64(dst, ss_number);
   }
 
@@ -116,7 +117,8 @@ void TropoVersionEdit::EncodeTo(std::string* dst) const {
 
 #ifdef VERSION_LEAK
   debug_version_leak_ = dst->size() - debug_version_leak_;
-  TROPO_LOG_DEBUG("DEBUG LEAK begin deleted ranges %lu \n", debug_version_leak_);
+  TROPO_LOG_DEBUG("DEBUG LEAK begin deleted ranges %lu \n",
+                  debug_version_leak_);
 #endif
 
   // deleted LN

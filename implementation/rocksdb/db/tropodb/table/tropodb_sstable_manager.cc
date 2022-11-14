@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <iostream>
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/memtable/tropodb_memtable.h"
 #include "db/tropodb/table/iterators/sstable_ln_iterator.h"
@@ -11,15 +10,16 @@
 #include "db/tropodb/table/tropodb_ln_sstable.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_zonemetadata.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "table/internal_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
-TropoSSTableManager::TropoSSTableManager(SZD::SZDChannelFactory* channel_factory,
-                                     const SZD::DeviceInfo& info,
-                                     const RangeArray& ranges)
+TropoSSTableManager::TropoSSTableManager(
+    SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
+    const RangeArray& ranges)
     : zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
       ranges_(ranges),
@@ -29,7 +29,7 @@ TropoSSTableManager::TropoSSTableManager(SZD::SZDChannelFactory* channel_factory
   // Create tables
   for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     sstable_level_[i] = new TropoL0SSTable(channel_factory_, info,
-                                         ranges[i].first, ranges[i].second);
+                                           ranges[i].first, ranges[i].second);
   }
   sstable_level_[TropoDBConfig::lower_concurrency] = new TropoLNSSTable(
       channel_factory_, info, ranges[TropoDBConfig::lower_concurrency].first,
@@ -55,10 +55,10 @@ TropoSSTableManager::~TropoSSTableManager() {
 }
 
 Status TropoSSTableManager::Get(const uint8_t level,
-                              const InternalKeyComparator& icmp,
-                              const Slice& key_ptr, std::string* value_ptr,
-                              const SSZoneMetaData& meta,
-                              EntryStatus* status) const {
+                                const InternalKeyComparator& icmp,
+                                const Slice& key_ptr, std::string* value_ptr,
+                                const SSZoneMetaData& meta,
+                                EntryStatus* status) const {
   assert(level < TropoDBConfig::level_count);
   if (level == 0) {
     return sstable_level_[meta.L0.log_number]->Get(icmp, key_ptr, value_ptr,
@@ -70,31 +70,32 @@ Status TropoSSTableManager::Get(const uint8_t level,
 }
 
 Status TropoSSTableManager::ReadSSTable(const uint8_t level, Slice* sstable,
-                                      const SSZoneMetaData& meta) const {
+                                        const SSZoneMetaData& meta) const {
   assert(level < TropoDBConfig::level_count);
   if (level == 0) {
     return sstable_level_[meta.L0.log_number]->ReadSSTable(sstable, meta);
   } else {
-    return sstable_level_[TropoDBConfig::lower_concurrency]->ReadSSTable(sstable,
-                                                                     meta);
+    return sstable_level_[TropoDBConfig::lower_concurrency]->ReadSSTable(
+        sstable, meta);
   }
 }
 
 Iterator* TropoSSTableManager::GetLNIterator(const Slice& file_value,
-                                           const Comparator* cmp) {
+                                             const Comparator* cmp) {
   std::pair<SSZoneMetaData, uint8_t> decoded_iterator =
       LNZoneIterator::DecodeLNIterator(file_value);
   return NewIterator(decoded_iterator.second, decoded_iterator.first, cmp);
 }
 
 Iterator* TropoSSTableManager::NewIterator(const uint8_t level,
-                                         const SSZoneMetaData& meta,
-                                         const Comparator* cmp) const {
+                                           const SSZoneMetaData& meta,
+                                           const Comparator* cmp) const {
   assert(level < TropoDBConfig::level_count);
   if (level == 0) {
     return sstable_level_[meta.L0.log_number]->NewIterator(meta, cmp);
   } else {
-    return sstable_level_[TropoDBConfig::lower_concurrency]->NewIterator(meta, cmp);
+    return sstable_level_[TropoDBConfig::lower_concurrency]->NewIterator(meta,
+                                                                         cmp);
   }
 }
 
@@ -115,9 +116,9 @@ Status TropoSSTableManager::RecoverLN(const std::string& recovery_data) {
   if (recovery_data == "") {
     return Status::OK();
   }
-  Status s =
-      static_cast<TropoLNSSTable*>(sstable_level_[TropoDBConfig::lower_concurrency])
-          ->Recover(recovery_data);
+  Status s = static_cast<TropoLNSSTable*>(
+                 sstable_level_[TropoDBConfig::lower_concurrency])
+                 ->Recover(recovery_data);
   if (!s.ok()) {
     TROPO_LOG_ERROR("ERROR: SSTable recovery: Can not recover LN\n");
   }
@@ -132,8 +133,8 @@ Status TropoSSTableManager::Recover(const std::string& recovery_data) {
 }
 
 std::string TropoSSTableManager::GetRecoveryData() {
-  TropoLNSSTable* table =
-      static_cast<TropoLNSSTable*>(sstable_level_[TropoDBConfig::lower_concurrency]);
+  TropoLNSSTable* table = static_cast<TropoLNSSTable*>(
+      sstable_level_[TropoDBConfig::lower_concurrency]);
   return table->Encode();
 }
 
@@ -152,9 +153,9 @@ TropoSSTableBuilder* TropoSSTableManager::NewTropoSSTableBuilder(
 }
 
 Status TropoSSTableManager::CopySSTable(const uint8_t level1,
-                                      const uint8_t level2,
-                                      const SSZoneMetaData& meta,
-                                      SSZoneMetaData* new_meta) const {
+                                        const uint8_t level2,
+                                        const SSZoneMetaData& meta,
+                                        SSZoneMetaData* new_meta) const {
   Status s = Status::OK();
   // Lazy copy. We do not have to rewrite, all tables are already in LN.
   if (level1 != 0) {
@@ -200,7 +201,7 @@ double TropoSSTableManager::GetFractionFilled(const uint8_t level) const {
 }
 
 bool TropoSSTableManager::EnoughSpaceAvailable(const uint8_t level,
-                                             const Slice& slice) const {
+                                               const Slice& slice) const {
   assert(level < TropoDBConfig::level_count);
   if (level == 0) {
     // TODO: Not used for L0 so not tested
@@ -211,8 +212,8 @@ bool TropoSSTableManager::EnoughSpaceAvailable(const uint8_t level,
     }
     return true;
   } else {
-    return sstable_level_[TropoDBConfig::lower_concurrency]->EnoughSpaceAvailable(
-        slice);
+    return sstable_level_[TropoDBConfig::lower_concurrency]
+        ->EnoughSpaceAvailable(slice);
   }
 }
 
@@ -223,8 +224,8 @@ TropoL0SSTable* TropoSSTableManager::GetL0SSTableLog(
 }
 
 Status TropoSSTableManager::FlushMemTable(TropoMemtable* mem,
-                                        std::vector<SSZoneMetaData>& metas,
-                                        uint8_t parallel_number) const {
+                                          std::vector<SSZoneMetaData>& metas,
+                                          uint8_t parallel_number) const {
   assert(parallel_number < TropoDBConfig::lower_concurrency);
   return GetL0SSTableLog(parallel_number)
       ->FlushMemTable(mem, metas, parallel_number);
@@ -289,12 +290,13 @@ uint64_t TropoSSTableManager::SpaceRemainingL0(uint8_t parallel_number) const {
 }
 
 Status TropoSSTableManager::DeleteLNTable(const uint8_t level,
-                                        const SSZoneMetaData& meta) const {
+                                          const SSZoneMetaData& meta) const {
   if (level == 0) {
     TROPO_LOG_ERROR("Error: %s : Invalid level for LN delete\n", __func__);
     return Status::InvalidArgument();
   }
-  return sstable_level_[TropoDBConfig::lower_concurrency]->InvalidateSSZone(meta);
+  return sstable_level_[TropoDBConfig::lower_concurrency]->InvalidateSSZone(
+      meta);
 }
 
 uint64_t TropoSSTableManager::SpaceRemainingInBytesLN() const {
@@ -365,19 +367,22 @@ size_t TropoSSTableManager::FindSSTableIndex(
   return right;
 }
 
-std::optional<TropoSSTableManager*> TropoSSTableManager::NewTropoDBSSTableManager(
+std::optional<TropoSSTableManager*>
+TropoSSTableManager::NewTropoDBSSTableManager(
     SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
     const uint64_t min_zone, const uint64_t max_zone) {
   uint64_t num_zones = max_zone - min_zone;
   RangeArray ranges;
   // Validate
   if (min_zone > max_zone ||
-      num_zones < TropoDBConfig::level_count * TropoDBConfig::min_ss_zone_count ||
+      num_zones <
+          TropoDBConfig::level_count * TropoDBConfig::min_ss_zone_count ||
       channel_factory == nullptr) {
     TROPO_LOG_ERROR(
         "ERROR: Creating SSTable division: not enough zones assigned "
         "%lu\\%lu\n",
-        num_zones, TropoDBConfig::level_count * TropoDBConfig::min_ss_zone_count);
+        num_zones,
+        TropoDBConfig::level_count * TropoDBConfig::min_ss_zone_count);
     return {};
   }
   // Distribute for L0

@@ -1689,7 +1689,7 @@ add_custom_target(
   format_rocksdb_zns
   COMMAND ${CLANG_FORMAT_PATH}
   -i
-  "-style=file"
+  "-style=file:${PROJECT_SOURCE_DIR}/.clang-format"
   ${FORMAT_PATHS}
   COMMENT "Formatting files"
 )

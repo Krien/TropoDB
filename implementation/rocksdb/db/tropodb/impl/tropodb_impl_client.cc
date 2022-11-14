@@ -17,7 +17,7 @@ struct TropoDBImpl::Writer {
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status TropoDBImpl::Put(const WriteOptions& options, const Slice& key,
-                      const Slice& value) {
+                        const Slice& value) {
   WriteBatch batch;
   batch.Put(key, value);
   return Write(options, &batch);
@@ -39,7 +39,8 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       s = bg_error_;
       return s;
     }
-    if (allow_delay && versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
+    if (allow_delay &&
+        versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
       // Throttle
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
@@ -77,7 +78,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       // Drop all that was in the memtable (NOT PERSISTENT!)
       mem_[parallel_number]->Unref();
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
-                                              max_write_buffer_size_);
+                                                max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       FlushData* dat = new FlushData(this, parallel_number);
       env_->Schedule(&TropoDBImpl::BGFlushWork, dat, rocksdb::Env::HIGH);
@@ -85,7 +86,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       // Switch to fresh memtable
       imm_[parallel_number] = mem_[parallel_number];
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
-                                              max_write_buffer_size_);
+                                                max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       // Ensure the background knows about these thingss
       MaybeScheduleFlush(parallel_number);
@@ -98,7 +99,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
 }
 
 WriteBatch* TropoDBImpl::BuildBatchGroup(Writer** last_writer,
-                                       uint8_t parallel_number) {
+                                         uint8_t parallel_number) {
   mutex_.AssertHeld();
   assert(!writers_[parallel_number].empty());
   Writer* first = writers_[parallel_number].front();
@@ -236,7 +237,7 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 }
 
 Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
-                      std::string* value) {
+                        std::string* value) {
   MutexLock l(&mutex_);
   Status s;
   value->clear();
@@ -302,8 +303,8 @@ Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
 }
 
 Status TropoDBImpl::Get(const ReadOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      PinnableSlice* value, std::string* timestamp) {
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        PinnableSlice* value, std::string* timestamp) {
   std::string* val = new std::string;
   Status s = Get(options, key, val);
   *value = PinnableSlice(val);

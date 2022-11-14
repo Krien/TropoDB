@@ -1,7 +1,7 @@
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/index/tropodb_version_set.h"
 #include "db/tropodb/table/tropodb_zonemetadata.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/rocksdb_namespace.h"
 
@@ -144,8 +144,9 @@ void TropoVersionSet::Builder::SaveTo(TropoVersion* v) {
   v->ss_deleted_range_ = ss_deleted_range_;
 }
 
-void TropoVersionSet::Builder::MaybeAddZone(TropoVersion* v, const uint8_t level,
-                                          SSZoneMetaData* m) {
+void TropoVersionSet::Builder::MaybeAddZone(TropoVersion* v,
+                                            const uint8_t level,
+                                            SSZoneMetaData* m) {
   // Only add if the table is not deleted
   if (levels_[level].deleted_ss.count(m->number) > 0) {
     // Table is deleted: do nothing

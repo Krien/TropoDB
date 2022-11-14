@@ -12,8 +12,9 @@ static constexpr const char* current_preamble = "CURRENT:";
 static constexpr const size_t current_preamble_size = strlen(current_preamble);
 
 TropoManifest::TropoManifest(SZD::SZDChannelFactory* channel_factory,
-                         const SZD::DeviceInfo& info,
-                         const uint64_t min_zone_nr, const uint64_t max_zone_nr)
+                             const SZD::DeviceInfo& info,
+                             const uint64_t min_zone_nr,
+                             const uint64_t max_zone_nr)
     : manifest_start_(max_zone_nr * info.zone_cap),  // enforce corruption
       manifest_blocks_(0),                           // enforce corruption
       manifest_start_new_(0),
@@ -59,7 +60,8 @@ Status TropoManifest::SetCurrent() {
                                     deleted_range_begin_ + delete_blocks_));
     if (!s.ok()) {
       TROPO_LOG_ERROR("ERROR: Manifest: Error consuming tail %lu %lu %lu\n",
-                    log_.GetWriteTail(), deleted_range_begin_, delete_blocks_);
+                      log_.GetWriteTail(), deleted_range_begin_,
+                      delete_blocks_);
     }
     deleted_range_blocks_ -= delete_blocks_;
   }
@@ -89,10 +91,10 @@ Status TropoManifest::SetCurrent() {
 }
 
 Status TropoManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
-                                    uint64_t* end_manifest,
-                                    uint64_t* start_manifest_delete,
-                                    uint64_t* end_manifest_delete,
-                                    TropoCommitReader& reader) {
+                                      uint64_t* end_manifest,
+                                      uint64_t* start_manifest_delete,
+                                      uint64_t* end_manifest_delete,
+                                      TropoCommitReader& reader) {
   Slice potential;
   committer_.GetCommitReader(0, slba, slba + 1, &reader);
   // Prevent reaeding invalid blocks
@@ -126,9 +128,9 @@ Status TropoManifest::TryParseCurrent(uint64_t slba, uint64_t* start_manifest,
 }
 
 Status TropoManifest::TryGetCurrent(uint64_t* start_manifest,
-                                  uint64_t* end_manifest,
-                                  uint64_t* start_manifest_delete,
-                                  uint64_t* end_manifest_delete) {
+                                    uint64_t* end_manifest,
+                                    uint64_t* start_manifest_delete,
+                                    uint64_t* end_manifest_delete) {
   // No manifest to get
   if (log_.Empty()) {
     *start_manifest = *end_manifest = 0;

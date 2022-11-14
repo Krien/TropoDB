@@ -1,13 +1,14 @@
 #include "db/tropodb/table/tropodb_sstable_builder.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/table/tropodb_ln_sstable.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table, SSZoneMetaData* meta,
-                               bool use_encoding, int8_t writer)
+TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table,
+                                         SSZoneMetaData* meta,
+                                         bool use_encoding, int8_t writer)
     : started_(false),
       kv_numbers_(0),
       counter_(0),
@@ -28,7 +29,7 @@ TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table, SSZoneMetaData* me
 TropoSSTableBuilder::~TropoSSTableBuilder() {}
 
 uint64_t TropoSSTableBuilder::EstimateSizeImpact(const Slice& key,
-                                            const Slice& value) const {
+                                                 const Slice& value) const {
   // TODO: this is hardcoded, not maintainable.
   return key.size() + value.size() + 5 * sizeof(uint32_t);
 }
@@ -99,7 +100,7 @@ Status TropoSSTableBuilder::Finalise() {
 Status TropoSSTableBuilder::Flush() {
   if (writer_ != -1) {
     return static_cast<TropoLNSSTable*>(table_)->WriteSSTable(Slice(buffer_),
-                                                            meta_, writer_);
+                                                              meta_, writer_);
   } else {
     return table_->WriteSSTable(Slice(buffer_), meta_);
   }

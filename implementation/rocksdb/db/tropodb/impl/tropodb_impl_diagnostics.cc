@@ -157,11 +157,11 @@ void TropoDBImpl::PrintIODistrStats() {
       << "\n";
   out << std::setfill('-') << std::setw(107) << "\n" << std::setfill(' ');
   struct TropoDiagnostics totaldiag = {.name_ = "Total",
-                                     .bytes_written_ = 0,
-                                     .append_operations_counter_ = 0,
-                                     .bytes_read_ = 0,
-                                     .read_operations_counter_ = 0,
-                                     .zones_erased_counter_ = 0};
+                                       .bytes_written_ = 0,
+                                       .append_operations_counter_ = 0,
+                                       .bytes_read_ = 0,
+                                       .read_operations_counter_ = 0,
+                                       .zones_erased_counter_ = 0};
   TROPO_LOG_PERF("%s", out.str().data());
   std::ostringstream hotzones_reset;
   std::ostringstream hotzones_append;

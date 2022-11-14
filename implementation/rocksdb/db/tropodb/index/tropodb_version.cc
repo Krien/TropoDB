@@ -3,11 +3,11 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/tropodb/index/tropodb_version.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_version_set.h"
 #include "db/tropodb/table/iterators/merging_iterator.h"
 #include "db/tropodb/table/iterators/sstable_ln_iterator.h"
 #include "db/tropodb/table/tropodb_sstable.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
@@ -47,7 +47,7 @@ TropoVersion::~TropoVersion() {
 void TropoVersion::Clear() {}
 
 Status TropoVersion::Get(const ReadOptions& options, const LookupKey& lkey,
-                       std::string* value) {
+                         std::string* value) {
   Status call_status;
   EntryStatus entry_status;
   const Comparator* ucmp = vset_->icmp_.user_comparator();
@@ -143,14 +143,14 @@ Status TropoVersion::Get(const ReadOptions& options, const LookupKey& lkey,
 }
 
 Iterator* TropoVersion::GetLNIterator(void* arg, const Slice& file_value,
-                                    const Comparator* cmp) {
+                                      const Comparator* cmp) {
   return reinterpret_cast<TropoSSTableManager*>(arg)->GetLNIterator(file_value,
-                                                                  cmp);
+                                                                    cmp);
 }
 
 void TropoVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
-                                      const InternalKey* end,
-                                      std::vector<SSZoneMetaData*>* inputs) {
+                                        const InternalKey* end,
+                                        std::vector<SSZoneMetaData*>* inputs) {
   assert(level >= 0);
   assert(level < TropoDBConfig::level_count);
   inputs->clear();
@@ -194,7 +194,7 @@ void TropoVersion::GetOverlappingInputs(uint8_t level, const InternalKey* begin,
 
 // FIXME: Do not use this function! It is broken and will not be maintained
 void TropoVersion::AddIterators(const ReadOptions& options,
-                              std::vector<Iterator*>* iters) {
+                                std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
   for (size_t i = 0; i < ss_[0].size(); i++) {
     iters->push_back(vset_->znssstable_->NewIterator(

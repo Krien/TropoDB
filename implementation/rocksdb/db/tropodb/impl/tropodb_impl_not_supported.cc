@@ -8,14 +8,14 @@
 namespace ROCKSDB_NAMESPACE {
 
 Iterator* TropoDBImpl::NewIterator(const ReadOptions& options,
-                                 ColumnFamilyHandle* column_family) {
+                                   ColumnFamilyHandle* column_family) {
   TROPO_LOG_ERROR("Not implemented\n");
   return NULL;
 }
 
 Status TropoDBImpl::Merge(const WriteOptions& options,
-                        ColumnFamilyHandle* column_family, const Slice& key,
-                        const Slice& value) {
+                          ColumnFamilyHandle* column_family, const Slice& key,
+                          const Slice& value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::OK();
 }
@@ -62,49 +62,50 @@ std::vector<Status> TropoDBImpl::MultiGet(
 }
 
 Status TropoDBImpl::SingleDelete(const WriteOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const Slice& key, const Slice& ts) {
+                                 ColumnFamilyHandle* column_family,
+                                 const Slice& key, const Slice& ts) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
 Status TropoDBImpl::SingleDelete(const WriteOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const Slice& key) {
+                                 ColumnFamilyHandle* column_family,
+                                 const Slice& key) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
 Status TropoDBImpl::Put(const WriteOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      const Slice& value) {
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        const Slice& value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
 Status TropoDBImpl::Put(const WriteOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      const Slice& ts, const Slice& value) {
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        const Slice& ts, const Slice& value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
 Status TropoDBImpl::Delete(const WriteOptions& options,
-                         ColumnFamilyHandle* column_family, const Slice& key) {
+                           ColumnFamilyHandle* column_family,
+                           const Slice& key) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
 Status TropoDBImpl::Delete(const WriteOptions& options,
-                         ColumnFamilyHandle* column_family, const Slice& key,
-                         const Slice& ts) {
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           const Slice& ts) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
 
 Status TropoDBImpl::Get(const ReadOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      PinnableSlice* value) {
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        PinnableSlice* value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported("Column families not supported");
 }
@@ -117,40 +118,40 @@ Status TropoDBImpl::NewIterators(
   return Status::NotSupported();
 }
 bool TropoDBImpl::GetProperty(ColumnFamilyHandle* column_family,
-                            const Slice& property, std::string* value) {
+                              const Slice& property, std::string* value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return false;
 }
 bool TropoDBImpl::GetMapProperty(ColumnFamilyHandle* column_family,
-                               const Slice& property,
-                               std::map<std::string, std::string>* value) {
+                                 const Slice& property,
+                                 std::map<std::string, std::string>* value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return false;
 }
 bool TropoDBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
-                               const Slice& property, uint64_t* value) {
+                                 const Slice& property, uint64_t* value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return false;
 }
 bool TropoDBImpl::GetAggregatedIntProperty(const Slice& property,
-                                         uint64_t* aggregated_value) {
+                                           uint64_t* aggregated_value) {
   TROPO_LOG_ERROR("Not implemented\n");
   return false;
 };
 Status TropoDBImpl::GetApproximateSizes(const SizeApproximationOptions& options,
-                                      ColumnFamilyHandle* column_family,
-                                      const Range* range, int n,
-                                      uint64_t* sizes) {
+                                        ColumnFamilyHandle* column_family,
+                                        const Range* range, int n,
+                                        uint64_t* sizes) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 };
 void TropoDBImpl::GetApproximateMemTableStats(ColumnFamilyHandle* column_family,
-                                            const Range& range,
-                                            uint64_t* const count,
-                                            uint64_t* const size){};
+                                              const Range& range,
+                                              uint64_t* const count,
+                                              uint64_t* const size){};
 Status TropoDBImpl::CompactRange(const CompactRangeOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const Slice* begin, const Slice* end) {
+                                 ColumnFamilyHandle* column_family,
+                                 const Slice* begin, const Slice* end) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 };
@@ -180,13 +181,15 @@ Status TropoDBImpl::EnableAutoCompaction(
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
-void TropoDBImpl::EnableManualCompaction() { TROPO_LOG_ERROR("Not implemented\n"); }
+void TropoDBImpl::EnableManualCompaction() {
+  TROPO_LOG_ERROR("Not implemented\n");
+}
 void TropoDBImpl::DisableManualCompaction() {
   TROPO_LOG_ERROR("Not implemented\n");
 }
 
 Status TropoDBImpl::Flush(const FlushOptions& options,
-                        ColumnFamilyHandle* column_family) {
+                          ColumnFamilyHandle* column_family) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
@@ -208,13 +211,13 @@ Status TropoDBImpl::DisableFileDeletions() {
 }
 
 Status TropoDBImpl::IncreaseFullHistoryTsLow(ColumnFamilyHandle* column_family,
-                                           std::string ts_low) {
+                                             std::string ts_low) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
 
 Status TropoDBImpl::GetFullHistoryTsLow(ColumnFamilyHandle* column_family,
-                                      std::string* ts_low) {
+                                        std::string* ts_low) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
@@ -225,8 +228,8 @@ Status TropoDBImpl::EnableFileDeletions(bool force) {
 }
 
 Status TropoDBImpl::GetLiveFiles(std::vector<std::string>&,
-                               uint64_t* manifest_file_size,
-                               bool flush_memtable) {
+                                 uint64_t* manifest_file_size,
+                                 bool flush_memtable) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }
@@ -311,7 +314,7 @@ ColumnFamilyHandle* TropoDBImpl::DefaultColumnFamily() const {
 }
 
 Status TropoDBImpl::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
-                                           TablePropertiesCollection* props) {
+                                             TablePropertiesCollection* props) {
   TROPO_LOG_ERROR("Not implemented\n");
   return Status::NotSupported();
 }

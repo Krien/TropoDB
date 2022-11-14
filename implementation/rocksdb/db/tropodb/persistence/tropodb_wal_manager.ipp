@@ -40,15 +40,9 @@ TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
   // WalManager is the boss of the channels. Prevents stale channels.
   write_channels_ = new SZD::SZDChannel*[1];
   channel_factory_->Ref();
-  channel_factory_->register_channel(&write_channels_[0], min_zone_nr,
-                                     max_zone_nr,
-                                     TropoDBConfig::wal_preserve_dma,
-#ifdef WAL_UNORDERED
-                                     TropoDBConfig::wal_iodepth
-#else
-                                     1
-#endif
-  );
+  channel_factory_->register_channel(
+      &write_channels_[0], min_zone_nr, max_zone_nr,
+      TropoDBConfig::wal_preserve_dma, TropoDBConfig::wal_iodepth);
   for (size_t i = 0; i < N; ++i) {
     TropoWAL* newwal = new TropoWAL(channel_factory, info, wal_walker,
                                     wal_walker + wal_range, 1, write_channels_);

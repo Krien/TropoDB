@@ -17,8 +17,6 @@
 
 #include "db/column_family.h"
 #include "db/memtable.h"
-#include "db/write_batch_internal.h"
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_compaction.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/index/tropodb_version_set.h"
@@ -28,7 +26,9 @@
 #include "db/tropodb/persistence/tropodb_wal_manager.h"
 #include "db/tropodb/table/tropodb_sstable_manager.h"
 #include "db/tropodb/table/tropodb_table_cache.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "db/write_batch_internal.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -48,8 +48,8 @@ namespace ROCKSDB_NAMESPACE {
 const int kNumNonTableCacheFiles = 10;
 
 TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
-                     const bool seq_per_batch, const bool batch_per_txn,
-                     bool read_only)
+                         const bool seq_per_batch, const bool batch_per_txn,
+                         bool read_only)
     : options_(options),
       name_(dbname),
       internal_comparator_(BytewiseComparator()),
@@ -65,10 +65,11 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
       // and 1~3 LOW for each LN thread)
       low_level_threads_((1 + TropoDBConfig::compaction_allow_prefetching +
                           TropoDBConfig::compaction_allow_deferring_writes)),
-      high_level_threads_(TropoDBConfig::lower_concurrency +
-                          TropoDBConfig::lower_concurrency *
-                              (1 + TropoDBConfig::compaction_allow_prefetching +
-                               TropoDBConfig::compaction_allow_deferring_writes)),
+      high_level_threads_(
+          TropoDBConfig::lower_concurrency +
+          TropoDBConfig::lower_concurrency *
+              (1 + TropoDBConfig::compaction_allow_prefetching +
+               TropoDBConfig::compaction_allow_deferring_writes)),
       // State
       bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
@@ -95,7 +96,7 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
   // Setup background threads (RocksDB env will not let us make threads
   // otherwise)
   TROPO_LOG_INFO("INFO: TropoDB will use a maximum of %u background threads\n",
-               low_level_threads_ + high_level_threads_);
+                 low_level_threads_ + high_level_threads_);
   env_->SetBackgroundThreads(high_level_threads_,
                              ROCKSDB_NAMESPACE::Env::Priority::HIGH);
   env_->SetBackgroundThreads(low_level_threads_,
@@ -169,8 +170,8 @@ Status TropoDBImpl::OpenZNSDevice(const std::string dbname) {
     TROPO_LOG_ERROR("ERROR: SPDK will not init. Are you root?\n");
     return Status::IOError("Error opening SPDK");
   }
-  s = FromStatus(
-      zns_device_->Open(this->name_, TropoDBConfig::min_zone, TropoDBConfig::max_zone));
+  s = FromStatus(zns_device_->Open(this->name_, TropoDBConfig::min_zone,
+                                   TropoDBConfig::max_zone));
   if (!s.ok()) {
     TROPO_LOG_ERROR("ERROR: SZD device does not open. Is it ZNS?\n");
     return Status::IOError("Error opening ZNS device");
@@ -201,7 +202,7 @@ Status TropoDBImpl::ResetZNSDevice() {
 }
 
 Status TropoDBImpl::InitDB(const DBOptions& options,
-                         const size_t max_write_buffer_size) {
+                           const size_t max_write_buffer_size) {
   assert(zns_device_ != nullptr);
   max_write_buffer_size_ = max_write_buffer_size;
 
@@ -225,7 +226,7 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
   {
     zone_step = TropoDBConfig::manifest_zones;
     manifest_ = new TropoManifest(channel_factory_, device_info, zone_head,
-                                zone_head + zone_step);
+                                  zone_head + zone_step);
     manifest_->Ref();
     info_str << std::left << std::setw(15) << "Manifest" << std::right
              << std::setw(25) << zone_head << std::setw(25)
@@ -253,8 +254,8 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
     zone_step = device_info.max_lba / device_info.zone_size - zone_head - 1;
     // If only we had access to C++23.
     ss_manager_ =
-        TropoSSTableManager::NewTropoDBSSTableManager(channel_factory_, device_info,
-                                               zone_head, zone_head + zone_step)
+        TropoSSTableManager::NewTropoDBSSTableManager(
+            channel_factory_, device_info, zone_head, zone_head + zone_step)
             .value_or(nullptr);
     if (ss_manager_ == nullptr) {
       TROPO_LOG_ERROR("ERROR: Could not initialise SSTable manager\n");
@@ -269,17 +270,17 @@ Status TropoDBImpl::InitDB(const DBOptions& options,
   {
     for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
       mem_[i] = new TropoMemtable(options, internal_comparator_,
-                                max_write_buffer_size_);
+                                  max_write_buffer_size_);
       mem_[i]->Ref();
     }
 
     Options opts(options, ColumnFamilyOptions());
     table_cache_ = new TropoTableCache(opts, internal_comparator_,
-                                     1024 * 1024 * 4, ss_manager_);
+                                       1024 * 1024 * 4, ss_manager_);
 
-    versions_ = new TropoVersionSet(internal_comparator_, ss_manager_, manifest_,
-                                  device_info.lba_size, device_info.zone_cap,
-                                  table_cache_, this->env_);
+    versions_ = new TropoVersionSet(
+        internal_comparator_, ss_manager_, manifest_, device_info.lba_size,
+        device_info.zone_cap, table_cache_, this->env_);
   }
 
   // Print info string (if enabled)
@@ -298,7 +299,7 @@ void TropoDBImpl::RecoverBackgroundFlow() {
       if (mem_[i]->GetInternalSize() > 0) {
         imm_[i] = mem_[i];
         mem_[i] = new TropoMemtable(options_, internal_comparator_,
-                                  max_write_buffer_size_);
+                                    max_write_buffer_size_);
         mem_[i]->Ref();
       }
       MaybeScheduleFlush(i);
@@ -432,7 +433,8 @@ Status TropoDBImpl::Close() {
   return Status::OK();
 }
 
-Status TropoDBImpl::DestroyDB(const std::string& dbname, const Options& options) {
+Status TropoDBImpl::DestroyDB(const std::string& dbname,
+                              const Options& options) {
   // Destroy "all files" from the DB. Since we do not use multitenancy, we
   // might as well reset the device.
   Status s;
