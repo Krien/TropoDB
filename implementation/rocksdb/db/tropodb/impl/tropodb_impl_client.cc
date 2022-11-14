@@ -191,12 +191,11 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       if (!options.sync) {
         // Async WAL write
         s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1, /*sync*/ false);
       } else {
         // Synchronous WAL write
         s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
-        s = s.ok() ? wal_[striped_index]->Sync() : s;
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1, /*sync*/ true);
       }
       // write to memtable
       assert(mem_[striped_index] != nullptr);

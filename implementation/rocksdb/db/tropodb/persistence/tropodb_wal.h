@@ -30,12 +30,12 @@ class TropoWAL : public RefCounter {
   ~TropoWAL();
 
   // Append data to WAL
-  Status Append(const Slice& data, uint64_t seq);
+  Status Append(const Slice& data, uint64_t seq, bool sync = true);
   // Sync buffer from heap to I/O
   Status DataSync();
   // Ensure WAL in heap buffer/DMA buffer is persisted to storage
   Status Sync();
-// Replay all changes present in this WAL to the memtable
+  // Replay all changes present in this WAL to the memtable
   Status Replay(TropoMemtable* mem, SequenceNumber* seq);
   // Closes the WAL gracefully (sync, free buffers)
   Status Close();
@@ -72,8 +72,12 @@ class TropoWAL : public RefCounter {
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
   // Timing
+  inline TimingCounter GetPrepareAppendPerfCounter() { return prepare_append_perf_counter_; }
   inline TimingCounter GetTotalAppendPerfCounter() { return total_append_perf_counter_; }
-  inline TimingCounter GetStorageAppendPerfCounter() { return storage_append_perf_counter_; }
+  inline TimingCounter GetSubmitAsyncAppendPerfCounter() { return submit_async_append_perf_counter_; }
+  inline TimingCounter GetSubmitSyncAppendPerfCounter() { return submit_sync_append_perf_counter_; }
+  inline TimingCounter GetBufferedAppendPerfCounter() { return submit_buffered_append_perf_counter_; }
+  inline TimingCounter GetSyncPerfCounter() { return sync_perf_counter_; }
   inline TimingCounter GetReplayPerfCounter() { return replay_perf_counter_; }
   inline TimingCounter GetRecoveryPerfCounter() { return recovery_perf_counter_; }
   inline TimingCounter GetResetPerfCounter() { return reset_perf_counter_; }
@@ -82,6 +86,8 @@ class TropoWAL : public RefCounter {
   // Append data to buffer or I/O if it is full
   Status BufferedAppend(const Slice& data);
   // Append data to storage (does not guarantee persistence)
+  Status SubmitAppend(const Slice& data);
+  // Append data to storage persistently
   Status DirectAppend(const Slice& data);
   Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
   Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
@@ -100,8 +106,12 @@ class TropoWAL : public RefCounter {
   uint32_t sequence_nr_;
   // Timing
   SystemClock* const clock_;
-  TimingCounter storage_append_perf_counter_;
+  TimingCounter prepare_append_perf_counter_;
   TimingCounter total_append_perf_counter_;
+  TimingCounter submit_async_append_perf_counter_;
+  TimingCounter submit_sync_append_perf_counter_;
+  TimingCounter submit_buffered_append_perf_counter_;
+  TimingCounter sync_perf_counter_;
   TimingCounter replay_perf_counter_;
   TimingCounter recovery_perf_counter_;
   TimingCounter reset_perf_counter_;

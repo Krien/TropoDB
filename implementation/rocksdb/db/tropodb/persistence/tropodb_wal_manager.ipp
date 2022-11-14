@@ -231,23 +231,35 @@ std::vector<TropoDiagnostics> TropoWALManager<N>::IODiagnostics() {
 template <std::size_t N>
 std::vector<std::pair<std::string, const TimingCounter>>
 TropoWALManager<N>::GetAdditionalWALStatistics() {
-  TimingCounter storage_append_perf_counter;
+  TimingCounter prepare_append_perf_counter_;
   TimingCounter total_append_perf_counter;
+  TimingCounter submit_async_append_perf_counter_;
+  TimingCounter submit_sync_append_perf_counter_;
+  TimingCounter submit_buffered_append_perf_counter_;  
+  TimingCounter sync_perf_counter_;
   TimingCounter replay_perf_counter;
   TimingCounter recovery_perf_counter;
   TimingCounter reset_perf_counter;
 
   // Merge the perf counters (this is safe)
   for (size_t i = 0; i < N; i++) {
-    storage_append_perf_counter += wals_[i]->GetStorageAppendPerfCounter();
+    prepare_append_perf_counter_ += wals_[i]->GetPrepareAppendPerfCounter();
     total_append_perf_counter += wals_[i]->GetTotalAppendPerfCounter();
+    submit_async_append_perf_counter_ += wals_[i]->GetSubmitAsyncAppendPerfCounter();
+    submit_sync_append_perf_counter_ += wals_[i]->GetSubmitSyncAppendPerfCounter();
+    submit_buffered_append_perf_counter_ += wals_[i]->GetBufferedAppendPerfCounter();
+    sync_perf_counter_ += wals_[i]->GetSyncPerfCounter();
     replay_perf_counter += wals_[i]->GetReplayPerfCounter();
     recovery_perf_counter += wals_[i]->GetRecoveryPerfCounter();
     reset_perf_counter += wals_[i]->GetResetPerfCounter();
   }
 
-  return {{"WAL Appends", total_append_perf_counter},
-          {"SZD Appends", storage_append_perf_counter},
+  return {{"WAL Appends (tot)", total_append_perf_counter},
+          {"WAL Appends (prep)", prepare_append_perf_counter_},
+          {"WAL Appends (sub)", submit_async_append_perf_counter_},
+          {"WAL Appends (sync)", submit_sync_append_perf_counter_},
+          {"WAL Appends (buf)", submit_buffered_append_perf_counter_},
+          {"Syncs", sync_perf_counter_},
           {"Replays", replay_perf_counter},
           {"Resets", reset_perf_counter},
           {"Recovery", recovery_perf_counter}};

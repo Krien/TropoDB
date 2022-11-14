@@ -51,7 +51,24 @@ TropoWAL::~TropoWAL() {
   channel_factory_->Unref();
 }
 
+Status TropoWAL::DirectAppend(const Slice& data) {
+  uint64_t before = clock_->NowMicros();
+  Status s =
+      FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
+  submit_sync_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  return s;
+}
+
+Status TropoWAL::SubmitAppend(const Slice& data) {
+  uint64_t before = clock_->NowMicros();
+  Status s =
+      FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
+  submit_async_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  return s;
+}
+
 Status TropoWAL::BufferedAppend(const Slice& data) {
+  uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
   size_t sizeleft = buffsize_ - buff_pos_;
   size_t sizeneeded = data.size();
@@ -62,7 +79,7 @@ Status TropoWAL::BufferedAppend(const Slice& data) {
     if (buff_pos_ != 0) {
       char buff_copy_[buff_pos_];
       memcpy(buff_copy_, buff_, buff_pos_);
-      s = DirectAppend(Slice(buff_copy_, buff_pos_));
+      s = SubmitAppend(Slice(buff_copy_, buff_pos_));
       buff_pos_ = 0;
     }
     if (!s.ok()) {
@@ -70,38 +87,38 @@ Status TropoWAL::BufferedAppend(const Slice& data) {
     }
     sizeleft = buffsize_ - buff_pos_;
     if (sizeneeded < sizeleft) {
-      s = DirectAppend(data);
+      s = SubmitAppend(data);
     } else {
       memcpy(buff_ + buff_pos_, data.data(), sizeneeded);
       buff_pos_ += sizeneeded;
     }
   }
+  submit_buffered_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
 Status TropoWAL::DataSync() {
   Status s = Status::OK();
-  if (buff_pos_ != 0) {
-    s = DirectAppend(Slice(buff_, buff_pos_));
+  if (buffered_ && buff_pos_ != 0) {
+    s = SubmitAppend(Slice(buff_, buff_pos_));
     buff_pos_ = 0;
   }
   return s;
 }
 
 Status TropoWAL::Sync() {
-  DataSync();
-  return FromStatus(log_.Sync());
-}
-
-Status TropoWAL::DirectAppend(const Slice& data) {
   uint64_t before = clock_->NowMicros();
-  Status s =
-      FromStatus(log_.AsyncAppend(data.data(), data.size(), nullptr, true));
-  storage_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  Status s = DataSync();
+  if (!s.ok()) {
+    return s;
+  }
+  s = FromStatus(log_.Sync());
+  sync_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
-Status TropoWAL::Append(const Slice& data, uint64_t seq) {
+
+Status TropoWAL::Append(const Slice& data, uint64_t seq, bool sync) {
   uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
   size_t space_needed = SpaceNeeded(data);
@@ -124,21 +141,27 @@ Status TropoWAL::Append(const Slice& data, uint64_t seq) {
   if (!s.ok()) {
     return s;
   }
-  if (buffered_) {
-    s = BufferedAppend(Slice(out, space_needed));
-  } else {
+  prepare_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
+  
+  if (sync) {
     s = DirectAppend(Slice(out, space_needed));
   }
+  else if (buffered_) {
+    s = BufferedAppend(Slice(out, space_needed));
+  } else {
+    s = SubmitAppend(Slice(out, space_needed));
+  }
+  
   delete[] out;
   total_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
 Status TropoWAL::ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq) {
-  TROPO_LOG_INFO("INFO: WAL: Replaying\n");
+  TROPO_LOG_INFO("INFO: WAL: Replaying unordered WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPO_LOG_INFO("INFO: WAL: <EMPTY> Replayed\n");
+    TROPO_LOG_INFO("INFO: WAL: <EMPTY> unoredered replayed\n");
     return s;
   }
   // Used for each batch
@@ -197,15 +220,15 @@ Status TropoWAL::ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq) {
       *seq = last_seq;
     }
   }
-  TROPO_LOG_INFO("INFO: WAL: <NOT-EMPTY> Replayed WAL\n");
+  TROPO_LOG_INFO("INFO: WAL: <NOT-EMPTY> Replayed unordered WAL\n");
   return s;
 }
 
 Status TropoWAL::ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq) {
-  TROPO_LOG_INFO("INFO: WAL: Replaying WAL\n");
+  TROPO_LOG_INFO("INFO: WAL: Replaying ordered WAL\n");
   Status s = Status::OK();
   if (log_.Empty()) {
-    TROPO_LOG_INFO("INFO: WAL: <EMPTY> Replayed\n");
+    TROPO_LOG_INFO("INFO: WAL: <EMPTY> ordered replayed\n");
     return s;
   }
   // Used for each batch
@@ -251,6 +274,7 @@ Status TropoWAL::ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq) {
 }
 
 Status TropoWAL::Reset() {
+  TROPO_LOG_DEBUG("DEBUG: WAL: Resetting WAL\n");
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.ResetAll());
   sequence_nr_ = 0;
@@ -259,6 +283,7 @@ Status TropoWAL::Reset() {
 }
 
 Status TropoWAL::Recover() {
+  TROPO_LOG_DEBUG("DEBUG: WAL: Recovering WAL log pointers\n");
   uint64_t before = clock_->NowMicros();
   Status s = FromStatus(log_.RecoverPointers());
   recovery_perf_counter_.AddTiming(clock_->NowMicros() - before);
