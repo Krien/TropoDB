@@ -53,7 +53,7 @@ class TropoWAL : public RefCounter {
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline size_t SpaceNeeded(const size_t size) {
-    return committer_.SpaceNeeded(size + pos_ + 2 * sizeof(uint64_t));
+    return committer_.SpaceNeeded(size + buff_pos_ + 2 * sizeof(uint64_t));
   }
   inline size_t SpaceNeeded(const Slice& data) {
     return committer_.SpaceNeeded(data.size());
