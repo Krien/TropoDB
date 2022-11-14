@@ -69,7 +69,10 @@ class TropoSSTableManager : public RefCounter {
   uint64_t GetBytesInLevel(const std::vector<SSZoneMetaData*>& metas);
   std::vector<TropoDiagnostics> IODiagnostics();
   std::string LayoutDivisionString();
-
+  TimingCounter GetFlushPreparePerfCounter();
+  TimingCounter GetFlushMergePerfCounter();
+  TimingCounter GetFlushWritePerfCounter();
+  TimingCounter GetFlushFinishPerfCounter();
  private:
   using RangeArray = std::array<std::pair<uint64_t, uint64_t>,
                                 1 + TropoDBConfig::lower_concurrency>;

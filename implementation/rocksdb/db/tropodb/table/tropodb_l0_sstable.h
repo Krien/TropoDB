@@ -52,6 +52,12 @@ class TropoL0SSTable : public TropoSSTable {
         .append_operations_ = log_.GetAppendOperations()};
     return diag;
   }
+  
+  // Timing
+  inline TimingCounter GetFlushPreparePerfCounter() { return flush_prepare_perf_counter_; }
+  inline TimingCounter GetFlushMergePerfCounter() { return flush_merge_perf_counter_; }
+  inline TimingCounter GetFlushWritePerfCounter() { return flush_write_perf_counter_; }
+  inline TimingCounter GetFlushFinishPerfCounter() { return flush_finish_perf_counter_; }
 
  private:
   friend class TropoSSTableManagerInternal;
@@ -68,6 +74,12 @@ class TropoL0SSTable : public TropoSSTable {
   port::Mutex mutex_;
   port::CondVar cv_;
   std::array<uint8_t, TropoDBConfig::number_of_concurrent_L0_readers> read_queue_;
+  // timing
+  SystemClock* const clock_;
+  TimingCounter flush_prepare_perf_counter_;
+  TimingCounter flush_merge_perf_counter_;
+  TimingCounter flush_write_perf_counter_;
+  TimingCounter flush_finish_perf_counter_;
 };
 
 /**

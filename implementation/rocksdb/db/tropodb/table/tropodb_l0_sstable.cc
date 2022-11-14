@@ -21,7 +21,8 @@ TropoL0SSTable::TropoL0SSTable(SZD::SZDChannelFactory* channel_factory,
       zasl_(info.zasl),
       lba_size_(info.lba_size),
       zone_size_(info.zone_size),
-      cv_(&mutex_) {
+      cv_(&mutex_),
+      clock_(SystemClock::Default().get()) {
   // unset
   for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
     read_queue_[i] = 0;
@@ -61,6 +62,7 @@ Status TropoL0SSTable::WriteSSTable(const Slice& content,
 Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
                                      std::vector<SSZoneMetaData>& metas,
                                      uint8_t parallel_number) {
+  uint64_t before = clock_->NowMicros();
   Status s = Status::OK();
   SSZoneMetaData meta;
   meta.L0.log_number = parallel_number;
@@ -71,6 +73,9 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
     TROPO_LOG_ERROR("ERROR: L0 SSTable: No valid iterator\n");
     return Status::Corruption("No valid iterator in the memtable");
   }
+  flush_prepare_perf_counter_.AddTiming(clock_->NowMicros() - before);
+
+  before = clock_->NowMicros();
   for (; iter->Valid(); iter->Next()) {
     const Slice& key = iter->key();
     const Slice& value = iter->value();
@@ -81,7 +86,10 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
             lba_size_ >=
         (TropoDBConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
       builder->Finalise();
+      flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+      before = clock_->NowMicros();
       s = builder->Flush();
+      flush_write_perf_counter_.AddTiming(clock_->NowMicros() - before);
       if (!s.ok()) {
         TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
         break;
@@ -89,14 +97,21 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
       metas.push_back(meta);
       delete builder;
       builder = NewBuilder(&meta);
+      before = clock_->NowMicros();
     }
   }
+  
   if (s.ok() && builder->GetSize() > 0) {
     s = builder->Finalise();
+    flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+    before = clock_->NowMicros();
     s = builder->Flush();
+    flush_write_perf_counter_.AddTiming(clock_->NowMicros() - before);
     metas.push_back(meta);
   }
+  before = clock_->NowMicros();
   delete builder;
+  flush_finish_perf_counter_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 

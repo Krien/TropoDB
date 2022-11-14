@@ -349,6 +349,40 @@ std::string TropoSSTableManager::LayoutDivisionString() {
   return div.str();
 }
 
+
+TimingCounter TropoSSTableManager::GetFlushPreparePerfCounter() {
+  TimingCounter c = GetL0SSTableLog(0)->GetFlushPreparePerfCounter();
+  for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
+    c += GetL0SSTableLog(i)->GetFlushPreparePerfCounter();
+  }
+  return c;
+}
+
+TimingCounter TropoSSTableManager::GetFlushMergePerfCounter() {
+  TimingCounter c = GetL0SSTableLog(0)->GetFlushMergePerfCounter();
+  for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
+    c += GetL0SSTableLog(i)->GetFlushMergePerfCounter();
+  }
+  return c;
+}
+
+TimingCounter TropoSSTableManager::GetFlushWritePerfCounter() {
+  TimingCounter c = GetL0SSTableLog(0)->GetFlushWritePerfCounter();
+  for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
+    c += GetL0SSTableLog(i)->GetFlushWritePerfCounter();
+  }
+  return c;
+}
+
+TimingCounter TropoSSTableManager::GetFlushFinishPerfCounter() {
+  TimingCounter c = GetL0SSTableLog(0)->GetFlushFinishPerfCounter();
+  for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
+    c += GetL0SSTableLog(i)->GetFlushFinishPerfCounter();
+  }
+  return c;
+}
+
+
 size_t TropoSSTableManager::FindSSTableIndex(
     const Comparator* cmp, const std::vector<SSZoneMetaData*>& ss,
     const Slice& key) {

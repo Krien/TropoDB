@@ -79,6 +79,13 @@ void TropoDBImpl::PrintCompactionStats() {
                      {"Updating Version", flush_update_version_counter_},
                      {"Resetting WALs", flush_reset_wal_counter_}});
 
+  TROPO_LOG_PERF("Flush writelatency breakdown:\n");
+  PrintCounterTable({{"Total", flush_flush_memtable_counter_},
+                     {"Setup", ss_manager_->GetFlushPreparePerfCounter()},
+                     {"Merge", ss_manager_->GetFlushMergePerfCounter()},
+                     {"Write", ss_manager_->GetFlushWritePerfCounter()},
+                     {"Finish", ss_manager_->GetFlushFinishPerfCounter()}});
+
   TROPO_LOG_PERF("L0 compaction latency breakdown:\n");
   PrintCounterTable({{"Total", compaction_compaction_L0_total_},
                      {"Picking SSTables", compaction_pick_compaction_},
