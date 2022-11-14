@@ -60,9 +60,6 @@ class TropoL0SSTable : public TropoSSTable {
   void release_read_queue(uint8_t reader);
 
   SZD::SZDCircularLog log_;
-#ifdef USE_COMMITTER
-  TropoCommitter committer_;
-#endif
   uint64_t zasl_;
   uint64_t lba_size_;
   uint64_t zone_size_;

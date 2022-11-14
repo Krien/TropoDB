@@ -18,9 +18,6 @@ TropoL0SSTable::TropoL0SSTable(SZD::SZDChannelFactory* channel_factory,
     : TropoSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
            TropoDBConfig::number_of_concurrent_L0_readers),
-#ifdef USE_COMMITTER
-      committer_(&log_, info, true),
-#endif
       zasl_(info.zasl),
       lba_size_(info.lba_size),
       zone_size_(info.zone_size),
@@ -41,11 +38,7 @@ TropoSSTableBuilder* TropoL0SSTable::NewBuilder(SSZoneMetaData* meta) {
 }
 
 bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
-#ifdef USE_COMMITTER
-  return committer_.SpaceEnough(slice);
-#else
   return log_.SpaceLeft(slice.size(), false);
-#endif
 }
 
 uint64_t TropoL0SSTable::SpaceAvailable() const {
@@ -59,16 +52,10 @@ Status TropoL0SSTable::WriteSSTable(const Slice& content,
     TROPO_LOG_ERROR("ERROR: L0 SSTable: Out of space\n");
     return Status::IOError("Not enough space available for L0");
   }
-#ifdef USE_COMMITTER
-  meta->L0.lba = log_.GetWriteHead();
-  Status s = committer_.SafeCommit(content, &meta->lba_count);
-  return s;
-#else
   meta->L0.lba = log_.GetWriteHead();
   Status s = FromStatus(
       log_.Append(content.data(), content.size(), &meta->lba_count, false));
   return s;
-#endif
 }
 
 Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
@@ -158,38 +145,6 @@ Status TropoL0SSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   sstable->clear();
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
-#ifdef USE_COMMITTER
-  TropoCommitReader reader;
-  Slice record;
-  std::string* raw_data = new std::string();
-  bool succeeded_once = false;
-  s = committer_.GetCommitReader(readernr, meta.L0.lba,
-                                 meta.L0.lba + meta.lba_count, &reader);
-
-  if (!s.ok()) {
-    release_read_queue(readernr);
-    TROPO_LOG_ERROR("ERROR: L0 SSTable: Can not get reader\n");
-    return s;
-  }
-  while (committer_.SeekCommitReader(reader, &record)) {
-    succeeded_once = true;
-    raw_data->append(record.data(), record.size());
-  }
-  if (!committer_.CloseCommit(reader)) {
-    release_read_queue(readernr);
-    // mutex_.Unlock();
-    return Status::Corruption();
-  }
-  // mutex_.Unlock();
-  release_read_queue(readernr);
-
-  // Committer never succeeded.
-  if (!succeeded_once) {
-    return Status::Corruption();
-  }
-  *sstable = Slice(raw_data->data(), raw_data->size());
-  return Status::OK();
-#else
   char* data = new char[meta.lba_count * lba_size_];
   s = FromStatus(
       log_.Read(meta.L0.lba, data, meta.lba_count * lba_size_, true, readernr));
@@ -202,7 +157,6 @@ Status TropoL0SSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     exit(-1);
   }
   return Status::OK();
-#endif
 }
 
 Status TropoL0SSTable::TryInvalidateSSZones(

@@ -16,7 +16,6 @@ namespace ROCKSDB_NAMESPACE {
 // Debug flag or perf related flags can be completely be removed from the binary if necesssary.
 #define TROPICAL_DEBUG
 
-
 // Changing any line here requires rebuilding all ZNS DB source files.
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
