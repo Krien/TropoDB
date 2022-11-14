@@ -11,8 +11,6 @@
 #ifndef TROPODB_IMPL_H
 #define TROPODB_IMPL_H
 
-//#define WALPerfTest
-
 #include <atomic>
 #include <deque>
 #include <functional>

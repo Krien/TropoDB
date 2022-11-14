@@ -74,7 +74,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       }
       wal_[parallel_number]->Ref();
       // Hack to prevent needing background operations
-#ifdef WALPerfTest
+#ifdef DISABLE_BACKGROUND_OPS
       // Drop all that was in the memtable (NOT PERSISTENT!)
       mem_[parallel_number]->Unref();
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,

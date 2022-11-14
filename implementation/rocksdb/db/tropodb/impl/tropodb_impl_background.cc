@@ -149,9 +149,11 @@ void TropoDBImpl::BackgroundFlushCall(uint8_t parallel_number) {
   MutexLock l(&mutex_);
   assert(bg_flush_scheduled_);
   // Hack to ensure that during a WAL test we do NOT test bg operations.
-#ifdef WALPerfTest
+#ifdef DISABLE_BACKGROUND_OPS
   wal_man_[parallel_number]->ResetOldWALs(&mutex_);
+#ifndef DISABLE_BACKGROUND_OPS_AND_RESETS
   bg_flush_work_finished_signal_.SignalAll();
+#endif
   return;
 #endif
   // TODO: how to deal with bg_error?
