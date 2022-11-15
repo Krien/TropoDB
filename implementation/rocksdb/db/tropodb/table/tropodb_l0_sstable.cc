@@ -108,9 +108,7 @@ void TropoL0SSTable::DeferFlushWrite(void* deferred_flush) {
   deferred->mutex_.Unlock();
 }
 
-Status TropoL0SSTable::FlushSSTable(TropoSSTableBuilder** builder,
-                                    SSZoneMetaData& meta,
-                                    std::vector<SSZoneMetaData>& metas) {
+Status TropoL0SSTable::FlushSSTable(TropoSSTableBuilder** builder, SSZoneMetaData& meta, std::vector<SSZoneMetaData>& metas) {
   Status s = Status::OK();
   // Setup flush task
   TropoSSTableBuilder* current_builder = *builder;
@@ -139,7 +137,7 @@ Status TropoL0SSTable::FlushSSTable(TropoSSTableBuilder** builder,
     s = current_builder->Flush();
     if (!s.ok()) {
       TROPO_LOG_ERROR("ERROR: Compaction: Error writing table\n");
-    }
+    } 
 
     metas.push_back(meta);
 
@@ -154,8 +152,6 @@ Status TropoL0SSTable::FlushSSTable(TropoSSTableBuilder** builder,
 Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
                                      std::vector<SSZoneMetaData>& metas,
                                      uint8_t parallel_number, Env* env) {
-  printf("BANNER 111111111111111111111111111\n");
-  printf("x\n");
   Status s = Status::OK();
   SSZoneMetaData meta;
   TropoSSTableBuilder* builder;
@@ -168,8 +164,7 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
     deferred_.last_ = false;
     deferred_.done_ = false;
     deferred_.deferred_builds_.clear();
-    env->Schedule(&TropoL0SSTable::DeferFlushWrite, &(this->deferred_),
-                  rocksdb::Env::LOW);
+    env->Schedule(&TropoL0SSTable::DeferFlushWrite , &(this->deferred_), rocksdb::Env::LOW);
   }
   builder = NewBuilder(&meta);
 
@@ -205,7 +200,7 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
       before = clock_->NowMicros();
     }
   }
-
+  
   // Now write the last remaining SSTable to storage
   if (s.ok() && builder->GetSize() > 0) {
     s = builder->Finalise();
@@ -213,7 +208,7 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
     before = clock_->NowMicros();
     s = FlushSSTable(&builder, meta, metas);
     if (!s.ok()) {
-      TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
+        TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
     }
     flush_write_perf_counter_.AddTiming(clock_->NowMicros() - before);
   }
@@ -222,28 +217,21 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
   before = clock_->NowMicros();
   // Teardown
   if (TropoDBConfig::flushes_allow_deferring_writes) {
-    deferred_.mutex_.Lock();
-    deferred_.last_ = true;
-    deferred_.new_task_.SignalAll();
-    while (!deferred_.done_) {
-      deferred_.new_task_.Wait();
-      deferred_.mutex_.Unlock();
-    }
-    printf("HEKKKIE\n");
-    printf("HEKKKIE\n");
-    printf("HEKKKIE\n");
-
-    TROPO_LOG_DEBUG("Deferred flush quiting \n");
+      deferred_.mutex_.Lock();
+      deferred_.last_ = true;
+      deferred_.new_task_.SignalAll();
+      while (!deferred_.done_) {
+        deferred_.new_task_.Wait();
+        deferred_.mutex_.Unlock();
+      }
+      TROPO_LOG_DEBUG("Deferred flush quiting \n");
   }
   flush_finish_perf_counter_.AddTiming(clock_->NowMicros() - before);
 
   // Force log number of all created metas
   for (auto nmeta : metas) {
-    printf("MET %lu %lu\n", nmeta.L0.lba, nmeta.lba_count);
     nmeta.L0.log_number = parallel_number;
   }
-  printf("BANNER 222222222222222222222222222222222\n");
-  printf("x\n");
   return s;
 }
 
