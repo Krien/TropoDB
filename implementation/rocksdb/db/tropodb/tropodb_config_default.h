@@ -92,6 +92,15 @@ constexpr static uint64_t max_bytes_sstable_ =
 constexpr static uint64_t max_lbas_compaction_l0 = 2097152 * 12; /**< Maximum
 amount of LBAS that can be considered for L0 to LN compaction. Prevents OOM.*/
 
+// Flushes
+constexpr static bool flushes_allow_deferring_writes =
+    true; /**< Allows deferring SSTable writes during flushes to a separate
+             thread. This can allow flushing to continue without waiting on
+             writes to finish.*/
+constexpr static uint8_t flushing_maximum_deferred_writes =
+    4; /**< How many SSTables can be deferred at most. Be careful, setting
+this too high can cause OOM.*/
+
 // Compaction
 constexpr static bool compaction_allow_prefetching =
     true; /**< If LN tables can be prefetched during compaction. This uses one
@@ -152,6 +161,10 @@ static_assert(max_zone == 0 || max_zone > manifest_zones +
 static_assert(max_bytes_sstable_l0 > 0);
 static_assert(max_bytes_sstable_ > 0);
 static_assert(max_lbas_compaction_l0 > 0);
+static_assert((!flushes_allow_deferring_writes &&
+               flushing_maximum_deferred_writes == 0) ||
+              (flushes_allow_deferring_writes &&
+               flushing_maximum_deferred_writes > 0));
 static_assert(
     (!compaction_allow_prefetching && compaction_maximum_prefetches == 0) ||
     (compaction_allow_prefetching && compaction_maximum_prefetches > 0));

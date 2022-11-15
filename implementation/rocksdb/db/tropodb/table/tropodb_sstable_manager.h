@@ -51,7 +51,7 @@ class TropoSSTableManager : public RefCounter {
   // L0 specific
   TropoL0SSTable* GetL0SSTableLog(uint8_t parallel_number) const;
   Status FlushMemTable(TropoMemtable* mem, std::vector<SSZoneMetaData>& metas,
-                       uint8_t parallel_number) const;
+                       uint8_t parallel_number, Env* env) const;
   Status DeleteL0Table(const std::vector<SSZoneMetaData*>& metas_to_delete,
                        std::vector<SSZoneMetaData*>& remaining_metas) const;
   double GetFractionFilledL0(const uint8_t parallel_number) const;

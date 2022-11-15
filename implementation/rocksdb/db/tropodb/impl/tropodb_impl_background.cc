@@ -45,7 +45,7 @@ namespace ROCKSDB_NAMESPACE {
 Status TropoDBImpl::FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
                                     uint8_t parallel_number) {
   return ss_manager_->FlushMemTable(imm_[parallel_number], metas,
-                                    parallel_number);
+                                    parallel_number, env_);
 }
 
 Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {

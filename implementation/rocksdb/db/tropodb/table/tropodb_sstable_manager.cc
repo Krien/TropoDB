@@ -225,10 +225,11 @@ TropoL0SSTable* TropoSSTableManager::GetL0SSTableLog(
 
 Status TropoSSTableManager::FlushMemTable(TropoMemtable* mem,
                                           std::vector<SSZoneMetaData>& metas,
-                                          uint8_t parallel_number) const {
+                                          uint8_t parallel_number,
+                                          Env* env) const {
   assert(parallel_number < TropoDBConfig::lower_concurrency);
   return GetL0SSTableLog(parallel_number)
-      ->FlushMemTable(mem, metas, parallel_number);
+      ->FlushMemTable(mem, metas, parallel_number, env);
 }
 
 Status TropoSSTableManager::DeleteL0Table(
@@ -349,7 +350,6 @@ std::string TropoSSTableManager::LayoutDivisionString() {
   return div.str();
 }
 
-
 TimingCounter TropoSSTableManager::GetFlushPreparePerfCounter() {
   TimingCounter c = GetL0SSTableLog(0)->GetFlushPreparePerfCounter();
   for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
@@ -381,7 +381,6 @@ TimingCounter TropoSSTableManager::GetFlushFinishPerfCounter() {
   }
   return c;
 }
-
 
 size_t TropoSSTableManager::FindSSTableIndex(
     const Comparator* cmp, const std::vector<SSZoneMetaData*>& ss,

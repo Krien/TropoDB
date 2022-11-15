@@ -203,7 +203,7 @@ void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
     // Process task
     Status s = Status::OK();
     if (current_builder == nullptr) {
-      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr");
+      TROPO_LOG_ERROR("ERROR: Deferred compaction: current builder == nullptr");
       s = Status::Corruption();
     } else {
       s = current_builder->Flush();
@@ -213,7 +213,7 @@ void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
     // Add to (potential) version structure
     deferred->mutex_.Lock();
     if (!s.ok()) {
-      TROPO_LOG_ERROR("ERROR: Deferred flush: error writing table\n");
+      TROPO_LOG_ERROR("ERROR: Deferred compaction: error writing table\n");
     } else {
       deferred->edit_->AddSSDefinition(deferred->level_,
                                        *(current_builder->GetMeta()));
@@ -439,10 +439,13 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
         deferred_.new_task_.Wait();
         deferred_.mutex_.Unlock();
       }
-      TROPO_LOG_DEBUG("Deferred quiting \n");
+      TROPO_LOG_DEBUG("Deferred compaction quiting \n");
       for (int i = metas_.size() - 1; i >= 0; i--) {
         delete metas_[i];
       }
+      deferred_.index_ = 0;
+      deferred_.last_ = false;
+      deferred_.done_ = false;
     }
   }
 

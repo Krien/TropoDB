@@ -69,7 +69,8 @@ TropoDBImpl::TropoDBImpl(const DBOptions& options, const std::string& dbname,
           TropoDBConfig::lower_concurrency +
           TropoDBConfig::lower_concurrency *
               (1 + TropoDBConfig::compaction_allow_prefetching +
-               TropoDBConfig::compaction_allow_deferring_writes)),
+               TropoDBConfig::compaction_allow_deferring_writes +
+               TropoDBConfig::flushes_allow_deferring_writes)),
       // State
       bg_work_l0_finished_signal_(&mutex_),
       bg_work_finished_signal_(&mutex_),
