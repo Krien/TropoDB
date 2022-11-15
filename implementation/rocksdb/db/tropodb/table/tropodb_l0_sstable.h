@@ -75,7 +75,7 @@ class TropoL0SSTable : public TropoSSTable {
  private:
   friend class TropoSSTableManagerInternal;
   static void DeferFlushWrite(void* deferred_flush);
-  Status FlushSSTable(TropoSSTableBuilder** builder, SSZoneMetaData& meta, std::vector<SSZoneMetaData>& metas);
+  Status FlushSSTable(TropoSSTableBuilder** builder, std::vector<SSZoneMetaData*>& new_metas, std::vector<SSZoneMetaData>& metas);
 
   uint8_t request_read_queue();
   void release_read_queue(uint8_t reader);
