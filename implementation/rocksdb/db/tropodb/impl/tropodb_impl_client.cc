@@ -53,7 +53,8 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
     } else if (imm_[parallel_number] != nullptr) {
       // flush is already scheduled, therefore, wait.
       bg_flush_work_finished_signal_.Wait();
-    } else if (versions_->NeedsL0Compaction()) {
+    } else if (versions_->NeedsL0CompactionForce() ||
+               versions_->NeedsL0CompactionForceParallel(parallel_number)) {
       // No more space in L0. Better to wait till compaction is done
       TROPO_LOG_DEBUG("DEBUG: Forcing L0 compaction, no space left\n");
       MaybeScheduleCompactionL0();
