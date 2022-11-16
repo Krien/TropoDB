@@ -46,7 +46,7 @@ TropoWALManager<N>::TropoWALManager(SZD::SZDChannelFactory* channel_factory,
   for (size_t i = 0; i < N; ++i) {
     TropoWAL* newwal =
         new TropoWAL(channel_factory, info, wal_walker, wal_walker + wal_range,
-                     TropoDBConfig::wal_allow_buffering,
+                     TropoDBConfig::wal_allow_buffering,TropoDBConfig::wal_allow_group_commit,
                      TropoDBConfig::wal_unordered, write_channels_[0]);
     newwal->Ref();
     wals_[i] = newwal;

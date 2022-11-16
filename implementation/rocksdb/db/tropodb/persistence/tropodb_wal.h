@@ -22,7 +22,7 @@ class TropoWAL : public RefCounter {
  public:
   TropoWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_nr, const uint64_t max_zone_nr,
-         const bool use_buffer_, const bool allow_unordered_,
+         const bool use_buffer, const bool group_commits, const bool allow_unordered,
          SZD::SZDChannel* borrowed_write_channel = nullptr);
   // No copying or implicits
   TropoWAL(const TropoWAL&) = delete;
@@ -83,6 +83,10 @@ class TropoWAL : public RefCounter {
   inline TimingCounter GetResetPerfCounter() { return reset_perf_counter_; }
 
  private:
+   Status LightEncodeAppend(const Slice& data, char** out, size_t* size);
+  // Encodes the append in the on-storage format 
+  Status EncodeAppend(const Slice& data, char** out, size_t* size);
+  Status BufferedFlush(const Slice& data);
   // Append data to buffer or I/O if it is full
   Status BufferedAppend(const Slice& data);
   // Append data to storage (does not guarantee persistence)
@@ -101,6 +105,7 @@ class TropoWAL : public RefCounter {
   const size_t buffsize_;
   char* buff_;
   size_t buff_pos_;
+  bool group_commits_;
   // unordered
   bool unordered_;
   uint32_t sequence_nr_;
