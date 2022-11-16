@@ -152,6 +152,9 @@ static_assert(level_count > 1 &&
                            // We do not want numeric overflows...
 static_assert(manifest_zones > 1);
 static_assert(zones_foreach_wal > 2);
+static_assert((wal_allow_buffering && wal_buffered_pages > 0) || 
+    (!wal_allow_buffering && wal_buffered_pages==0));
+static_assert(!wal_allow_group_commit || wal_allow_buffering);
 static_assert(wal_count > 2);
 static_assert(wal_unordered || wal_iodepth == 1,
               "WAL io_depth of more than 1 requires unordered writes");

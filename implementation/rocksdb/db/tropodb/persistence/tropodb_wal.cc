@@ -72,25 +72,25 @@ Status TropoWAL::BufferedAppend(const Slice& data) {
   Status s = Status::OK();
   size_t sizeleft = buffsize_ - buff_pos_;
   size_t sizeneeded = data.size();
+  // Does it fit in the buffer, the copy to buffer
   if (sizeneeded < sizeleft) {
     memcpy(buff_ + buff_pos_, data.data(), sizeneeded);
     buff_pos_ += sizeneeded;
   } else {
+    // If it does not fit, we first flush the buffer
     if (buff_pos_ != 0) {
-      char buff_copy_[buff_pos_];
-      memcpy(buff_copy_, buff_, buff_pos_);
-      s = SubmitAppend(Slice(buff_copy_, buff_pos_));
-      buff_pos_ = 0;
+      s = DataSync();
+      if (!s.ok()) {
+        return s;
+      }
+      sizeleft = buffsize_ - buff_pos_;
     }
-    if (!s.ok()) {
-      return s;
-    }
-    sizeleft = buffsize_ - buff_pos_;
+    // Attempt 2 - If it still does not fit, we simply append directly
     if (sizeneeded < sizeleft) {
-      s = SubmitAppend(data);
-    } else {
       memcpy(buff_ + buff_pos_, data.data(), sizeneeded);
       buff_pos_ += sizeneeded;
+    } else {
+      s = SubmitAppend(data);
     }
   }
   submit_buffered_append_perf_counter_.AddTiming(clock_->NowMicros() - before);
