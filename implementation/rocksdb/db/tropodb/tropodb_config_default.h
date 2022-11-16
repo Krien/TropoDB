@@ -13,9 +13,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// Debug flag or perf related flags can be completely be removed from the binary
-// if necesssary.
-#define TROPICAL_DEBUG
+/* Debug flag or perf related flags can be completely be removed from the binary
+   if necesssary.
+*/
+// #define TROPICAL_DEBUG
 // #define DISABLE_BACKGROUND_OPS // Used for e.g. WALPerfTest
 // #define DISABLE_BACKGROUND_OPS_AND_RESETS // Used for e.g. WALPerfTest
 
@@ -23,18 +24,22 @@ namespace ROCKSDB_NAMESPACE {
 // Reasons for statics is static_asserts and as they can be directly used during
 // compilation.
 namespace TropoDBConfig {
-constexpr static TropoLogLevel default_log_level =
-    TropoLogLevel::TROPO_INFO_LEVEL;
-// WAL options
-constexpr static uint8_t level_count =
-    6; /**< Amount of LSM-tree levels L0 up to LN */
+// Versioning options
 constexpr static size_t manifest_zones =
     4; /**< Amount of zones to reserve for metadata*/
+
+// WAL options
 constexpr static size_t zones_foreach_wal =
     4; /**< Amount of zones for each WAL*/
-constexpr bool wal_allow_buffering =
+constexpr static bool wal_allow_buffering =
     true; /**< If writes are allowed to be buffered when written to the WAL.
              Increases performance at the cost of persistence.*/
+constexpr static uint64_t wal_buffered_pages = 
+    1; /**< Amount of pages that can be buffered. Increasing this will make 
+            the system less reliable.*/
+constexpr static bool wal_allow_group_commit =
+    true; /**< Trade persistency for space and performance by grouping multiple KV-pairs
+             in one page.*/
 constexpr static size_t wal_count = 40; /**< Amount of WALs on one zone region*/
 constexpr static bool wal_unordered = true; /**< WAL appends can be reordered */
 constexpr static uint8_t wal_iodepth =
@@ -44,6 +49,8 @@ constexpr static bool wal_preserve_dma =
              Prevents reallocations. */
 
 // L0 and LN options
+constexpr static uint8_t level_count =
+    6; /**< Amount of LSM-tree levels L0 up to LN */
 constexpr static size_t L0_zones =
     100; /**< amount of zones to reserve for each L0 circular log */
 constexpr static uint8_t lower_concurrency =
@@ -125,6 +132,8 @@ constexpr static uint64_t max_zone =
     0x0; /**< Maximum zone to use for database. Set to 0 for full region*/
 
 // MISC
+constexpr static TropoLogLevel default_log_level =
+    TropoLogLevel::TROPO_INFO_LEVEL;
 constexpr static size_t max_channels =
     0x100; /**< Maximum amount of channels that can be live. Used to ensure
               that there is no channel leak. */
