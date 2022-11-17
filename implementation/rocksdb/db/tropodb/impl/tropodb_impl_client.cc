@@ -33,6 +33,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
+  uint64_t before;
   while (true) {
     if (!bg_error_.ok()) {
       // Yield error
@@ -42,29 +43,38 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
     if (allow_delay &&
         versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
       // Throttle
+      before = clock_->NowMicros();
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
+      put_slowdown_.AddTiming(clock_->NowMicros() - before);
     } else if (!mem_[parallel_number]->ShouldScheduleFlush() &&
                wal_[parallel_number]->SpaceLeft(size)) {
       // space left in memory table
       break;
     } else if (imm_[parallel_number] != nullptr) {
       // flush is already scheduled, therefore, wait.
+      before = clock_->NowMicros();
       bg_flush_work_finished_signal_.Wait();
+      put_wait_on_flush_.AddTiming(clock_->NowMicros() - before);
     } else if (versions_->NeedsL0CompactionForce() ||
                versions_->NeedsL0CompactionForceParallel(parallel_number)) {
       // No more space in L0. Better to wait till compaction is done
       TROPO_LOG_DEBUG("DEBUG: Forcing L0 compaction, no space left\n");
+      before = clock_->NowMicros();
       MaybeScheduleCompactionL0();
       bg_work_l0_finished_signal_.Wait();
+      put_wait_on_forced_l0_.AddTiming(clock_->NowMicros() - before);
     } else if (!wal_man_[parallel_number]->WALAvailable()) {
       // This can not happen in current implementation, but we do treat it.
       // Simply wait for WALs to become available
       TROPO_LOG_DEBUG("DEBUG: out of WALs\n");
+      before = clock_->NowMicros();
       bg_flush_work_finished_signal_.Wait();
+      put_wait_on_WAL_.AddTiming(clock_->NowMicros() - before);
     } else {
+      before = clock_->NowMicros();
       // create new WAL
       wal_[parallel_number]->Sync();
       wal_[parallel_number]->Close();
@@ -93,6 +103,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       MaybeScheduleFlush(parallel_number);
       MaybeScheduleCompactionL0();
 #endif
+      put_create_new_mem_.AddTiming(clock_->NowMicros() - before);
     }
   }
   // We can write

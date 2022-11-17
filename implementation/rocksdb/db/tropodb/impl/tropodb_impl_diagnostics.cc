@@ -89,6 +89,7 @@ void TropoDBImpl::PrintCompactionStats() {
   TROPO_LOG_PERF("L0 compaction latency breakdown:\n");
   PrintCounterTable({{"Total", compaction_compaction_L0_total_},
                      {"Picking SSTables", compaction_pick_compaction_},
+                     {"Waiting for LN", compaction_wait_compaction_},
                      {"Writing LN", compaction_compaction_},
                      {"Copying L0", compaction_compaction_trivial_},
                      {"Updating version", compaction_version_edit_},
@@ -97,6 +98,7 @@ void TropoDBImpl::PrintCompactionStats() {
   TROPO_LOG_PERF("LN compaction latency breakdown:\n");
   PrintCounterTable({{"Total", compaction_compaction_LN_total_},
                      {"Picking SSTables", compaction_pick_compaction_LN_},
+                     {"Waiting for L0", compaction_wait_compaction_LN_},
                      {"Writing LN", compaction_compaction_LN_},
                      {"Copying LN", compaction_compaction_trivial_LN_},
                      {"Updating version", compaction_version_edit_LN_},
@@ -121,7 +123,12 @@ void TropoDBImpl::PrintWALStats() {
   TROPO_LOG_PERF("====  WAL stats ====\n");
   PrintCounterTable({{"Put total", put_total_},
                      {"Put WAL", put_wal_},
-                     {"Put mem", put_mem_}});
+                     {"Put mem", put_mem_},
+                     {"Put slow", put_slowdown_},
+                     {"Put wflush", put_wait_on_flush_},
+                     {"Put wl0", put_wait_on_forced_l0_},
+                     {"Put wwal", put_wait_on_WAL_},
+                     {"Put cmem", put_create_new_mem_}});
   for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
     std::ostringstream out;
     out << "====  WAL manager " << i << " ====\n";

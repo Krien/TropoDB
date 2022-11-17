@@ -277,7 +277,9 @@ void TropoDBImpl::BackgroundCompactionL0() {
           c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 0 : reserve_claimed_;
+      uint64_t before_wait = clock_->NowMicros();
       bg_work_finished_signal_.Wait();
+      compaction_wait_compaction_.AddTiming(clock_->NowMicros() - before_wait);
       current = versions_->current();
       c = versions_->PickCompaction(0 /*level*/, reserved_comp_[1]);
     }
@@ -435,7 +437,9 @@ void TropoDBImpl::BackgroundCompaction() {
           c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 1 : reserve_claimed_;
+      uint64_t before_wait = clock_->NowMicros();
       bg_work_l0_finished_signal_.Wait();
+      compaction_wait_compaction_LN_.AddTiming(clock_->NowMicros() - before_wait);
       current = versions_->current();
       c = versions_->PickCompaction(current->CompactionLevel(),
                                     reserved_comp_[0]);
