@@ -9,8 +9,8 @@
 
 namespace ROCKSDB_NAMESPACE {
 TropoMemtable::TropoMemtable(const DBOptions& db_options,
-                         const InternalKeyComparator& ikc,
-                         const size_t buffer_size)
+                             const InternalKeyComparator& ikc,
+                             const size_t buffer_size)
     : options_(db_options, ColumnFamilyOptions()),
       ioptions_(options_),
       write_buffer_size_(buffer_size),
@@ -35,7 +35,7 @@ Status TropoMemtable::Write(const WriteOptions& options, WriteBatch* updates) {
 }
 
 bool TropoMemtable::Get(const ReadOptions& options, const LookupKey& lkey,
-                      std::string* value, Status* s, SequenceNumber* seq) {
+                        std::string* value, Status* s, SequenceNumber* seq) {
   ReadOptions roptions;
   SequenceNumber max_covering_tombstone_seq = 0;
   MergeContext merge_context;

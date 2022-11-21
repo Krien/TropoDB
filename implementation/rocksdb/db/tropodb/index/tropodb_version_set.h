@@ -80,7 +80,7 @@ class TropoVersionSet {
         current_->ss_[0].size() > TropoDBConfig::ss_compact_treshold[0] ||
         NeedsL0CompactionForce();
     if (!needcompaction) {
-      for (size_t i = 0; i < TropoDBConfig::wal_concurrency; i++) {
+      for (size_t i = 0; i < TropoDBConfig::lower_concurrency; i++) {
         if (NeedsL0CompactionForceParallel(i)) {
           return true;
         }

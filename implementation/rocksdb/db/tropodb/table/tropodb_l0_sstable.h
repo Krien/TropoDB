@@ -14,6 +14,19 @@
 #include "rocksdb/status.h"
 namespace ROCKSDB_NAMESPACE {
 
+struct DeferredFlush {
+  port::Mutex mutex_;
+  port::CondVar new_task_;  // In case deferred is waiting for main
+  bool last_;        // Signal that we are done and deferred should be gone
+  bool done_;        // Signal that deferred is done
+  std::vector<TropoSSTableBuilder*> deferred_builds_; // All deferred builders to use for compaction
+  uint8_t index_;
+  std::vector<SSZoneMetaData>* metas_;
+  DeferredFlush() : new_task_(&mutex_), last_(false), done_(false), index_(0), metas_(nullptr) {
+    deferred_builds_.clear();
+  }
+};
+
 // Like a Oroborous, an entire circle without holes.
 class TropoL0SSTable : public TropoSSTable {
  public:
@@ -30,7 +43,7 @@ class TropoL0SSTable : public TropoSSTable {
              std::string* value, const SSZoneMetaData& meta,
              EntryStatus* entry) override;
   Status FlushMemTable(TropoMemtable* mem, std::vector<SSZoneMetaData>& metas,
-                       uint8_t parallel_number);
+                       uint8_t parallel_number, Env* env);
   Status ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) override;
   Status TryInvalidateSSZones(const std::vector<SSZoneMetaData*>& metas,
                               std::vector<SSZoneMetaData*>& remaining_metas);
@@ -52,17 +65,22 @@ class TropoL0SSTable : public TropoSSTable {
         .append_operations_ = log_.GetAppendOperations()};
     return diag;
   }
+  
+  // Timing
+  inline TimingCounter GetFlushPreparePerfCounter() { return flush_prepare_perf_counter_; }
+  inline TimingCounter GetFlushMergePerfCounter() { return flush_merge_perf_counter_; }
+  inline TimingCounter GetFlushWritePerfCounter() { return flush_write_perf_counter_; }
+  inline TimingCounter GetFlushFinishPerfCounter() { return flush_finish_perf_counter_; }
 
  private:
   friend class TropoSSTableManagerInternal;
+  static void DeferFlushWrite(void* deferred_flush);
+  Status FlushSSTable(TropoSSTableBuilder** builder, std::vector<SSZoneMetaData*>& new_metas, std::vector<SSZoneMetaData>& metas);
 
   uint8_t request_read_queue();
   void release_read_queue(uint8_t reader);
 
   SZD::SZDCircularLog log_;
-#ifdef USE_COMMITTER
-  TropoCommitter committer_;
-#endif
   uint64_t zasl_;
   uint64_t lba_size_;
   uint64_t zone_size_;
@@ -71,6 +89,14 @@ class TropoL0SSTable : public TropoSSTable {
   port::Mutex mutex_;
   port::CondVar cv_;
   std::array<uint8_t, TropoDBConfig::number_of_concurrent_L0_readers> read_queue_;
+  // deferred
+  DeferredFlush deferred_;
+  // timing
+  SystemClock* const clock_;
+  TimingCounter flush_prepare_perf_counter_;
+  TimingCounter flush_merge_perf_counter_;
+  TimingCounter flush_write_perf_counter_;
+  TimingCounter flush_finish_perf_counter_;
 };
 
 /**

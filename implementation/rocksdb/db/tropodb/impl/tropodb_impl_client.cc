@@ -17,7 +17,7 @@ struct TropoDBImpl::Writer {
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status TropoDBImpl::Put(const WriteOptions& options, const Slice& key,
-                      const Slice& value) {
+                        const Slice& value) {
   WriteBatch batch;
   batch.Put(key, value);
   return Write(options, &batch);
@@ -33,36 +33,48 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
   mutex_.AssertHeld();
   Status s;
   bool allow_delay = true;
+  uint64_t before;
   while (true) {
     if (!bg_error_.ok()) {
       // Yield error
       s = bg_error_;
       return s;
     }
-    if (allow_delay && versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
+    if (allow_delay &&
+        versions_->NumLevelZones(0) > TropoDBConfig::L0_slow_down) {
       // Throttle
+      before = clock_->NowMicros();
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;
       mutex_.Lock();
+      put_slowdown_.AddTiming(clock_->NowMicros() - before);
     } else if (!mem_[parallel_number]->ShouldScheduleFlush() &&
                wal_[parallel_number]->SpaceLeft(size)) {
       // space left in memory table
       break;
     } else if (imm_[parallel_number] != nullptr) {
       // flush is already scheduled, therefore, wait.
+      before = clock_->NowMicros();
       bg_flush_work_finished_signal_.Wait();
-    } else if (versions_->NeedsL0Compaction()) {
+      put_wait_on_flush_.AddTiming(clock_->NowMicros() - before);
+    } else if (versions_->NeedsL0CompactionForce() ||
+               versions_->NeedsL0CompactionForceParallel(parallel_number)) {
       // No more space in L0. Better to wait till compaction is done
       TROPO_LOG_DEBUG("DEBUG: Forcing L0 compaction, no space left\n");
+      before = clock_->NowMicros();
       MaybeScheduleCompactionL0();
       bg_work_l0_finished_signal_.Wait();
+      put_wait_on_forced_l0_.AddTiming(clock_->NowMicros() - before);
     } else if (!wal_man_[parallel_number]->WALAvailable()) {
       // This can not happen in current implementation, but we do treat it.
       // Simply wait for WALs to become available
       TROPO_LOG_DEBUG("DEBUG: out of WALs\n");
+      before = clock_->NowMicros();
       bg_flush_work_finished_signal_.Wait();
+      put_wait_on_WAL_.AddTiming(clock_->NowMicros() - before);
     } else {
+      before = clock_->NowMicros();
       // create new WAL
       wal_[parallel_number]->Sync();
       wal_[parallel_number]->Close();
@@ -73,11 +85,11 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       }
       wal_[parallel_number]->Ref();
       // Hack to prevent needing background operations
-#ifdef WALPerfTest
+#ifdef DISABLE_BACKGROUND_OPS
       // Drop all that was in the memtable (NOT PERSISTENT!)
       mem_[parallel_number]->Unref();
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
-                                              max_write_buffer_size_);
+                                                max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       FlushData* dat = new FlushData(this, parallel_number);
       env_->Schedule(&TropoDBImpl::BGFlushWork, dat, rocksdb::Env::HIGH);
@@ -85,12 +97,13 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
       // Switch to fresh memtable
       imm_[parallel_number] = mem_[parallel_number];
       mem_[parallel_number] = new TropoMemtable(options_, internal_comparator_,
-                                              max_write_buffer_size_);
+                                                max_write_buffer_size_);
       mem_[parallel_number]->Ref();
       // Ensure the background knows about these thingss
       MaybeScheduleFlush(parallel_number);
       MaybeScheduleCompactionL0();
 #endif
+      put_create_new_mem_.AddTiming(clock_->NowMicros() - before);
     }
   }
   // We can write
@@ -98,7 +111,7 @@ Status TropoDBImpl::MakeRoomForWrite(size_t size, uint8_t parallel_number) {
 }
 
 WriteBatch* TropoDBImpl::BuildBatchGroup(Writer** last_writer,
-                                       uint8_t parallel_number) {
+                                         uint8_t parallel_number) {
   mutex_.AssertHeld();
   assert(!writers_[parallel_number].empty());
   Writer* first = writers_[parallel_number].front();
@@ -145,6 +158,7 @@ WriteBatch* TropoDBImpl::BuildBatchGroup(Writer** last_writer,
 }
 
 Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+  uint64_t before = clock_->NowMicros();
   Status s;
 
   Writer w(&mutex_);
@@ -187,17 +201,22 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       wal_[striped_index]->Ref();
       mutex_.Unlock();
       // WAL
-      if (!options.sync) {
-        // Async WAL write
-        s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
-      } else {
+      uint64_t before_wal = clock_->NowMicros();
+      if (options.sync) {
         // Synchronous WAL write
         s = wal_[striped_index]->Append(
-            WriteBatchInternal::Contents(write_batch), last_sequence + 1);
-        s = s.ok() ? wal_[striped_index]->Sync() : s;
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1,
+            /*sync*/ true);
+
+      } else {
+        // Async WAL write
+        s = wal_[striped_index]->Append(
+            WriteBatchInternal::Contents(write_batch), last_sequence + 1,
+            /*sync*/ false);
       }
+      put_wal_.AddTiming(clock_->NowMicros() - before_wal);
       // write to memtable
+      uint64_t before_mem = clock_->NowMicros();
       assert(mem_[striped_index] != nullptr);
       if (s.ok()) {
         s = mem_[striped_index]->Write(options, write_batch);
@@ -207,6 +226,7 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
       } else {
         TROPO_LOG_ERROR("ERROR: WAL append error\n");
       }
+      put_mem_.AddTiming(clock_->NowMicros() - before_mem);
       mutex_.Lock();
       wal_[striped_index]->Unref();
     }
@@ -232,11 +252,12 @@ Status TropoDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     writers_[striped_index].front()->cv.Signal();
   }
 
+  put_total_.AddTiming(clock_->NowMicros() - before);
   return s;
 }
 
 Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
-                      std::string* value) {
+                        std::string* value) {
   MutexLock l(&mutex_);
   Status s;
   value->clear();
@@ -302,8 +323,8 @@ Status TropoDBImpl::Get(const ReadOptions& options, const Slice& key,
 }
 
 Status TropoDBImpl::Get(const ReadOptions& options,
-                      ColumnFamilyHandle* column_family, const Slice& key,
-                      PinnableSlice* value, std::string* timestamp) {
+                        ColumnFamilyHandle* column_family, const Slice& key,
+                        PinnableSlice* value, std::string* timestamp) {
   std::string* val = new std::string;
   Status s = Get(options, key, val);
   *value = PinnableSlice(val);

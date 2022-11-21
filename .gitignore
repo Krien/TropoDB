@@ -2,6 +2,7 @@
 build/
 doc_doxygen/
 build_version.cc
+tropodb_config.h
 
 # Latex
 *.aux

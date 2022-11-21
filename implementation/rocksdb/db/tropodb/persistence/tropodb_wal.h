@@ -22,44 +22,31 @@ class TropoWAL : public RefCounter {
  public:
   TropoWAL(SZD::SZDChannelFactory* channel_factory, const SZD::DeviceInfo& info,
          const uint64_t min_zone_nr, const uint64_t max_zone_nr,
-         const uint8_t number_of_writers,
-         SZD::SZDChannel** borrowed_write_channel = nullptr);
+         const bool use_buffer, const bool group_commits, const bool allow_unordered,
+         SZD::SZDChannel* borrowed_write_channel = nullptr);
   // No copying or implicits
   TropoWAL(const TropoWAL&) = delete;
   TropoWAL& operator=(const TropoWAL&) = delete;
   ~TropoWAL();
 
-#ifdef WAL_BUFFERED
+  // Append data to WAL
+  Status Append(const Slice& data, uint64_t seq, bool sync = true);
   // Sync buffer from heap to I/O
   Status DataSync();
-  // Append data to buffer or I/O if it is full
-  Status BufferedAppend(const Slice& data);
-#endif
-  // Append data to storage (does not guarantee persistence)
-  Status DirectAppend(const Slice& data);
-  // Append data to WAL
-  Status Append(const Slice& data, uint64_t seq);
   // Ensure WAL in heap buffer/DMA buffer is persisted to storage
   Status Sync();
-// Replay all changes present in this WAL to the memtable
-#ifdef WAL_UNORDERED
-  Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
-#else
-  Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
-#endif
+  // Replay all changes present in this WAL to the memtable
   Status Replay(TropoMemtable* mem, SequenceNumber* seq);
   // Closes the WAL gracefully (sync, free buffers)
   Status Close();
   Status Reset();
   Status Recover();
+
+  // status
   inline bool Empty() { return log_.Empty(); }
   inline uint64_t SpaceAvailable() const { return log_.SpaceAvailable(); }
   inline size_t SpaceNeeded(const size_t size) {
-#ifdef WAL_BUFFERED
-    return committer_.SpaceNeeded(size + pos_ + 2 * sizeof(uint64_t));
-#else
-    return committer_.SpaceNeeded(size + 2 * sizeof(uint64_t));
-#endif
+    return committer_.SpaceNeeded(size + buff_pos_ + 2 * sizeof(uint64_t));
   }
   inline size_t SpaceNeeded(const Slice& data) {
     return committer_.SpaceNeeded(data.size());
@@ -85,32 +72,51 @@ class TropoWAL : public RefCounter {
   inline Status MarkInactive() { return FromStatus(log_.MarkInactive()); }
 
   // Timing
+  inline TimingCounter GetPrepareAppendPerfCounter() { return prepare_append_perf_counter_; }
   inline TimingCounter GetTotalAppendPerfCounter() { return total_append_perf_counter_; }
-  inline TimingCounter GetStorageAppendPerfCounter() { return storage_append_perf_counter_; }
+  inline TimingCounter GetSubmitAsyncAppendPerfCounter() { return submit_async_append_perf_counter_; }
+  inline TimingCounter GetSubmitSyncAppendPerfCounter() { return submit_sync_append_perf_counter_; }
+  inline TimingCounter GetBufferedAppendPerfCounter() { return submit_buffered_append_perf_counter_; }
+  inline TimingCounter GetSyncPerfCounter() { return sync_perf_counter_; }
   inline TimingCounter GetReplayPerfCounter() { return replay_perf_counter_; }
   inline TimingCounter GetRecoveryPerfCounter() { return recovery_perf_counter_; }
   inline TimingCounter GetResetPerfCounter() { return reset_perf_counter_; }
 
  private:
+   Status LightEncodeAppend(const Slice& data, char** out, size_t* size);
+  // Encodes the append in the on-storage format 
+  Status EncodeAppend(const Slice& data, char** out, size_t* size);
+  Status BufferedFlush(const Slice& data);
+  // Append data to buffer or I/O if it is full
+  Status BufferedAppend(const Slice& data);
+  // Append data to storage (does not guarantee persistence)
+  Status SubmitAppend(const Slice& data);
+  // Append data to storage persistently
+  Status DirectAppend(const Slice& data);
+  Status ReplayUnordered(TropoMemtable* mem, SequenceNumber* seq);
+  Status ReplayOrdered(TropoMemtable* mem, SequenceNumber* seq);
+
   // references
   SZD::SZDChannelFactory* channel_factory_;
   SZD::SZDOnceLog log_;
   TropoCommitter committer_;
-#ifdef WAL_BUFFERED
   // buffer
   bool buffered_;
   const size_t buffsize_;
-  char* buf_;
-  size_t pos_;
-#endif
-#ifdef WAL_UNORDERED
+  char* buff_;
+  size_t buff_pos_;
+  bool group_commits_;
+  // unordered
+  bool unordered_;
   uint32_t sequence_nr_;
-#endif
-
   // Timing
   SystemClock* const clock_;
-  TimingCounter storage_append_perf_counter_;
+  TimingCounter prepare_append_perf_counter_;
   TimingCounter total_append_perf_counter_;
+  TimingCounter submit_async_append_perf_counter_;
+  TimingCounter submit_sync_append_perf_counter_;
+  TimingCounter submit_buffered_append_perf_counter_;
+  TimingCounter sync_perf_counter_;
   TimingCounter replay_perf_counter_;
   TimingCounter recovery_perf_counter_;
   TimingCounter reset_perf_counter_;

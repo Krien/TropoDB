@@ -33,7 +33,7 @@ void SSTableIterator::Seek(const Slice& target) {
   if (Valid()) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
       TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                    count_);
+                      count_);
     }
     current_key_compare =
         cmp_->Compare(parsed_key.user_key, target_ptr_stripped);
@@ -54,7 +54,7 @@ void SSTableIterator::Seek(const Slice& target) {
     ParseNextKey();
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
       TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                    count_);
+                      count_);
     }
     if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
       left = mid;
@@ -67,7 +67,7 @@ void SSTableIterator::Seek(const Slice& target) {
   while (Valid()) {
     if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
       TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                    count_);
+                      count_);
     }
     if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) == 0) {
       restart_index_ = left;

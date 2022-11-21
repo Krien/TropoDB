@@ -1,30 +1,28 @@
 #include "db/tropodb/table/tropodb_l0_sstable.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/table/iterators/sstable_iterator.h"
 #include "db/tropodb/table/iterators/sstable_iterator_compressed.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_sstable_builder.h"
 #include "db/tropodb/table/tropodb_sstable_reader.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 
 namespace ROCKSDB_NAMESPACE {
 
 TropoL0SSTable::TropoL0SSTable(SZD::SZDChannelFactory* channel_factory,
-                           const SZD::DeviceInfo& info,
-                           const uint64_t min_zone_nr,
-                           const uint64_t max_zone_nr)
+                               const SZD::DeviceInfo& info,
+                               const uint64_t min_zone_nr,
+                               const uint64_t max_zone_nr)
     : TropoSSTable(channel_factory, info, min_zone_nr, max_zone_nr),
       log_(channel_factory_, info, min_zone_nr, max_zone_nr,
            TropoDBConfig::number_of_concurrent_L0_readers),
-#ifdef USE_COMMITTER
-      committer_(&log_, info, true),
-#endif
       zasl_(info.zasl),
       lba_size_(info.lba_size),
       zone_size_(info.zone_size),
-      cv_(&mutex_) {
+      cv_(&mutex_),
+      clock_(SystemClock::Default().get()) {
   // unset
   for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
     read_queue_[i] = 0;
@@ -36,50 +34,148 @@ TropoL0SSTable::~TropoL0SSTable() = default;
 Status TropoL0SSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
 
 TropoSSTableBuilder* TropoL0SSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_sstable_encoding);
+  return new TropoSSTableBuilder(this, meta,
+                                 TropoDBConfig::use_sstable_encoding);
 }
 
 bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
-#ifdef USE_COMMITTER
-  return committer_.SpaceEnough(slice);
-#else
   return log_.SpaceLeft(slice.size(), false);
-#endif
 }
 
-uint64_t TropoL0SSTable::SpaceAvailable() const { return log_.SpaceAvailable(); }
+uint64_t TropoL0SSTable::SpaceAvailable() const {
+  return log_.SpaceAvailable();
+}
 
-Status TropoL0SSTable::WriteSSTable(const Slice& content, SSZoneMetaData* meta) {
+Status TropoL0SSTable::WriteSSTable(const Slice& content,
+                                    SSZoneMetaData* meta) {
   // The callee has to check beforehand if there is enough space.
   if (!EnoughSpaceAvailable(content)) {
     TROPO_LOG_ERROR("ERROR: L0 SSTable: Out of space\n");
     return Status::IOError("Not enough space available for L0");
   }
-#ifdef USE_COMMITTER
-  meta->L0.lba = log_.GetWriteHead();
-  Status s = committer_.SafeCommit(content, &meta->lba_count);
-  return s;
-#else
   meta->L0.lba = log_.GetWriteHead();
   Status s = FromStatus(
       log_.Append(content.data(), content.size(), &meta->lba_count, false));
   return s;
-#endif
+}
+
+void TropoL0SSTable::DeferFlushWrite(void* deferred_flush) {
+  DeferredFlush* deferred = reinterpret_cast<DeferredFlush*>(deferred_flush);
+  while (true) {
+    // Wait for task
+    deferred->mutex_.Lock();
+    if (deferred->index_ >= deferred->deferred_builds_.size()) {
+      // Host asked the defer thread to die, so die.
+      if (deferred->last_) {
+        break;
+      }
+      deferred->new_task_.Wait();
+    }
+
+    // Set current task
+    TropoSSTableBuilder* current_builder =
+        deferred->deferred_builds_[deferred->index_];
+    deferred->mutex_.Unlock();
+
+    // Process task
+    Status s = Status::OK();
+    if (current_builder == nullptr) {
+      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr");
+      s = Status::Corruption();
+    } else {
+      s = current_builder->Flush();
+    }
+    // TODO: error must be stored in deferred data to propogate the issue.
+
+    // Add to metas
+    deferred->mutex_.Lock();
+    if (!s.ok()) {
+      TROPO_LOG_ERROR("ERROR: Deferred flush: error writing table\n");
+    } else {
+      deferred->metas_->push_back(*current_builder->GetMeta());
+      delete current_builder;
+      deferred->deferred_builds_[deferred->index_] = nullptr;
+    }
+
+    // Finish task
+    deferred->index_++;
+    deferred->new_task_.SignalAll();
+    deferred->mutex_.Unlock();
+  }
+  // Die
+  deferred->done_ = true;
+  deferred->new_task_.SignalAll();
+  deferred->mutex_.Unlock();
+}
+
+Status TropoL0SSTable::FlushSSTable(TropoSSTableBuilder** builder,
+                                    std::vector<SSZoneMetaData*>& new_metas,
+                                    std::vector<SSZoneMetaData>& metas) {
+  Status s = Status::OK();
+  // Setup flush task
+  TropoSSTableBuilder* current_builder = *builder;
+  // Either defer or block current thread and do it now
+  if (TropoDBConfig::flushes_allow_deferring_writes) {
+    // It is possible the deferred threads mailbox is full, be polite and wait.
+    deferred_.mutex_.Lock();
+    while (deferred_.deferred_builds_.size() > deferred_.index_ &&
+           deferred_.deferred_builds_.size() - deferred_.index_ >
+               TropoDBConfig::flushing_maximum_deferred_writes) {
+      deferred_.new_task_.Wait();
+    }
+
+    // Push task to deferred thread
+    deferred_.deferred_builds_.push_back(current_builder);
+    deferred_.new_task_.SignalAll();
+    deferred_.mutex_.Unlock();
+
+    return s;
+  } else {
+    // Flush manually
+    s = current_builder->Flush();
+    if (!s.ok()) {
+      TROPO_LOG_ERROR("ERROR: Compaction: Error writing table\n");
+    }
+
+    metas.push_back(*new_metas[new_metas.size() - 1]);
+    // Cleanup our work and create a new task.
+    delete current_builder;
+    return s;
+  }
 }
 
 Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
-                                   std::vector<SSZoneMetaData>& metas,
-                                   uint8_t parallel_number) {
+                                     std::vector<SSZoneMetaData>& metas,
+                                     uint8_t parallel_number, Env* env) {
   Status s = Status::OK();
-  SSZoneMetaData meta;
-  meta.L0.log_number = parallel_number;
-  TropoSSTableBuilder* builder = NewBuilder(&meta);
+  std::vector<SSZoneMetaData*> new_metas;
+  new_metas.push_back(new SSZoneMetaData);
+  TropoSSTableBuilder* builder;
+
+  uint64_t before = clock_->NowMicros();
+  // Spawn worker threads if needed
+  if (TropoDBConfig::flushes_allow_deferring_writes) {
+    deferred_.metas_ = &metas;
+    deferred_.index_ = 0;
+    deferred_.last_ = false;
+    deferred_.done_ = false;
+    deferred_.deferred_builds_.clear();
+    env->Schedule(&TropoL0SSTable::DeferFlushWrite, &(this->deferred_),
+                  rocksdb::Env::LOW);
+  }
+  builder = NewBuilder(new_metas[new_metas.size() - 1]);
+
+  // Setup iterator
   InternalIterator* iter = mem->NewIterator();
   iter->SeekToFirst();
   if (!iter->Valid()) {
     TROPO_LOG_ERROR("ERROR: L0 SSTable: No valid iterator\n");
     return Status::Corruption("No valid iterator in the memtable");
   }
+  flush_prepare_perf_counter_.AddTiming(clock_->NowMicros() - before);
+
+  before = clock_->NowMicros();
+  // Iterate over SSTable iterator, merge and write
   for (; iter->Valid(); iter->Next()) {
     const Slice& key = iter->key();
     const Slice& value = iter->value();
@@ -90,22 +186,58 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
             lba_size_ >=
         (TropoDBConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
       builder->Finalise();
-      s = builder->Flush();
+      flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+      before = clock_->NowMicros();
+      s = FlushSSTable(&builder, new_metas, metas);
+      // Create a new task to do in the main thread
+      new_metas.push_back(new SSZoneMetaData);
+      builder = NewBuilder(new_metas[new_metas.size() - 1]);
+      flush_write_perf_counter_.AddTiming(clock_->NowMicros() - before);
       if (!s.ok()) {
         TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
         break;
       }
-      metas.push_back(meta);
-      delete builder;
-      builder = NewBuilder(&meta);
+      before = clock_->NowMicros();
     }
   }
+
+  // Now write the last remaining SSTable to storage
   if (s.ok() && builder->GetSize() > 0) {
     s = builder->Finalise();
-    s = builder->Flush();
-    metas.push_back(meta);
+    flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+    before = clock_->NowMicros();
+    s = FlushSSTable(&builder, new_metas, metas);
+    // Create a new task to do in the main thread
+    new_metas.push_back(new SSZoneMetaData);
+    builder = NewBuilder(new_metas[new_metas.size() - 1]);
+    if (!s.ok()) {
+      TROPO_LOG_ERROR("ERROR: L0 SSTable: Error flushing table\n");
+    }
+    flush_write_perf_counter_.AddTiming(clock_->NowMicros() - before);
   }
-  delete builder;
+
+  before = clock_->NowMicros();
+  // Teardown
+  if (TropoDBConfig::flushes_allow_deferring_writes) {
+    deferred_.mutex_.Lock();
+    deferred_.last_ = true;
+    deferred_.new_task_.SignalAll();
+    while (!deferred_.done_) {
+      deferred_.new_task_.Wait();
+      deferred_.mutex_.Unlock();
+    }
+    TROPO_LOG_DEBUG("Deferred flush quiting \n");
+  }
+  // Force log number of all created metas
+  for (auto nmeta : metas) {
+    nmeta.L0.log_number = parallel_number;
+  }
+  // Delete stuff
+  for (auto nmeta : new_metas) {
+    delete nmeta;
+  }
+  flush_finish_perf_counter_.AddTiming(clock_->NowMicros() - before);
+
   return s;
 }
 
@@ -122,7 +254,8 @@ uint8_t TropoL0SSTable::request_read_queue() {
   }
   while (picked_reader >= TropoDBConfig::number_of_concurrent_L0_readers) {
     cv_.Wait();
-    for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers; i++) {
+    for (uint8_t i = 0; i < TropoDBConfig::number_of_concurrent_L0_readers;
+         i++) {
       if (read_queue_[i] == 0) {
         picked_reader = i;
         break;
@@ -153,38 +286,6 @@ Status TropoL0SSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
   sstable->clear();
   // mutex_.Lock();
   uint8_t readernr = request_read_queue();
-#ifdef USE_COMMITTER
-  TropoCommitReader reader;
-  Slice record;
-  std::string* raw_data = new std::string();
-  bool succeeded_once = false;
-  s = committer_.GetCommitReader(readernr, meta.L0.lba,
-                                 meta.L0.lba + meta.lba_count, &reader);
-
-  if (!s.ok()) {
-    release_read_queue(readernr);
-    TROPO_LOG_ERROR("ERROR: L0 SSTable: Can not get reader\n");
-    return s;
-  }
-  while (committer_.SeekCommitReader(reader, &record)) {
-    succeeded_once = true;
-    raw_data->append(record.data(), record.size());
-  }
-  if (!committer_.CloseCommit(reader)) {
-    release_read_queue(readernr);
-    // mutex_.Unlock();
-    return Status::Corruption();
-  }
-  // mutex_.Unlock();
-  release_read_queue(readernr);
-
-  // Committer never succeeded.
-  if (!succeeded_once) {
-    return Status::Corruption();
-  }
-  *sstable = Slice(raw_data->data(), raw_data->size());
-  return Status::OK();
-#else
   char* data = new char[meta.lba_count * lba_size_];
   s = FromStatus(
       log_.Read(meta.L0.lba, data, meta.lba_count * lba_size_, true, readernr));
@@ -197,7 +298,6 @@ Status TropoL0SSTable::ReadSSTable(Slice* sstable, const SSZoneMetaData& meta) {
     exit(-1);
   }
   return Status::OK();
-#endif
 }
 
 Status TropoL0SSTable::TryInvalidateSSZones(
@@ -277,7 +377,7 @@ Status TropoL0SSTable::InvalidateSSZone(const SSZoneMetaData& meta) {
 }
 
 Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
-                                    const Comparator* cmp) {
+                                      const Comparator* cmp) {
   Status s;
   Slice sstable;
   s = ReadSSTable(&sstable, meta);
@@ -290,8 +390,9 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
-      TROPO_LOG_ERROR("ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n",
-                    size, count);
+      TROPO_LOG_ERROR(
+          "ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n", size,
+          count);
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
@@ -302,8 +403,8 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
 }
 
 Status TropoL0SSTable::Get(const InternalKeyComparator& icmp,
-                         const Slice& key_ptr, std::string* value_ptr,
-                         const SSZoneMetaData& meta, EntryStatus* status) {
+                           const Slice& key_ptr, std::string* value_ptr,
+                           const SSZoneMetaData& meta, EntryStatus* status) {
   Iterator* it = NewIterator(meta, icmp.user_comparator());
   if (it == nullptr) {
     TROPO_LOG_ERROR("ERROR: L0 SSTable: Corrupt iterator\n");

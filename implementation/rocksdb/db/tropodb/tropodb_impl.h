@@ -11,8 +11,6 @@
 #ifndef TROPODB_IMPL_H
 #define TROPODB_IMPL_H
 
-//#define WALPerfTest
-
 #include <atomic>
 #include <deque>
 #include <functional>
@@ -401,14 +399,24 @@ class TropoDBImpl : public DB {
   TimingCounter flush_reset_wal_counter_;
   // Diag compaction
   std::array<uint64_t, TropoDBConfig::level_count - 1> compactions_;
+  TimingCounter put_total_;
+  TimingCounter put_wal_;
+  TimingCounter put_mem_;
+  TimingCounter put_slowdown_;
+  TimingCounter put_wait_on_flush_;
+  TimingCounter put_wait_on_forced_l0_;
+  TimingCounter put_wait_on_WAL_;
+  TimingCounter put_create_new_mem_;
   TimingCounter compaction_compaction_L0_total_;
   TimingCounter compaction_reset_L0_counter_;
+  TimingCounter compaction_wait_compaction_;
   TimingCounter compaction_pick_compaction_;
   TimingCounter compaction_compaction_;
   TimingCounter compaction_compaction_trivial_;
   TimingCounter compaction_version_edit_;
   TimingCounter compaction_compaction_LN_total_;
   TimingCounter compaction_reset_LN_counter_;
+  TimingCounter compaction_wait_compaction_LN_;
   TimingCounter compaction_pick_compaction_LN_;
   TimingCounter compaction_compaction_LN_;
   TimingCounter compaction_compaction_trivial_LN_;

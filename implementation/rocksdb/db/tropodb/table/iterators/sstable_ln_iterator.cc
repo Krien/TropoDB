@@ -1,10 +1,10 @@
 #include "db/tropodb/table/iterators/sstable_ln_iterator.h"
 
 #include "db/dbformat.h"
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_sstable_manager.h"
 #include "db/tropodb/table/tropodb_zonemetadata.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 

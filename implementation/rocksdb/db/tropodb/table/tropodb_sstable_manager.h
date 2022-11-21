@@ -51,7 +51,7 @@ class TropoSSTableManager : public RefCounter {
   // L0 specific
   TropoL0SSTable* GetL0SSTableLog(uint8_t parallel_number) const;
   Status FlushMemTable(TropoMemtable* mem, std::vector<SSZoneMetaData>& metas,
-                       uint8_t parallel_number) const;
+                       uint8_t parallel_number, Env* env) const;
   Status DeleteL0Table(const std::vector<SSZoneMetaData*>& metas_to_delete,
                        std::vector<SSZoneMetaData*>& remaining_metas) const;
   double GetFractionFilledL0(const uint8_t parallel_number) const;
@@ -69,7 +69,10 @@ class TropoSSTableManager : public RefCounter {
   uint64_t GetBytesInLevel(const std::vector<SSZoneMetaData*>& metas);
   std::vector<TropoDiagnostics> IODiagnostics();
   std::string LayoutDivisionString();
-
+  TimingCounter GetFlushPreparePerfCounter();
+  TimingCounter GetFlushMergePerfCounter();
+  TimingCounter GetFlushWritePerfCounter();
+  TimingCounter GetFlushFinishPerfCounter();
  private:
   using RangeArray = std::array<std::pair<uint64_t, uint64_t>,
                                 1 + TropoDBConfig::lower_concurrency>;

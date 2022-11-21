@@ -5,19 +5,20 @@
 
 #include <numeric>
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/index/tropodb_version_edit.h"
 #include "db/tropodb/index/tropodb_version_set.h"
 #include "db/tropodb/table/iterators/merging_iterator.h"
 #include "db/tropodb/table/iterators/sstable_ln_iterator.h"
 #include "db/tropodb/table/tropodb_sstable.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
 namespace ROCKSDB_NAMESPACE {
-TropoCompaction::TropoCompaction(TropoVersionSet* vset, uint8_t first_level, Env* env)
+TropoCompaction::TropoCompaction(TropoVersionSet* vset, uint8_t first_level,
+                                 Env* env)
     : first_level_(first_level),
       max_lba_count_((TropoDBConfig::max_bytes_sstable_ + vset->lba_size_ - 1) /
                      vset->lba_size_),
@@ -55,7 +56,8 @@ bool TropoCompaction::HasOverlapWithOtherCompaction(
   return false;
 }
 
-void TropoCompaction::GetCompactionTargets(std::vector<SSZoneMetaData*>* metas) {
+void TropoCompaction::GetCompactionTargets(
+    std::vector<SSZoneMetaData*>* metas) {
   metas->clear();
   metas->insert(metas->end(), targets_[0].begin(), targets_[0].end());
   metas->insert(metas->end(), targets_[1].begin(), targets_[1].end());
@@ -140,7 +142,7 @@ void TropoCompaction::MarkCompactedTablesAsDead(TropoVersionEdit* edit) {
 }
 
 Iterator* TropoCompaction::GetLNIterator(void* arg, const Slice& file_value,
-                                       const Comparator* cmp) {
+                                         const Comparator* cmp) {
   TropoSSTableManager* zns = reinterpret_cast<TropoSSTableManager*>(arg);
   Iterator* iterator = zns->GetLNIterator(file_value, cmp);
   return iterator;
@@ -201,7 +203,7 @@ void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
     // Process task
     Status s = Status::OK();
     if (current_builder == nullptr) {
-      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr");
+      TROPO_LOG_ERROR("ERROR: Deferred compaction: current builder == nullptr");
       s = Status::Corruption();
     } else {
       s = current_builder->Flush();
@@ -211,7 +213,7 @@ void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
     // Add to (potential) version structure
     deferred->mutex_.Lock();
     if (!s.ok()) {
-      TROPO_LOG_ERROR("ERROR: Deferred flush: error writing table\n");
+      TROPO_LOG_ERROR("ERROR: Deferred compaction: error writing table\n");
     } else {
       deferred->edit_->AddSSDefinition(deferred->level_,
                                        *(current_builder->GetMeta()));
@@ -231,7 +233,8 @@ void TropoCompaction::DeferCompactionWrite(void* deferred_compaction) {
 }
 
 Status TropoCompaction::FlushSSTable(TropoSSTableBuilder** builder,
-                                   TropoVersionEdit* edit, SSZoneMetaData* meta) {
+                                     TropoVersionEdit* edit,
+                                     SSZoneMetaData* meta) {
   Status s = Status::OK();
   // Setup flush task
   TropoSSTableBuilder* current_builder = *builder;
@@ -315,12 +318,13 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
                    rocksdb::Env::LOW);
     // Setup our joblist
     metas_.push_back(new SSZoneMetaData);
-    builder = vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1,
-                                                    metas_[metas_.size() - 1]);
+    builder = vset_->znssstable_->NewTropoSSTableBuilder(
+        first_level_ + 1, metas_[metas_.size() - 1]);
   } else {
     // Setup our job(list). We can only process one at the same time without
     // deferred.
-    builder = vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1, &meta);
+    builder =
+        vset_->znssstable_->NewTropoSSTableBuilder(first_level_ + 1, &meta);
   }
 
   // Setup SSTable iterator
@@ -387,7 +391,8 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
                 vset_->lba_size_ >=
             max_size) {
           // Flush
-          compaction_k_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
+          compaction_k_merge_perf_counter_.AddTiming(clock_->NowMicros() -
+                                                     before);
           before = clock_->NowMicros();
           if (TropoDBConfig::compaction_allow_deferring_writes) {
             s = FlushSSTable(&builder, edit, metas_[metas_.size() - 1]);
@@ -398,7 +403,8 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
             TROPO_LOG_ERROR("ERROR: Compaction: Could not flush\n");
             break;
           }
-          compaction_flush_perf_counter_.AddTiming(clock_->NowMicros() - before);
+          compaction_flush_perf_counter_.AddTiming(clock_->NowMicros() -
+                                                   before);
           before = clock_->NowMicros();
         }
         // Only now add key to SSTable
@@ -433,10 +439,13 @@ Status TropoCompaction::DoCompaction(TropoVersionEdit* edit) {
         deferred_.new_task_.Wait();
         deferred_.mutex_.Unlock();
       }
-      TROPO_LOG_DEBUG("Deferred quiting \n");
+      TROPO_LOG_DEBUG("Deferred compaction quiting \n");
       for (int i = metas_.size() - 1; i >= 0; i--) {
         delete metas_[i];
       }
+      deferred_.index_ = 0;
+      deferred_.last_ = false;
+      deferred_.done_ = false;
     }
   }
 

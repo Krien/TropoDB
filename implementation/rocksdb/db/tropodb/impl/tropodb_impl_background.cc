@@ -14,9 +14,6 @@
 
 #include "db/column_family.h"
 #include "db/memtable.h"
-#include "db/write_batch_internal.h"
-#include "db/tropodb/tropodb_config.h"
-#include "db/tropodb/tropodb_impl.h"
 #include "db/tropodb/index/tropodb_compaction.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/index/tropodb_version_set.h"
@@ -26,7 +23,10 @@
 #include "db/tropodb/persistence/tropodb_wal_manager.h"
 #include "db/tropodb/table/tropodb_sstable_manager.h"
 #include "db/tropodb/table/tropodb_table_cache.h"
+#include "db/tropodb/tropodb_config.h"
+#include "db/tropodb/tropodb_impl.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "db/write_batch_internal.h"
 #include "port/port.h"
 #include "rocksdb/db.h"
 #include "rocksdb/file_checksum.h"
@@ -43,9 +43,9 @@
 namespace ROCKSDB_NAMESPACE {
 
 Status TropoDBImpl::FlushL0SSTables(std::vector<SSZoneMetaData>& metas,
-                                  uint8_t parallel_number) {
+                                    uint8_t parallel_number) {
   return ss_manager_->FlushMemTable(imm_[parallel_number], metas,
-                                    parallel_number);
+                                    parallel_number, env_);
 }
 
 Status TropoDBImpl::CompactMemtable(uint8_t parallel_number) {
@@ -149,9 +149,11 @@ void TropoDBImpl::BackgroundFlushCall(uint8_t parallel_number) {
   MutexLock l(&mutex_);
   assert(bg_flush_scheduled_);
   // Hack to ensure that during a WAL test we do NOT test bg operations.
-#ifdef WALPerfTest
+#ifdef DISABLE_BACKGROUND_OPS
   wal_man_[parallel_number]->ResetOldWALs(&mutex_);
+#ifndef DISABLE_BACKGROUND_OPS_AND_RESETS
   bg_flush_work_finished_signal_.SignalAll();
+#endif
   return;
 #endif
   // TODO: how to deal with bg_error?
@@ -275,7 +277,9 @@ void TropoDBImpl::BackgroundCompactionL0() {
           c->HasOverlapWithOtherCompaction(reserved_comp_[1]));
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 0 : reserve_claimed_;
+      uint64_t before_wait = clock_->NowMicros();
       bg_work_finished_signal_.Wait();
+      compaction_wait_compaction_.AddTiming(clock_->NowMicros() - before_wait);
       current = versions_->current();
       c = versions_->PickCompaction(0 /*level*/, reserved_comp_[1]);
     }
@@ -301,7 +305,8 @@ void TropoDBImpl::BackgroundCompactionL0() {
         compaction_setup_perf_counter_ += c->GetCompactionSetupPerfCounter();
         compaction_k_merge_perf_counter_ += c->GetCompactionKMergePerfCounter();
         compaction_flush_perf_counter_ += c->GetCompactionFlushPerfCounter();
-        compaction_breakdown_perf_counter_ += c->GetCompactionBreakdownPerfCounter();
+        compaction_breakdown_perf_counter_ +=
+            c->GetCompactionBreakdownPerfCounter();
       }
       TROPO_LOG_INFO("BG Operation: Finished L0 Non-trivial compaction\n");
     }
@@ -353,7 +358,7 @@ void TropoDBImpl::BackgroundCompactionL0() {
 
   if (!s.ok()) {
     TROPO_LOG_ERROR("ERROR: Compaction L0: error in flow control of %s:%s \n",
-                  __FILE__, __func__);
+                    __FILE__, __func__);
     bg_error_ = s;
   }
 }
@@ -423,7 +428,7 @@ void TropoDBImpl::BackgroundCompaction() {
     // Pick compaction
     before = clock_->NowMicros();
     TropoCompaction* c = versions_->PickCompaction(current->CompactionLevel(),
-                                                 reserved_comp_[0]);
+                                                   reserved_comp_[0]);
     while (reserve_claimed_ == 0 ||
            c->HasOverlapWithOtherCompaction(reserved_comp_[0]) || c->IsBusy()) {
       TROPO_LOG_DEBUG(
@@ -432,7 +437,9 @@ void TropoDBImpl::BackgroundCompaction() {
           c->HasOverlapWithOtherCompaction(reserved_comp_[0]), c->IsBusy());
       delete c;
       reserve_claimed_ = reserve_claimed_ == -1 ? 1 : reserve_claimed_;
+      uint64_t before_wait = clock_->NowMicros();
       bg_work_l0_finished_signal_.Wait();
+      compaction_wait_compaction_LN_.AddTiming(clock_->NowMicros() - before_wait);
       current = versions_->current();
       c = versions_->PickCompaction(current->CompactionLevel(),
                                     reserved_comp_[0]);
@@ -459,7 +466,8 @@ void TropoDBImpl::BackgroundCompaction() {
         compaction_setup_perf_counter_ += c->GetCompactionSetupPerfCounter();
         compaction_k_merge_perf_counter_ += c->GetCompactionKMergePerfCounter();
         compaction_flush_perf_counter_ += c->GetCompactionFlushPerfCounter();
-        compaction_breakdown_perf_counter_ += c->GetCompactionBreakdownPerfCounter();
+        compaction_breakdown_perf_counter_ +=
+            c->GetCompactionBreakdownPerfCounter();
       }
       TROPO_LOG_INFO("BG Operation: Finished LN Non-trivial compaction\n");
     }
@@ -511,7 +519,7 @@ void TropoDBImpl::BackgroundCompaction() {
 
   if (!s.ok()) {
     TROPO_LOG_ERROR("ERROR: Compaction LN: error in flow control of %s:%s \n",
-                  __FILE__, __func__);
+                    __FILE__, __func__);
     bg_error_ = s;
   }
 }

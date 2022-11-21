@@ -3,13 +3,13 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/tropodb/index/tropodb_version_set.h"
 
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/index/tropodb_compaction.h"
 #include "db/tropodb/index/tropodb_version.h"
 #include "db/tropodb/index/tropodb_version_edit.h"
 #include "db/tropodb/table/iterators/merging_iterator.h"
 #include "db/tropodb/table/iterators/sstable_ln_iterator.h"
 #include "db/tropodb/table/tropodb_sstable.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
 #include "port/port.h"
 #include "rocksdb/slice.h"
@@ -17,10 +17,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 TropoVersionSet::TropoVersionSet(const InternalKeyComparator& icmp,
-                             TropoSSTableManager* znssstable,
-                             TropoManifest* manifest, const uint64_t lba_size,
-                             uint64_t zone_cap, TropoTableCache* table_cache,
-                             Env* env)
+                                 TropoSSTableManager* znssstable,
+                                 TropoManifest* manifest,
+                                 const uint64_t lba_size, uint64_t zone_cap,
+                                 TropoTableCache* table_cache, Env* env)
     : dummy_versions_(this),
       current_(nullptr),
       icmp_(icmp),
@@ -62,7 +62,7 @@ void TropoVersionSet::AppendVersion(TropoVersion* v) {
 }
 
 void TropoVersionSet::GetLiveZones(const uint8_t level,
-                                 std::set<uint64_t>& live) {
+                                   std::set<uint64_t>& live) {
   for (TropoVersion* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {
     v->Ref();
@@ -76,7 +76,7 @@ void TropoVersionSet::GetLiveZones(const uint8_t level,
 
 // TODO: Do we still use this?
 void TropoVersionSet::GetSaveDeleteRange(const uint8_t level,
-                                       std::pair<uint64_t, uint64_t>* range) {
+                                         std::pair<uint64_t, uint64_t>* range) {
   *range = std::make_pair<uint64_t, uint64_t>(0, 0);
   bool first = true;
   for (TropoVersion* v = dummy_versions_.next_; v != &dummy_versions_;
@@ -101,7 +101,7 @@ void TropoVersionSet::GetSaveDeleteRange(const uint8_t level,
 }
 
 Status TropoVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
-                                             port::CondVar* cond) {
+                                               port::CondVar* cond) {
   Status s = Status::OK();
   TropoVersionEdit edit;
 
@@ -120,7 +120,8 @@ Status TropoVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
     }
   }
   // Sort on circular log order
-  TROPO_LOG_DEBUG("DEBUG: Reclaim SSTablesL0: Safe to delete %lu \n", tmp.size());
+  TROPO_LOG_DEBUG("DEBUG: Reclaim SSTablesL0: Safe to delete %lu \n",
+                  tmp.size());
   if (!tmp.empty()) {
     // in_range = 0;
     std::sort(tmp.begin(), tmp.end(), [](SSZoneMetaData* a, SSZoneMetaData* b) {
@@ -144,7 +145,7 @@ Status TropoVersionSet::ReclaimStaleSSTablesL0(port::Mutex* mutex_,
 }
 
 Status TropoVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
-                                             port::CondVar* cond) {
+                                               port::CondVar* cond) {
   Status s = Status::OK();
   TropoVersionEdit edit;
   for (uint8_t i = 1; i < TropoDBConfig::level_count; i++) {
@@ -178,7 +179,7 @@ Status TropoVersionSet::ReclaimStaleSSTablesLN(port::Mutex* mutex_,
 }
 
 Status TropoVersionSet::WriteSnapshot(std::string* snapshot_dst,
-                                    TropoVersion* version) {
+                                      TropoVersion* version) {
   TropoVersionEdit edit;
   edit.SetComparatorName(icmp_.user_comparator()->Name());
   // compaction stuff
@@ -258,7 +259,8 @@ void TropoVersionSet::RecalculateScore() {
   v->compaction_score_ = best_score;
 }
 
-Status TropoVersionSet::CommitVersion(TropoVersion* v, TropoSSTableManager* man) {
+Status TropoVersionSet::CommitVersion(TropoVersion* v,
+                                      TropoSSTableManager* man) {
   Status s;
   // Setup version (for now CoW)
   std::string version_body;
@@ -285,7 +287,7 @@ Status TropoVersionSet::CommitVersion(TropoVersion* v, TropoSSTableManager* man)
 // *smallest, *largest.
 // REQUIRES: inputs is not empty
 void TropoVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
-                             InternalKey* smallest, InternalKey* largest) {
+                               InternalKey* smallest, InternalKey* largest) {
   assert(!inputs.empty());
   smallest->Clear();
   largest->Clear();
@@ -306,8 +308,8 @@ void TropoVersionSet::GetRange(const std::vector<SSZoneMetaData*>& inputs,
 }
 
 void TropoVersionSet::GetRange2(const std::vector<SSZoneMetaData*>& inputs1,
-                              const std::vector<SSZoneMetaData*>& inputs2,
-                              InternalKey* smallest, InternalKey* largest) {
+                                const std::vector<SSZoneMetaData*>& inputs2,
+                                InternalKey* smallest, InternalKey* largest) {
   std::vector<SSZoneMetaData*> all = inputs1;
   all.insert(all.end(), inputs2.begin(), inputs2.end());
   GetRange(all, smallest, largest);
@@ -389,7 +391,8 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 // }
 
 // static int64_t ExpandedCompactionLbaSizeLimit(uint64_t lba_size) {
-//   return 25 * (((TropoDBConfig::max_bytes_sstable_ + lba_size - 1) / lba_size) *
+//   return 25 * (((TropoDBConfig::max_bytes_sstable_ + lba_size - 1) /
+//   lba_size) *
 //                lba_size);
 // }
 
@@ -455,7 +458,7 @@ bool TropoVersionSet::OnlyNeedDeletes(uint8_t level) {
                    (level > 0 && znssstable_->GetFractionFilled(level) > 0.85);
   if (only_need) {
     TROPO_LOG_DEBUG("ONLY %u %lu %lu \n", level, current_->ss_[level].size(),
-                  current_->ss_d_[level].size());
+                    current_->ss_d_[level].size());
   }
   return only_need;
 }
@@ -567,7 +570,8 @@ TropoCompaction* TropoVersionSet::PickCompaction(
         max_lba_c -= current_->ss_[level][0]->lba_count;
       } else {
         // This should not happen
-        TROPO_LOG_ERROR("ERROR: Pick Compaction: Compacting from empty level?\n");
+        TROPO_LOG_ERROR(
+            "ERROR: Pick Compaction: Compacting from empty level?\n");
         return c;
       }
     }

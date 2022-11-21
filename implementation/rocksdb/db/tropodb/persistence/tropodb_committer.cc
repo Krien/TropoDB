@@ -1,9 +1,9 @@
 #include "db/tropodb/persistence/tropodb_committer.h"
 
-#include "db/write_batch_internal.h"
-#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/io/szd_port.h"
+#include "db/tropodb/tropodb_config.h"
 #include "db/tropodb/utils/tropodb_logger.h"
+#include "db/write_batch_internal.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 #include "rocksdb/types.h"
@@ -24,7 +24,7 @@ static void InitTypeCrc(
 }
 
 TropoCommitter::TropoCommitter(SZD::SZDLog* log, const SZD::DeviceInfo& info,
-                           bool keep_buffer)
+                               bool keep_buffer)
     : zone_cap_(info.zone_cap),
       lba_size_(info.lba_size),
       zasl_(info.zasl),
@@ -119,23 +119,14 @@ Status TropoCommitter::CommitToCharArray(const Slice& in, char** out) {
 Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
   Status s = Status::OK();
   const char* ptr = data.data();
-#ifdef DIRECT_COMMIT
   size_t walker = 0;
-#endif
   size_t left = data.size();
 
   size_t fragcount = data.size() / lba_size_ + 1;
   size_t size_needed = fragcount * kTropoHeaderSize + data.size();
   size_needed = ((size_needed + lba_size_ - 1) / lba_size_) * lba_size_;
 
-  if (!(s = FromStatus(write_buffer_.ReallocBuffer(
-#ifdef DIRECT_COMMIT
-            size_needed
-#else
-            lba_size_
-#endif
-            )))
-           .ok()) {
+  if (!(s = FromStatus(write_buffer_.ReallocBuffer(size_needed))).ok()) {
     TROPO_LOG_ERROR("Error: Commit: Failed resizing buffer\n");
     return s;
   }
@@ -168,9 +159,7 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
       type = TropoRecordType::kMiddleType;
     }
     size_t frag_begin_addr = 0;
-#ifdef DIRECT_COMMIT
     frag_begin_addr = walker;
-#endif
 
     memset(fragment + frag_begin_addr, 0, lba_size_);  // Ensure no stale bits.
     memcpy(fragment + frag_begin_addr + kTropoHeaderSize, ptr,
@@ -187,25 +176,12 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
                                   fragment_length);
     crc = crc32c::Mask(crc);
     EncodeFixed32(fragment + frag_begin_addr, crc);
-#ifdef DIRECT_COMMIT
     walker += fragment_length + kTropoHeaderSize;
-#else
-    // Actual commit
-    s = FromStatus(log_->Append(
-        write_buffer_, 0, fragment_length + kTropoHeaderSize, &lbas_iter, false));
-    if (lbas != nullptr) {
-      *lbas += lbas_iter;
-    }
-    if (!s.ok()) {
-      TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
-      return s;
-    }
-#endif
     ptr += fragment_length;
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
-#ifdef DIRECT_COMMIT
+
   s = FromStatus(
       log_->Append(write_buffer_, 0, size_needed, &lbas_iter, false));
   if (lbas != nullptr) {
@@ -214,7 +190,6 @@ Status TropoCommitter::Commit(const Slice& data, uint64_t* lbas) {
   if (!s.ok()) {
     TROPO_LOG_ERROR("Error: Commit: Fatal append error\n");
   }
-#endif
 
   if (!keep_buffer_) {
     s = FromStatus(write_buffer_.FreeBuffer());
@@ -234,7 +209,8 @@ Status TropoCommitter::SafeCommit(const Slice& data, uint64_t* lbas) {
 }
 
 Status TropoCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
-                                     uint64_t end, TropoCommitReader* reader) {
+                                       uint64_t end,
+                                       TropoCommitReader* reader) {
   if (begin >= end || reader_number >= number_of_readers_) {
     return Status::InvalidArgument();
   }
@@ -252,7 +228,8 @@ Status TropoCommitter::GetCommitReader(uint8_t reader_number, uint64_t begin,
   return Status::OK();
 }
 
-bool TropoCommitter::SeekCommitReader(TropoCommitReader& reader, Slice* record) {
+bool TropoCommitter::SeekCommitReader(TropoCommitReader& reader,
+                                      Slice* record) {
   // buffering issue
   if (read_buffer_[reader.reader_nr]->GetBufferSize() == 0) {
     TROPO_LOG_ERROR("ERROR: Commit: try to seek an undefined commit\n");
@@ -281,8 +258,9 @@ bool TropoCommitter::SeekCommitReader(TropoCommitReader& reader, Slice* record) 
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
     const uint32_t d = static_cast<uint32_t>(header[7]);
-    TropoRecordType type = d > kTropoRecordTypeLast ? TropoRecordType::kInvalid
-                                                : static_cast<TropoRecordType>(d);
+    TropoRecordType type = d > kTropoRecordTypeLast
+                               ? TropoRecordType::kInvalid
+                               : static_cast<TropoRecordType>(d);
     const uint32_t length = a | (b << 8) | (c << 16);
     // read potential body
     if (length > lba_size_ && length <= to_read - kTropoHeaderSize) {
@@ -302,8 +280,8 @@ bool TropoCommitter::SeekCommitReader(TropoCommitReader& reader, Slice* record) 
       uint32_t expected_crc = crc32c::Unmask(DecodeFixed32(header));
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
-        TROPO_LOG_ERROR("ERROR: Seek commit: Corrupt crc %u %u %lu %lu\n", length,
-                      d, reader.commit_ptr, reader.commit_end);
+        TROPO_LOG_ERROR("ERROR: Seek commit: Corrupt crc %u %u %lu %lu\n",
+                        length, d, reader.commit_ptr, reader.commit_end);
         type = TropoRecordType::kInvalid;
       }
     }
@@ -350,7 +328,7 @@ bool TropoCommitter::CloseCommit(TropoCommitReader& reader) {
 }
 
 Status TropoCommitter::GetCommitReaderString(std::string* in,
-                                           TropoCommitReaderString* reader) {
+                                             TropoCommitReaderString* reader) {
   reader->commit_start = 0;
   reader->commit_end = in->size();
   reader->commit_ptr = reader->commit_start;
@@ -360,7 +338,7 @@ Status TropoCommitter::GetCommitReaderString(std::string* in,
 }
 
 bool TropoCommitter::SeekCommitReaderString(TropoCommitReaderString& reader,
-                                          Slice* record) {
+                                            Slice* record) {
   if (reader.commit_ptr >= reader.commit_end) {
     return false;
   }
@@ -379,8 +357,9 @@ bool TropoCommitter::SeekCommitReaderString(TropoCommitReaderString& reader,
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const uint32_t c = static_cast<uint32_t>(header[6]) & 0xff;
     const uint32_t d = static_cast<uint32_t>(header[7]);
-    TropoRecordType type = d > kTropoRecordTypeLast ? TropoRecordType::kInvalid
-                                                : static_cast<TropoRecordType>(d);
+    TropoRecordType type = d > kTropoRecordTypeLast
+                               ? TropoRecordType::kInvalid
+                               : static_cast<TropoRecordType>(d);
     const uint32_t length = a | (b << 8) | (c << 16);
     // TODO: we need better error handling at some point than setting to wrong
     // tag.
@@ -393,7 +372,7 @@ bool TropoCommitter::SeekCommitReaderString(TropoCommitReaderString& reader,
       uint32_t actual_crc = crc32c::Value(header + 7, 1 + length);
       if (actual_crc != expected_crc) {
         TROPO_LOG_ERROR("Corrupt crc %u %u %lu %lu\n", length, d,
-                      reader.commit_ptr, reader.commit_end);
+                        reader.commit_ptr, reader.commit_end);
         type = TropoRecordType::kInvalid;
       }
     }
