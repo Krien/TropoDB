@@ -64,12 +64,16 @@ void TropoL0SSTable::DeferFlushWrite(void* deferred_flush) {
   while (true) {
     // Wait for task
     deferred->mutex_.Lock();
-    if (deferred->index_ >= deferred->deferred_builds_.size()) {
+    while (deferred->index_ >= deferred->deferred_builds_.size()) {
       // Host asked the defer thread to die, so die.
       if (deferred->last_) {
         break;
       }
       deferred->new_task_.Wait();
+    }
+
+    if (deferred->last_ && deferred->index_ >= deferred->deferred_builds_.size()) {
+      break;
     }
 
     // Set current task
