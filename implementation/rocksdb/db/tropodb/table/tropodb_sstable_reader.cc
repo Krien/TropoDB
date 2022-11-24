@@ -26,10 +26,21 @@ const char* DecodeEncodedEntry(const char* p, const char* limit,
   return p;
 }
 
-void ParseNextNonEncoded(char** src, Slice* key, Slice* value) {
+void ParseNextMinimalEncoded(char** src, Slice* key, Slice* value) {
   uint32_t keysize, valuesize;
   *src = (char*)GetVarint32Ptr(*src, *src + 5, &keysize);
   *src = (char*)GetVarint32Ptr(*src, *src + 5, &valuesize);
+  *key = Slice(*src, keysize);
+  *src += keysize;
+  *value = Slice(*src, valuesize);
+  *src += valuesize;
+}
+
+void ParseNextNonEncoded(char** src, Slice* key, Slice* value) {
+  uint32_t keysize, valuesize;
+  keysize = DecodeFixed32(*src);
+  valuesize = DecodeFixed32(*src + sizeof(uint32_t));
+  *src += 2 * sizeof(uint32_t);
   *key = Slice(*src, keysize);
   *src += keysize;
   *value = Slice(*src, valuesize);

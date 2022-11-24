@@ -69,6 +69,7 @@ class TropoL0SSTable : public TropoSSTable {
   // Timing
   inline TimingCounter GetFlushPreparePerfCounter() { return flush_prepare_perf_counter_; }
   inline TimingCounter GetFlushMergePerfCounter() { return flush_merge_perf_counter_; }
+  inline TimingCounter GetFlushHeaderPerfCounter() { return flush_header_perf_counter_; }
   inline TimingCounter GetFlushWritePerfCounter() { return flush_write_perf_counter_; }
   inline TimingCounter GetFlushFinishPerfCounter() { return flush_finish_perf_counter_; }
 
@@ -95,6 +96,7 @@ class TropoL0SSTable : public TropoSSTable {
   SystemClock* const clock_;
   TimingCounter flush_prepare_perf_counter_;
   TimingCounter flush_merge_perf_counter_;
+  TimingCounter flush_header_perf_counter_;
   TimingCounter flush_write_perf_counter_;
   TimingCounter flush_finish_perf_counter_;
 };

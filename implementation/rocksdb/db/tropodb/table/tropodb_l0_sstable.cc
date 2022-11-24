@@ -2,6 +2,7 @@
 
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/table/iterators/sstable_iterator.h"
+#include "db/tropodb/table/iterators/sstable_iterator_minimal.h"
 #include "db/tropodb/table/iterators/sstable_iterator_compressed.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_sstable_builder.h"
@@ -34,8 +35,8 @@ TropoL0SSTable::~TropoL0SSTable() = default;
 Status TropoL0SSTable::Recover() { return FromStatus(log_.RecoverPointers()); }
 
 TropoSSTableBuilder* TropoL0SSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new TropoSSTableBuilder(this, meta,
-                                 TropoDBConfig::use_sstable_encoding);
+  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_encoding,
+                                 TropoDBConfig::use_compressed_encoding);
 }
 
 bool TropoL0SSTable::EnoughSpaceAvailable(const Slice& slice) const {
@@ -189,7 +190,9 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
          lba_size_ - 1) /
             lba_size_ >=
         (TropoDBConfig::max_bytes_sstable_l0 + lba_size_ - 1) / lba_size_) {
+      uint64_t before_finalise = clock_->NowMicros();
       builder->Finalise();
+      flush_header_perf_counter_.AddTiming(clock_->NowMicros() - before_finalise);
       flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
       before = clock_->NowMicros();
       s = FlushSSTable(&builder, new_metas, metas);
@@ -207,7 +210,9 @@ Status TropoL0SSTable::FlushMemTable(TropoMemtable* mem,
 
   // Now write the last remaining SSTable to storage
   if (s.ok() && builder->GetSize() > 0) {
+    uint64_t before_finalise = clock_->NowMicros();
     s = builder->Finalise();
+    flush_header_perf_counter_.AddTiming(clock_->NowMicros() - before_finalise);
     flush_merge_perf_counter_.AddTiming(clock_->NowMicros() - before);
     before = clock_->NowMicros();
     s = FlushSSTable(&builder, new_metas, metas);
@@ -390,7 +395,7 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
     return nullptr;
   }
   char* data = (char*)sstable.data();
-  if (TropoDBConfig::use_sstable_encoding) {
+  if (TropoDBConfig::use_encoding && TropoDBConfig::use_compressed_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || size > sstable.size() || count == 0) {
@@ -400,7 +405,7 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
       return nullptr;
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
-  } else {
+  } else if (TropoDBConfig::use_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || size > sstable.size() || count == 0) {
@@ -408,7 +413,18 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
           "ERROR: L0 SSSTable: Reading corrupt L0 header %lu \n", count);
       return nullptr;
     } 
-    return new SSTableIterator(data + 2 * sizeof(uint64_t), size, (size_t)count,
+    return new SSTableIteratorMinimal(data + 2 * sizeof(uint64_t), size, (size_t)count,
+                               &TropoEncoding::ParseNextMinimalEncoded, cmp);
+  } else {
+    uint64_t size = DecodeFixed64(data);
+    uint32_t count = DecodeFixed32(data + sizeof(uint64_t));
+    if (size == 0 || size > sstable.size() || count == 0) {
+      TROPO_LOG_ERROR(
+          "ERROR: L0 SSSTable: Reading corrupt L0 header %u \n", count);
+      return nullptr;
+    }
+    return new SSTableIterator(data + sizeof(uint32_t) + sizeof(uint64_t), size,
+                                (size_t)count,
                                &TropoEncoding::ParseNextNonEncoded, cmp);
   }
 }

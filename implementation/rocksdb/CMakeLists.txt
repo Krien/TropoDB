@@ -1127,6 +1127,7 @@ set(TROPODB_SOURCES
   db/tropodb/table/tropodb_table_cache.cc
   db/tropodb/table/tropodb_sstable_manager.cc
   db/tropodb/table/iterators/sstable_iterator.cc
+  db/tropodb/table/iterators/sstable_iterator_minimal.cc
   db/tropodb/table/iterators/sstable_iterator_compressed.cc
   db/tropodb/table/iterators/sstable_ln_iterator.cc
   db/tropodb/table/iterators/merging_iterator.cc

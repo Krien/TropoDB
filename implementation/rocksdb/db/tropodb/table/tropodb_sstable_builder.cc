@@ -8,11 +8,13 @@ namespace ROCKSDB_NAMESPACE {
 
 TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table,
                                          SSZoneMetaData* meta,
-                                         bool use_encoding, int8_t writer)
+                                         bool use_encoding, bool compress,
+                                         int8_t writer)
     : started_(false),
       kv_numbers_(0),
       counter_(0),
       use_encoding_(use_encoding),
+      compressed_(compress),
       table_(table),
       meta_(meta),
       writer_(writer) {
@@ -20,9 +22,12 @@ TropoSSTableBuilder::TropoSSTableBuilder(TropoSSTable* table,
   buffer_.clear();
   buffer_.reserve(TropoDBConfig::max_bytes_sstable_);
   kv_pair_offsets_.clear();
-  if (use_encoding_) {
+  if (use_encoding_&& compress) {
     kv_pair_offsets_.push_back(0);
     last_key_.clear();
+  } else if (!use_encoding) {
+    PutFixed64(&buffer_, 0);
+    PutFixed32(&buffer_, 0);   
   }
 }
 
@@ -31,7 +36,8 @@ TropoSSTableBuilder::~TropoSSTableBuilder() {}
 uint64_t TropoSSTableBuilder::EstimateSizeImpact(const Slice& key,
                                                  const Slice& value) const {
   // TODO: this is hardcoded, not maintainable.
-  return key.size() + value.size() + 5 * sizeof(uint32_t);
+  // It is based on key + val + size pointers + offset pointer
+  return key.size() + value.size() + 3 * sizeof(uint64_t);
 }
 
 Status TropoSSTableBuilder::Apply(const Slice& key, const Slice& value) {
@@ -40,7 +46,7 @@ Status TropoSSTableBuilder::Apply(const Slice& key, const Slice& value) {
     started_ = true;
   }
 
-  if (use_encoding_) {
+  if (use_encoding_ && compressed_) {
     Slice last_key_piece(last_key_);
     size_t shared = 0;
     if (counter_ < TropoDBConfig::max_sstable_encoding) {
@@ -68,12 +74,17 @@ Status TropoSSTableBuilder::Apply(const Slice& key, const Slice& value) {
     last_key_.append(key.data() + shared, non_shared);
     assert(Slice(last_key_) == key);
     counter_++;
-  } else {
+  } else if (use_encoding_) {
     PutVarint32(&buffer_, key.size());
     PutVarint32(&buffer_, value.size());
     buffer_.append(key.data(), key.size());
     buffer_.append(value.data(), value.size());
     kv_pair_offsets_.push_back(buffer_.size());
+  } else {
+    PutFixed32(&buffer_, key.size());
+    PutFixed32(&buffer_, value.size());
+    buffer_.append(key.data(), key.size());
+    buffer_.append(value.data(), value.size());   
   }
   meta_->largest.DecodeFrom(key);
   kv_numbers_++;
@@ -83,15 +94,22 @@ Status TropoSSTableBuilder::Apply(const Slice& key, const Slice& value) {
 Status TropoSSTableBuilder::Finalise() {
   meta_->numbers = kv_numbers_;
   // TODO: this is not a bottleneck, but it is ugly...
-  std::string preamble;
-  uint64_t expect_size =
-    buffer_.size() + (kv_pair_offsets_.size() + 2) * sizeof(uint64_t);
-  PutFixed64(&preamble, expect_size);
-  PutFixed64(&preamble, kv_pair_offsets_.size());
-  for (size_t i = 0; i < kv_pair_offsets_.size(); i++) {
-    PutFixed64(&preamble, kv_pair_offsets_[i]);
+  if (use_encoding_) {
+    std::string preamble;
+    uint64_t expect_size =
+      buffer_.size() + (kv_pair_offsets_.size() + 2) * sizeof(uint64_t);
+    PutFixed64(&preamble, expect_size);
+    PutFixed64(&preamble, kv_pair_offsets_.size());
+    for (size_t i = 0; i < kv_pair_offsets_.size(); i++) {
+      PutFixed64(&preamble, kv_pair_offsets_[i]);
+    }
+    buffer_ = preamble.append(buffer_);
+  } else {
+    uint64_t expect_size = buffer_.size();
+    EncodeFixed64(buffer_.data(), expect_size);
+    EncodeFixed32(buffer_.data() + sizeof(uint64_t), kv_numbers_);
   }
-  buffer_ = preamble.append(buffer_);
+
   return Status::OK();
 }
 

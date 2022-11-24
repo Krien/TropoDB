@@ -137,8 +137,10 @@ constexpr static TropoLogLevel default_log_level =
 constexpr static size_t max_channels =
     0x100; /**< Maximum amount of channels that can be live. Used to ensure
               that there is no channel leak. */
-constexpr static bool use_sstable_encoding =
-    true; /**< If RLE should be used for SSTables. */
+constexpr static bool use_encoding = 
+    false; /**< Trade scan ability for fast encoding/decoding. */
+constexpr static bool use_compressed_encoding =
+    false; /**< If RLE should be used for SSTables. */
 constexpr static uint32_t max_sstable_encoding = 16; /**< RLE max size. */
 constexpr static const char* deadbeef =
     "\xaf\xeb\xad\xde"; /**< Used for placeholder strings*/
@@ -186,7 +188,8 @@ static_assert((!compaction_allow_deferring_writes &&
                compaction_maximum_deferred_writes > 0));
 static_assert(max_lbas_compaction_l0 > 0);
 static_assert(max_channels > 0);
-static_assert(!use_sstable_encoding || max_sstable_encoding > 0);
+static_assert(!use_compressed_encoding || use_encoding);
+static_assert(!use_compressed_encoding || max_sstable_encoding > 0)
 #ifndef TROPICAL_DEBUG
 static_assert(default_log_level > TropoLogLevel::TROPO_DEBUG_LEVEL,
               "Debug level can not be set to debug when debug is disabled");

@@ -71,6 +71,7 @@ class TropoSSTableManager : public RefCounter {
   std::string LayoutDivisionString();
   TimingCounter GetFlushPreparePerfCounter();
   TimingCounter GetFlushMergePerfCounter();
+  TimingCounter GetFlushHeaderPerfCounter();
   TimingCounter GetFlushWritePerfCounter();
   TimingCounter GetFlushFinishPerfCounter();
  private:

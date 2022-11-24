@@ -11,7 +11,7 @@ namespace TropoEncoding {
 extern const char* DecodeEncodedEntry(const char* p, const char* limit,
                                       uint32_t* shared, uint32_t* non_shared,
                                       uint32_t* value_length);
-
+extern void ParseNextMinimalEncoded(char** src, Slice* key, Slice* value);
 extern void ParseNextNonEncoded(char** src, Slice* key, Slice* value);
 }  // namespace TropoEncoding
 }  // namespace ROCKSDB_NAMESPACE

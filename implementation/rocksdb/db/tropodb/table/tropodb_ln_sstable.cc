@@ -2,6 +2,7 @@
 
 #include "db/tropodb/io/szd_port.h"
 #include "db/tropodb/table/iterators/sstable_iterator.h"
+#include "db/tropodb/table/iterators/sstable_iterator_minimal.h"
 #include "db/tropodb/table/iterators/sstable_iterator_compressed.h"
 #include "db/tropodb/table/tropodb_sstable.h"
 #include "db/tropodb/table/tropodb_sstable_builder.h"
@@ -36,13 +37,13 @@ Status TropoLNSSTable::Recover(const std::string& from) {
 std::string TropoLNSSTable::Encode() { return log_.Encode(); }
 
 TropoSSTableBuilder* TropoLNSSTable::NewBuilder(SSZoneMetaData* meta) {
-  return new TropoSSTableBuilder(this, meta,
-                                 TropoDBConfig::use_sstable_encoding);
+  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_encoding,
+                                 TropoDBConfig::use_compressed_encoding);
 }
 
 TropoSSTableBuilder* TropoLNSSTable::NewLNBuilder(SSZoneMetaData* meta) {
-  return new TropoSSTableBuilder(this, meta,
-                                 TropoDBConfig::use_sstable_encoding, 1);
+  return new TropoSSTableBuilder(this, meta, TropoDBConfig::use_encoding,
+                                 TropoDBConfig::use_compressed_encoding, 1);
 }
 
 bool TropoLNSSTable::EnoughSpaceAvailable(const Slice& slice) const {
@@ -180,7 +181,7 @@ Iterator* TropoLNSSTable::NewIterator(const SSZoneMetaData& meta,
     return nullptr;
   }
   char* data = (char*)sstable.data();
-  if (TropoDBConfig::use_sstable_encoding) {
+  if (TropoDBConfig::use_encoding && TropoDBConfig::use_compressed_encoding)  {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || count == 0) {
@@ -189,16 +190,27 @@ Iterator* TropoLNSSTable::NewIterator(const SSZoneMetaData& meta,
       return nullptr;
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
-  } else {
+  } else if (TropoDBConfig::use_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
     if (size == 0 || size > sstable.size() || count == 0) {
       TROPO_LOG_ERROR(
-          "ERROR: LN SSSTable: Reading corrupt L0 header %lu \n", count);
+          "ERROR: LN SSSTable: Reading corrupt LN header %lu \n", count);
       return nullptr;
     }
-    return new SSTableIterator(data + 2 * sizeof(uint64_t), size, (size_t)count,
-                               &TropoEncoding::ParseNextNonEncoded, cmp);
+    return new SSTableIteratorMinimal(data + 2 * sizeof(uint64_t), size, (size_t)count,
+                               &TropoEncoding::ParseNextMinimalEncoded, cmp);
+  } else {
+    uint64_t size = DecodeFixed64(data);
+    uint32_t count = DecodeFixed32(data + sizeof(uint64_t));
+    if (size == 0 || size > sstable.size() || count == 0) {
+      TROPO_LOG_ERROR(
+          "ERROR: LN SSSTable: Reading corrupt LN header %u \n", count);
+      return nullptr;
+    }
+    return new SSTableIterator(data + sizeof(uint32_t) + sizeof(uint64_t), size,
+                                (size_t)count,
+                               &TropoEncoding::ParseNextNonEncoded, cmp);  
   }
 }
 

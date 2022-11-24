@@ -366,6 +366,15 @@ TimingCounter TropoSSTableManager::GetFlushMergePerfCounter() {
   return c;
 }
 
+TimingCounter TropoSSTableManager::GetFlushHeaderPerfCounter() {
+  TimingCounter c = GetL0SSTableLog(0)->GetFlushHeaderPerfCounter();
+  for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {
+    c += GetL0SSTableLog(i)->GetFlushHeaderPerfCounter();
+  }
+  return c;
+}
+
+
 TimingCounter TropoSSTableManager::GetFlushWritePerfCounter() {
   TimingCounter c = GetL0SSTableLog(0)->GetFlushWritePerfCounter();
   for (size_t i = 1; i < TropoDBConfig::lower_concurrency; i++) {

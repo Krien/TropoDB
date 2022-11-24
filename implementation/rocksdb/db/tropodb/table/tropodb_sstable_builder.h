@@ -9,9 +9,11 @@
 
 namespace ROCKSDB_NAMESPACE {
 class TropoSSTable;
+
 class TropoSSTableBuilder {
  public:
   TropoSSTableBuilder(TropoSSTable* table, SSZoneMetaData* meta, bool use_encoding,
+                 bool compress,
                  int8_t writer = -1);
   ~TropoSSTableBuilder();
   uint64_t EstimateSizeImpact(const Slice& key, const Slice& value) const;
@@ -30,6 +32,7 @@ class TropoSSTableBuilder {
   uint32_t counter_;
   // Used when encoding is used
   bool use_encoding_;
+  bool compressed_;
   std::string last_key_;
   // References
   TropoSSTable* table_;

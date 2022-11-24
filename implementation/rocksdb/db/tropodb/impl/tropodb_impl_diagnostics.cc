@@ -82,6 +82,7 @@ void TropoDBImpl::PrintCompactionStats() {
   TROPO_LOG_PERF("Flush writelatency breakdown:\n");
   PrintCounterTable({{"Total", flush_flush_memtable_counter_},
                      {"Setup", ss_manager_->GetFlushPreparePerfCounter()},
+                     {"Header", ss_manager_->GetFlushHeaderPerfCounter()},
                      {"Merge", ss_manager_->GetFlushMergePerfCounter()},
                      {"Write", ss_manager_->GetFlushWritePerfCounter()},
                      {"Finish", ss_manager_->GetFlushFinishPerfCounter()}});
