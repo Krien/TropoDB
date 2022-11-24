@@ -80,7 +80,7 @@ void TropoL0SSTable::DeferFlushWrite(void* deferred_flush) {
     // Process task
     Status s = Status::OK();
     if (current_builder == nullptr) {
-      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr");
+      TROPO_LOG_ERROR("ERROR: Deferred flush: current builder == nullptr\n");
       s = Status::Corruption();
     } else {
       s = current_builder->Flush();
@@ -389,15 +389,22 @@ Iterator* TropoL0SSTable::NewIterator(const SSZoneMetaData& meta,
   if (TropoDBConfig::use_sstable_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
-    if (size == 0 || count == 0) {
+    if (size == 0 || size > sstable.size() || count == 0) {
       TROPO_LOG_ERROR(
-          "ERROR: L0 SSSTable: Reading corrupt L0 header %lu %lu \n", size,
+          "ERROR: L0 SSSTable: Reading corrupt encoded L0 header %lu %lu \n", size,
           count);
+      return nullptr;
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
-    uint64_t count = DecodeFixed32(data);
-    return new SSTableIterator(data, sstable.size(), (size_t)count,
+    uint64_t size = DecodeFixed64(data);
+    uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
+    if (size == 0 || size > sstable.size() || count == 0) {
+      TROPO_LOG_ERROR(
+          "ERROR: L0 SSSTable: Reading corrupt L0 header %lu \n", count);
+      return nullptr;
+    } 
+    return new SSTableIterator(data + 2 * sizeof(uint64_t), size, (size_t)count,
                                &TropoEncoding::ParseNextNonEncoded, cmp);
   }
 }

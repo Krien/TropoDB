@@ -5,12 +5,12 @@
 #include "rocksdb/slice.h"
 
 namespace ROCKSDB_NAMESPACE {
-SSTableIterator::SSTableIterator(char* data, const size_t data_size,
-                                 const size_t count, NextPair nextf,
+SSTableIterator::SSTableIterator(char* data, const uint64_t data_size,
+                                 const uint64_t count, NextPair nextf,
                                  const Comparator* cmp)
     : data_(data),
       data_size_(data_size),
-      kv_pairs_offset_(sizeof(uint32_t) * (count + 1)),
+      kv_pairs_offset_(sizeof(uint64_t) * count),
       count_(count),
       cmp_(cmp),
       nextf_(nextf),
@@ -25,18 +25,13 @@ SSTableIterator::~SSTableIterator() { free(data_); };
 void SSTableIterator::Seek(const Slice& target) {
   Slice target_ptr_stripped = ExtractUserKey(target);
   // binary search as seen in LevelDB.
-  size_t left = 0;
-  size_t right = count_ - 1;
+  uint64_t left = 0;
+  uint64_t right = count_ - 1;
+
   int current_key_compare = 0;
-  ParsedInternalKey parsed_key;
 
   if (Valid()) {
-    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                      count_);
-    }
-    current_key_compare =
-        cmp_->Compare(parsed_key.user_key, target_ptr_stripped);
+    current_key_compare = Compare(ExtractUserKey(current_key_), target_ptr_stripped);
     if (current_key_compare < 0) {
       left = restart_index_;  // index_ > 2 ? index_ - 2 : 0;
     } else if (current_key_compare > 0) {
@@ -46,43 +41,39 @@ void SSTableIterator::Seek(const Slice& target) {
     }
   }
 
-  size_t mid = 0;
-  size_t region_offset = 0;
-  while (left < right) {
-    mid = (left + right + 1) / 2;
+  uint64_t mid = 0;
+  while (left != right) {
+    mid = (left + right) / 2;
     SeekToRestartPoint(mid);
     ParseNextKey();
-    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                      count_);
-    }
-    if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) < 0) {
-      left = mid;
-    } else {
+    int cmp = Compare(ExtractUserKey(current_key_), target_ptr_stripped);
+    if (cmp < 0) {
+      left = mid + 1;
+    } else if (cmp > 0) {
       right = mid - 1;
+    } else {
+      left = mid;
+      break;
     }
   }
   SeekToRestartPoint(left);
   ParseNextKey();
+  size_t steps = 0;
   while (Valid()) {
-    if (!ParseInternalKey(current_key_, &parsed_key, false).ok()) {
-      TROPO_LOG_ERROR("ERROR: SSTableIterator: corrupt key %lu %lu\n", index_,
-                      count_);
-    }
-    if (cmp_->Compare(parsed_key.user_key, target_ptr_stripped) == 0) {
+    if (Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
       restart_index_ = left;
       break;
     }
     if (!ParseNextKey()) {
       break;
     }
+    steps++;
   }
   // OLD lineair
   // SeekToRestartPoint(0);
   // while (Valid()) {
   //   ParseNextKey();
-  //   if (icmp_.Compare(ExtractUserKey(current_key_), target_ptr_stripped) ==
-  //   0) {
+  //   if (Compare(ExtractUserKey(current_key_), target_ptr_stripped) == 0) {
   //     break;
   //   }
   // }
@@ -116,7 +107,7 @@ void SSTableIterator::Prev() {
 }
 
 bool SSTableIterator::ParseNextKey() {
-  if ((size_t)(walker_ - data_) >= data_size_) {
+  if ((uint64_t)(walker_ - data_) >= data_size_) {
     return false;
   }
   nextf_(&walker_, &current_key_, &current_val_);
@@ -124,17 +115,17 @@ bool SSTableIterator::ParseNextKey() {
   return true;
 }
 
-void SSTableIterator::SeekToRestartPoint(const uint32_t index) {
+void SSTableIterator::SeekToRestartPoint(const uint64_t index) {
   current_key_.clear();
+  current_val_.clear();
   index_ = index;
   walker_ = data_ + GetRestartPoint(index_);
-  current_val_ = Slice(walker_, 0);
 }
 
-uint32_t SSTableIterator::GetRestartPoint(const uint32_t index) const {
-  return index == 0 ? kv_pairs_offset_
-                    : DecodeFixed32(data_ + index * sizeof(uint32_t)) +
-                          kv_pairs_offset_;
+uint64_t SSTableIterator::GetRestartPoint(const uint64_t index) const {
+  uint64_t point = index == 0 ? 0 : DecodeFixed64(data_ + index * sizeof(uint64_t));
+  point += kv_pairs_offset_;
+  return point;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

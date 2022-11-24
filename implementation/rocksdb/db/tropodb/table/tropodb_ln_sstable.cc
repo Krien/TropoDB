@@ -183,14 +183,21 @@ Iterator* TropoLNSSTable::NewIterator(const SSZoneMetaData& meta,
   if (TropoDBConfig::use_sstable_encoding) {
     uint64_t size = DecodeFixed64(data);
     uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
-    if (size == 0) {
+    if (size == 0 || count == 0) {
       TROPO_LOG_ERROR("ERROR: LN SSTable: Corrupt table SIZE %lu COUNT %lu \n",
                       size, count);
+      return nullptr;
     }
     return new SSTableIteratorCompressed(cmp, data, size, count);
   } else {
-    uint64_t count = DecodeFixed64(data);
-    return new SSTableIterator(data, sstable.size(), (size_t)count,
+    uint64_t size = DecodeFixed64(data);
+    uint64_t count = DecodeFixed64(data + sizeof(uint64_t));
+    if (size == 0 || size > sstable.size() || count == 0) {
+      TROPO_LOG_ERROR(
+          "ERROR: LN SSSTable: Reading corrupt L0 header %lu \n", count);
+      return nullptr;
+    }
+    return new SSTableIterator(data + 2 * sizeof(uint64_t), size, (size_t)count,
                                &TropoEncoding::ParseNextNonEncoded, cmp);
   }
 }
