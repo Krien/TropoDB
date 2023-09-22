@@ -21,6 +21,11 @@ The design as a whole looks like the following: ![Broken graph...](./paper/graph
 For more information on how these components work, we refer to the paper in the `./paper` directory.
 There the design is explained component by component, including how they interact.
 
+## What is new
+
+* The backend [SZD](https://github.com/Krien/SimpleZNSDevice) now has io_uring with NVMe passthrough support. We are working on enabling it for TropoDB.
+* We ported our Nameless WAL design to ZenFS - Checkout [ZenFS-append](https://github.com/Krien/ZenFS-append/tree/appends) to see the results.
+
 ## Implementation
 
 TropoDB is not an entirely new key-value store. It continues on the key-value stores [LevelDB](https://github.com/google/leveldb) and [RocksDB](https://github.com/facebook/rocksdb). In particular the API, benchmark tooling (db_bench) and memtable implementation are reused from RocksDB. Most of the key-value store logic originated from LevelDB, with some slight modifications to allow for an approach without a file system abstraction, but a SZD abstraction instead. This results in the following lean stack:
