@@ -7,6 +7,11 @@ To get full control it makes use of (and only allows):
 * [SZD](https://github.com/Krien/SimpleZNSDevice): a simple API built on top of SPDKs ZNS functionalities, removing the kernel mostly from the storage path. In other words, the database lives entirely in user-space!
 * No file system at all. To get full control, the store is built directly on storage.
 
+## What is new
+
+* The backend [SZD](https://github.com/Krien/SimpleZNSDevice) now has io_uring with NVMe passthrough support. We are working on enabling it for TropoDB.
+* We ported our Nameless WAL design to ZenFS - Checkout [ZenFS-append](https://github.com/Krien/ZenFS-append/tree/appends) to see the results.
+
 ## ZNS key-value store design
 
 TropoDB uses an LSM-tree design similar to many other key-value stores as it naturally fits SSDs. However, the way the LSM-tree is persisted to storage is unique. Unique to TropoDB is its approach to design the individual LSM-tree components and how it divides the available storage. TropoDB claims an entire part of the SSD, runs the database in user-space and does not allow for multi-tenancy. Claiming an entire region, allows it to designate areas for each LSM-tree component. Rather than building components on generic files and hoping the file system does proper hot and cold separation, each component lives in a designated region and has a specialistic storage design. We have a specialistic:
@@ -20,11 +25,6 @@ The design as a whole looks like the following: ![Broken graph...](./paper/graph
 
 For more information on how these components work, we refer to the paper in the `./paper` directory.
 There the design is explained component by component, including how they interact.
-
-## What is new
-
-* The backend [SZD](https://github.com/Krien/SimpleZNSDevice) now has io_uring with NVMe passthrough support. We are working on enabling it for TropoDB.
-* We ported our Nameless WAL design to ZenFS - Checkout [ZenFS-append](https://github.com/Krien/ZenFS-append/tree/appends) to see the results.
 
 ## Implementation
 
